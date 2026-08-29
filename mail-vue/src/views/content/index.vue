@@ -207,6 +207,7 @@ watch(() => accountStore.currentAccountId, () => {
 onMounted(() => {
   if (emailStore.contentData.showUnread && email.unread === EmailUnreadEnum.UNREAD) {
     email.unread = EmailUnreadEnum.READ;
+    emailStore.markListRead(email.emailId);
     emailRead([email.emailId]);
   }
   window.addEventListener('keydown', handleKeyDown);

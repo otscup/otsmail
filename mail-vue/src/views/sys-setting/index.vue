@@ -287,6 +287,24 @@
                   </el-button>
                 </div>
               </div>
+              <div class="setting-item">
+                <div><span>Webhook 通知</span></div>
+                <div class="forward">
+                  <span>{{ setting.webhookStatus === 0 ? $t('enabled') : $t('disabled') }}</span>
+                  <el-button class="opt-button" size="small" type="primary" @click="openWebhook">
+                    <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
+                  </el-button>
+                </div>
+              </div>
+              <div class="setting-item">
+                <div><span>自动清理</span></div>
+                <div class="forward">
+                  <span>{{ setting.autoCleanDays > 0 ? ('保留 ' + setting.autoCleanDays + ' 天') : $t('disabled') }}</span>
+                  <el-button class="opt-button" size="small" type="primary" @click="openAutoClean">
+                    <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
+                  </el-button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -611,6 +629,65 @@
         </template>
       </el-dialog>
       <el-dialog
+          v-model="webhookShow"
+          class="forward-dialog"
+      >
+        <template #header>
+          <div class="forward-head">
+            <span class="forward-set-title">Webhook 通知</span>
+            <el-tooltip effect="dark" content="收到新邮件时向该 URL 发送 POST 请求（JSON）">
+              <Icon class="warning" icon="fe:warning" width="18" height="18"/>
+            </el-tooltip>
+          </div>
+        </template>
+        <div class="forward-set-body">
+          <el-input v-model="webhookUrl" placeholder="https://your-webhook-url.com/notify"/>
+          <div class="forward-set-row">
+            <span>开启</span>
+            <el-switch v-model="webhookStatus" :active-value="0" :inactive-value="1"/>
+          </div>
+          <div class="forward-set-row">
+            <span>失败重试次数</span>
+            <el-input-number v-model="webhookRetry" :min="0" :max="5"/>
+          </div>
+          <div class="forward-set-row">
+            <span>签名密钥(可选)</span>
+            <el-input v-model="webhookSecret" placeholder="Bearer Token，留空不校验" type="password" show-password/>
+          </div>
+        </div>
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button :loading="settingLoading" type="primary" @click="saveWebhook">{{ $t('save') }}</el-button>
+          </div>
+        </template>
+      </el-dialog>
+      <el-dialog
+          v-model="autoCleanShow"
+          class="forward-dialog"
+      >
+        <template #header>
+          <div class="forward-head">
+            <span class="forward-set-title">自动清理</span>
+            <el-tooltip effect="dark" content="自动删除超过指定天数的邮件，0 表示关闭">
+              <Icon class="warning" icon="fe:warning" width="18" height="18"/>
+            </el-tooltip>
+          </div>
+        </template>
+        <div class="forward-set-body">
+          <div class="forward-set-row">
+            <span>保留天数</span>
+            <el-input-number v-model="autoCleanDays" :min="0" :max="3650"/>
+          </div>
+          <el-input-tag tag-type="warning" placeholder="排除的用户邮箱（不清理），逗号分隔" v-model="autoCleanExclude"
+                        @add-tag="autoCleanExcludeAddTag"/>
+        </div>
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button :loading="settingLoading" type="primary" @click="saveAutoClean">{{ $t('save') }}</el-button>
+          </div>
+        </template>
+      </el-dialog>
+      <el-dialog
           v-model="forwardRulesShow"
           class="forward-dialog"
       >
@@ -857,6 +934,14 @@ const tgSettingShow = ref(false)
 const noticePopupShow = ref(false)
 const thirdEmailShow = ref(false)
 const forwardRulesShow = ref(false)
+const webhookShow = ref(false)
+const webhookUrl = ref('')
+const webhookStatus = ref(1)
+const webhookRetry = ref(0)
+const webhookSecret = ref('')
+const autoCleanShow = ref(false)
+const autoCleanDays = ref(0)
+const autoCleanExclude = ref([])
 const emailPrefixShow = ref(false)
 const showResendList = ref(false)
 const settingStore = useSettingStore();
@@ -1048,6 +1133,50 @@ function saveRegVerifyCount() {
     regVerifyCount.value = 1
   }
   editSetting({regVerifyCount: regVerifyCount.value})
+}
+
+function openWebhook() {
+  webhookUrl.value = setting.value.webhookUrl || ''
+  webhookStatus.value = setting.value.webhookStatus === undefined ? 1 : setting.value.webhookStatus
+  webhookRetry.value = setting.value.webhookRetry || 0
+  webhookSecret.value = setting.value.webhookSecret || ''
+  webhookShow.value = true
+}
+
+function saveWebhook() {
+  editSetting({
+    webhookUrl: webhookUrl.value,
+    webhookStatus: webhookStatus.value,
+    webhookRetry: webhookRetry.value,
+    webhookSecret: webhookSecret.value
+  }, true)
+}
+
+function openAutoClean() {
+  autoCleanDays.value = setting.value.autoCleanDays || 0
+  autoCleanExclude.value = setting.value.autoCleanExclude
+      ? setting.value.autoCleanExclude.split(',').filter(Boolean)
+      : []
+  autoCleanShow.value = true
+}
+
+function saveAutoClean() {
+  editSetting({
+    autoCleanDays: autoCleanDays.value,
+    autoCleanExclude: autoCleanExclude.value.join(',')
+  }, true)
+}
+
+function autoCleanExcludeAddTag(val) {
+  const emails = Array.from(new Set(
+      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
+  ));
+  autoCleanExclude.value.splice(autoCleanExclude.value.length - 1, 1)
+  emails.forEach(email => {
+    if (isEmail(email) && !autoCleanExclude.value.includes(email)) {
+      autoCleanExclude.value.push(email)
+    }
+  })
 }
 
 const compareByLengthAndUpperCase = (a, b, key) => {

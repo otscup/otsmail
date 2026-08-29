@@ -108,6 +108,10 @@ export const settingConst = {
 		OPEN: 0,
 		CLOSE: 1,
 	},
+	webhookStatus: {
+		OPEN: 0,
+		CLOSE: 1,
+	},
 	tgBotStatus: {
 		OPEN: 0,
 		CLOSE: 1,
