@@ -40,11 +40,13 @@ bucket_name = "mail-r2"
 [ai]
 binding = "ai"
 
-[assets]
-binding = "assets"		#静态资源绑定名默认不可修改
-directory = "./dist"	#前端vue项目打包的静态资源存放位置,默认dist
-not_found_handling = "single-page-application"
-run_worker_first = true
+## [assets] 已弃用：Cloudflare Assets 绑定存储层损坏(所有静态资源返回 0 字节)，
+## 前端改用 R2 托管 (web-asset-service.js 从 env.r2 读 web/ 前缀)。保留配置注释备查。
+#[assets]
+#binding = "assets"
+#directory = "./dist"
+#not_found_handling = "single-page-application"
+#run_worker_first = true
 
 ## [triggers] cron 每日刷分析缓存 —— 免费档「每账号 5 个 cron」已满，暂不启用。
 ## 需要的话改用本机 Hermes cron 定时打 /api 端点（不占 CF 配额）。

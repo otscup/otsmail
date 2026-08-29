@@ -4,6 +4,7 @@ import userService from './service/user-service';
 import verifyRecordService from './service/verify-record-service';
 import emailService from './service/email-service';
 import kvObjService from './service/kv-obj-service';
+import webAssetService from './service/web-asset-service';
 import oauthService from "./service/oauth-service";
 import analysisService from './service/analysis-service';
 export default {
@@ -21,7 +22,7 @@ export default {
 			 return await kvObjService.toObjResp( { env }, url.pathname.substring(1));
 		 }
 
-		return env.assets.fetch(req);
+		return webAssetService.fetch(req, env);
 	},
 	email: email,
 	async scheduled(c, env, ctx) {
