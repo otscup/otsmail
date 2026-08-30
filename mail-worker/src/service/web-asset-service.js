@@ -44,14 +44,16 @@ const webAssetService = {
 					return new Response('Not Found', { status: 404 });
 				}
 				return new Response(await indexObj.arrayBuffer(), {
-					headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' }
+					headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }
 				});
 			}
 			const body = await obj.arrayBuffer();
 			return new Response(body, {
 				headers: {
 					'content-type': this.contentType(pathname),
-					'cache-control': 'public, max-age=3600'
+					// no-store: 防止 CF/浏览器缓存坏响应导致白屏复发
+					'cache-control': 'no-store',
+					'cdn-cache-control': 'no-store'
 				}
 			});
 		} catch (e) {
