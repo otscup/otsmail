@@ -1,5 +1,6 @@
 // 前端静态资源服务：从 R2 (web/ 前缀) 读取 (绕开 Cloudflare Assets 绑定存储层故障)
 // 移植策略：替代 env.assets.fetch，直接用 R2 托管前端构建产物
+// 关键: 用流式 body (obj.body) 返回, 避免大文件 arrayBuffer 在 Worker runtime 下偶发空 body
 
 const webAssetService = {
 
@@ -43,12 +44,12 @@ const webAssetService = {
 				if (!indexObj) {
 					return new Response('Not Found', { status: 404 });
 				}
-				return new Response(await indexObj.arrayBuffer(), {
+				return new Response(indexObj.body, {
 					headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }
 				});
 			}
-			const body = await obj.arrayBuffer();
-			return new Response(body, {
+			// 流式返回 R2 对象 body (避免 arrayBuffer 大文件偶发空 body)
+			return new Response(obj.body, {
 				headers: {
 					'content-type': this.contentType(pathname),
 					// no-store: 防止 CF/浏览器缓存坏响应导致白屏复发

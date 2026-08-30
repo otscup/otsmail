@@ -2,7 +2,7 @@
 # 前台串行上传 mail-vue/dist -> R2 mail-r2/web/ (--remote 真实R2)
 # 函数内联同作用域, 不走 xargs/bash -c (避开 MSYS export -f 失效)
 # wrangler 输出丢/dev/null, 仅记纯文本 OK/FAIL
-DIST="E:/otsmail/mail-vue/dist"
+DIST="E:/otsmail/mail-worker/dist"
 BKT="mail-r2"
 PREFIX="web"
 LOG="E:/otsmail/mail-worker/_upload_web.log"
