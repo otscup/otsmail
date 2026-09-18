@@ -12,6 +12,7 @@ import userService from '../service/user-service';
 import telegramService from '../service/telegram-service';
 import aiService from '../service/ai-service';
 import webhookService from '../service/webhook-service';
+import emailRules from '../utils/emailRules';
 
 export async function email(message, env, ctx) {
 
@@ -168,21 +169,24 @@ export async function email(message, env, ctx) {
 		}
 
 		//转发到其他邮箱
-		if (forwardStatus === settingConst.forwardStatus.OPEN && forwardEmail) {
+				// N-02：Gmail 转发邮件只 TG+保存，跳过 forward（不送 Outlook/QQ）
+				const isGmailForwarded = emailRules.isGmailForwardedEmail(email.headers, env);
 
-			const emails = forwardEmail.split(',');
+				if (forwardStatus === settingConst.forwardStatus.OPEN && forwardEmail && !isGmailForwarded) {
 
-			await Promise.all(emails.map(async email => {
+					const emails = forwardEmail.split(',');
 
-				try {
-					await message.forward(email);
-				} catch (e) {
-					console.error(`转发邮箱 ${email} 失败：`, e);
+					await Promise.all(emails.map(async email => {
+
+						try {
+							await message.forward(email);
+						} catch (e) {
+							console.error(`转发邮箱 ${email} 失败：`, e);
+						}
+
+					}));
+
 				}
-
-			}));
-
-		}
 
 		//转发到 Webhook
 		if (webhookStatus === settingConst.webhookStatus.OPEN && webhookUrl) {
