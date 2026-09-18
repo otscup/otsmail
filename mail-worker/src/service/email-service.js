@@ -1057,7 +1057,7 @@ const emailService = {
 		// v1.0: GET /email/detail?emailId= —— 单封详情，复用 emailAddAtt 组装 attList（T-02 根治）
 		async detail(c, params, userId) {
 			const emailId = Number(params.emailId);
-			const row = orm(c).select({
+			const row = await orm(c).select({
 				...email,
 				starId: star.starId
 			})

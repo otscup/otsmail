@@ -485,6 +485,7 @@ Resend webhook POST /webhooks
 - `SELECT` 单行 → `.get()`，多行 → `.all()`
 - 审计命令：`grep -n "orm(c)\.\(update\|delete\|insert\)" mail-worker/src/service/ | 逐个核对终结符`
 - 已发现的实例：`email-service.js read()`（T-01 真身，漏 `.run()` 已修 `cb09b31`）。
+- ⚠ `email-service.js detail()`（v1.0 新端点）：`const row = orm(...)...get()` 漏 `await`，`{...row}` 展开 Promise 空对象导致 detail 全 500（部署后 @qa-deploy 实测暴露，`1b709898` 上线后、`get()` 未 await）→ 已补 `await` 修复。教训并入清单：**SELECT 单行 `.get()`/`.all()` 同样必须 `await`**。
 **v1.0 通告 @fullstack-dev（2026-09-18）**：
 - 新增后端 handler `GET /email/detail`（§3.2）+ 前端 `request/email.js` 封装 `emailDetail(emailId)`。
 - T-01 已读同步复测点：核 `emailStore.contentData.email` 与列表项 `emailScroll.emailList[]` 是否同一引用；断链则补读后回写。
