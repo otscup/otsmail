@@ -5,6 +5,7 @@ import { eq, inArray } from 'drizzle-orm';
 import userService from "./user-service";
 import loginService from "./login-service";
 import cryptoUtils from "../utils/crypto-utils";
+import { t } from "../i18n/i18n";
 
 const oauthService = {
 
@@ -51,7 +52,7 @@ const oauthService = {
 		})
 
 		if (!tokenRes.ok) {
-			throw new BizError(tokenRes.statusText)
+			throw new BizError(tokenRes.status === 400 ? t('oauthBadCode') : t('oauthTokenFailed'))
 		}
 
 		token = await tokenRes.json()
@@ -63,7 +64,7 @@ const oauthService = {
 		});
 
 		if (!userRes.ok) {
-			throw new BizError(userRes.statusText)
+			throw new BizError(t('oauthUserFailed'))
 		}
 
 		userInfo = await userRes.json();
