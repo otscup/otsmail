@@ -1051,7 +1051,7 @@ const emailService = {
 
 	async read(c, params, userId) {
 			const { emailIds } = params;
-			await orm(c).update(email).set({ unread: emailConst.unread.READ }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds)));
+			await orm(c).update(email).set({ unread: emailConst.unread.READ }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds))).run();
 		},
 
 		// v1.0: GET /email/detail?emailId= —— 单封详情，复用 emailAddAtt 组装 attList（T-02 根治）
