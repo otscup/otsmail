@@ -479,6 +479,12 @@ Resend webhook POST /webhooks
 ## 8. 实现备注（开发 Bot 回写区）
 
 <!-- 本区由 fullstack-dev 回写技术细节；架构 Bot 保持单一事实来源。 -->
+**防回归清单（@architect 提议，2026-09-19）**：静态核对看得到"链路在"但测不到"真正落库"。所有涉及 D1 写操作的接口，改完须逐一确认 drizzle 语句带执行终结符：
+- `UPDATE/DELETE` → 必须 `.run()`
+- `INSERT ... returning` / `UPDATE ... returning` → `.get()` 或 `.all()`
+- `SELECT` 单行 → `.get()`，多行 → `.all()`
+- 审计命令：`grep -n "orm(c)\.\(update\|delete\|insert\)" mail-worker/src/service/ | 逐个核对终结符`
+- 已发现的实例：`email-service.js read()`（T-01 真身，漏 `.run()` 已修 `cb09b31`）。
 **v1.0 通告 @fullstack-dev（2026-09-18）**：
 - 新增后端 handler `GET /email/detail`（§3.2）+ 前端 `request/email.js` 封装 `emailDetail(emailId)`。
 - T-01 已读同步复测点：核 `emailStore.contentData.email` 与列表项 `emailScroll.emailList[]` 是否同一引用；断链则补读后回写。
