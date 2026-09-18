@@ -1,16 +1,18 @@
 // Webhook 通知服务：收到邮件后向配置的 URL 推送 JSON（移植自 maillab/cloud-mail v3.2.0）
 import { emailConst } from '../const/entity-const';
+import domainUtils from '../utils/domain-uitls';
 
 const webhookService = {
 
 	// 收信后调用：把邮件摘要 POST 到 webhookUrl
 	async sendEmail({ env }, email, webhookUrl, webhookRetry = 0, webhookSecret = '') {
+		webhookUrl = domainUtils.toOssDomain(webhookUrl);
 		if (!webhookUrl) return;
 
 		const payload = {
 			emailId: email.emailId,
 			sendEmail: email.sendEmail,
-			sendName: email.sendName,
+			sendName: email.name,
 			toEmail: email.toEmail,
 			toName: email.toName,
 			subject: email.subject,
@@ -22,7 +24,7 @@ const webhookService = {
 
 		const headers = { 'Content-Type': 'application/json' };
 		if (webhookSecret) {
-			headers['Authorization'] = `Bearer ${webhookSecret}`;
+			headers['Authorization'] = webhookSecret;
 		}
 
 		let attempt = 0;
