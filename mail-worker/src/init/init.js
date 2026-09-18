@@ -33,6 +33,7 @@ const dbInit = {
 		await this.otsmail_1DB(c);
 		await this.otsmail_2DB(c);
 		await this.otsmail_3DB(c);
+		await this.otsmail_4DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
 	},
@@ -66,7 +67,24 @@ const dbInit = {
 		}
 	},
 
-	// otsmail 迁移：邮件翻译缓存表
+	// otsmail 迁移：T-04 列表性能复合索引（对齐上游 a8c9ae3，mail list/latest 查询路径）
+async otsmail_4DB(c) {
+	try {
+		await c.env.db.batch([
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_list_user ON email(user_id, type, is_del, email_id)`),
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_list_account ON email(user_id, account_id, type, is_del, email_id)`),
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_star_user_email ON star(user_id, email_id)`),
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_name_nocase ON email(name COLLATE NOCASE)`),
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_subject_nocase ON email(subject COLLATE NOCASE)`),
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_to_email_nocase ON email(to_email COLLATE NOCASE)`),
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_send_email_nocase ON email(send_email COLLATE NOCASE)`)
+		]);
+	} catch (e) {
+		console.warn(`跳过字段：${e.message}`);
+	}
+},
+
+// otsmail 迁移：邮件翻译缓存表
 	async otsmail_1DB(c) {
 		try {
 			await c.env.db.batch([
