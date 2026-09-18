@@ -205,6 +205,11 @@ watch(() => accountStore.currentAccountId, () => {
 })
 
 onMounted(async () => {
+  // T-02 edge: persisted contentData.email null -> no recoverable id, fall back to inbox list
+  if (!email || !email.emailId) {
+    router.replace('/inbox')
+    return
+  }
   // T-02: 刷新后从 persist 恢复的 contentData.email 可能 content 缺失/过期 → 用 detail 兜底重取
   if (email && email.emailId && !email.content) {
     try {
