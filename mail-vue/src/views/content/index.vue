@@ -105,7 +105,7 @@ import ShadowHtml from '@/components/shadow-html/index.vue'
 import {reactive, ref, watch, onMounted, onUnmounted} from "vue";
 import {useRouter} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
-import {emailDelete, emailRead} from "@/request/email.js";
+import {emailDelete, emailRead, emailDetail} from "@/request/email.js";
 import {Icon} from "@iconify/vue";
 import {useEmailStore} from "@/store/email.js";
 import {useAccountStore} from "@/store/account.js";
@@ -204,7 +204,17 @@ watch(() => accountStore.currentAccountId, () => {
   handleBack()
 })
 
-onMounted(() => {
+onMounted(async () => {
+  // T-02: 刷新后从 persist 恢复的 contentData.email 可能 content 缺失/过期 → 用 detail 兜底重取
+  if (email && email.emailId && !email.content) {
+    try {
+      const detail = await emailDetail(email.emailId)
+      // 就地合并，保持模板 `email` 引用与响应式
+      Object.assign(email, detail)
+    } catch (e) {
+      // 兜底失败不阻塞其它 onMounted 逻辑（错误已有 axios 拦截器 Toast）
+    }
+  }
   if (emailStore.contentData.showUnread && email.unread === EmailUnreadEnum.UNREAD) {
     email.unread = EmailUnreadEnum.READ;
     emailStore.markListRead(email.emailId);

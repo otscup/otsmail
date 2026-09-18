@@ -1050,9 +1050,35 @@ const emailService = {
 	},
 
 	async read(c, params, userId) {
-		const { emailIds } = params;
-		await orm(c).update(email).set({ unread: emailConst.unread.READ }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds)));
-	}
-};
+			const { emailIds } = params;
+			await orm(c).update(email).set({ unread: emailConst.unread.READ }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds)));
+		},
+
+		// v1.0: GET /email/detail?emailId= —— 单封详情，复用 emailAddAtt 组装 attList（T-02 根治）
+		async detail(c, params, userId) {
+			const emailId = Number(params.emailId);
+			const row = orm(c).select({
+				...email,
+				starId: star.starId
+			})
+				.from(email)
+				.leftJoin(star, and(eq(star.emailId, email.emailId), eq(star.userId, userId)))
+				.where(and(
+					eq(email.emailId, emailId),
+					eq(email.userId, userId),
+					eq(email.isDel, isDel.NORMAL)
+				))
+				.get();
+
+			if (!row) {
+				// 记录不存在或非当前用户 → 不可读
+				throw new BizError(t('authExpired'));
+			}
+
+			const detail = { ...row, isStar: row.starId != null ? 1 : 0 };
+			await this.emailAddAtt(c, [detail]);
+			return detail;
+		}
+	};
 
 export default emailService;

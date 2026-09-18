@@ -34,3 +34,8 @@ app.put('/email/read', async (c) => {
 	return c.json(result.ok());
 })
 
+app.get('/email/detail', async (c) => {
+	const data = await emailService.detail(c, c.req.query(), userContext.getUserId(c));
+	return c.json(result.ok(data));
+})
+

@@ -16,6 +16,11 @@ export function emailRead(emailIds) {
     return http.put('/email/read', {emailIds})
 }
 
+// v1.0: GET /email/detail?emailId= —— 单封详情（含 attList），T-02 刷新兜底重取
+export function emailDetail(emailId) {
+    return http.get('/email/detail', {params: {emailId}})
+}
+
 export function emailSend(form,progress) {
     return http.post('/email/send', form,{
         onUploadProgress: (e) => {
