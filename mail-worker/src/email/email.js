@@ -169,10 +169,10 @@ export async function email(message, env, ctx) {
 		}
 
 		//转发到其他邮箱
-				// N-02：Gmail 转发邮件只 TG+保存，跳过 forward（不送 Outlook/QQ）
-				const isGmailForwarded = emailRules.isGmailForwardedEmail(email.headers, env);
+				// N-02：Google/Gmail 来源邮件只 TG+保存，跳过 forward（不送 Outlook/QQ）
+				const isGoogleSourced = emailRules.isGoogleSourcedEmail(email, env);
 
-				if (forwardStatus === settingConst.forwardStatus.OPEN && forwardEmail && !isGmailForwarded) {
+				if (forwardStatus === settingConst.forwardStatus.OPEN && forwardEmail && !isGoogleSourced) {
 
 					const emails = forwardEmail.split(',');
 
