@@ -135,6 +135,14 @@ const oauthService = {
 
 		const  oauthRow = await this.saveUser(c, userInfo);
 		const userRow = await userService.selectByIdIncludeDel(c, oauthRow.userId);
+		// 会话守卫（state=bind 登录态绑定）：已登录时不在此自动登录，
+		// 该 oauth 行归属交由前端 oauthBind() 决定，避免"当前 A 绑定却被登进他人 B"。
+		const sessionUserId = await this.getLoggedInUserId(c);
+
+		if (sessionUserId) {
+			return { userInfo: oauthRow, token: null }
+		}
+
 
 		if (!userRow) {
 			return { userInfo: oauthRow, token: null }
@@ -190,6 +198,14 @@ const oauthService = {
 		// N-01 字段映射（架构 §3.1）：id/username/name/avatar_url + provider='github'
 		const oauthRow = await this.saveUser(c, this.githubUserToOauth(githubUser));
 		const userRow = await userService.selectByIdIncludeDel(c, oauthRow.userId);
+		// 会话守卫（state=bind 登录态绑定）：已登录时不在此自动登录，
+		// 该 oauth 行归属交由前端 oauthBind() 决定，避免"当前 A 绑定却被登进他人 B"。
+		const sessionUserId = await this.getLoggedInUserId(c);
+
+		if (sessionUserId) {
+			return { userInfo: oauthRow, token: null }
+		}
+
 
 		if (!userRow) {
 			return { userInfo: oauthRow, token: null }
@@ -250,7 +266,16 @@ const oauthService = {
 		// N-01 字段映射（架构 §3.1）：sub/email/name/picture + provider='google'
 		const oauthRow = await this.saveUser(c, this.googleUserToOauth(googleUser));
 
-		// Google 特例：email_verified=true 且该 email 已是站内用户 → 直接绑定登录
+		// 会话判断：带有效会话（登录态绑定 state=bind）时，该行归属完全交由前端
+		// oauthBind() 决定（未绑→绑当前、已绑当前→幂等、已绑他人→oauthBoundOther 拒绝）。
+		// 绝不按 bound-user 或 email 自动登录，杜绝"当前用户 A 绑定却被登进他人 B"的会话劫持。
+		const sessionUserId = await this.getLoggedInUserId(c);
+
+		if (sessionUserId) {
+			return { userInfo: oauthRow, token: null }
+		}
+
+		// 纯登录（无会话）：email_verified=true 且 email 已是站内用户 → 直接绑定登录（标准 OIDC 免注册）
 		if (googleUser.email_verified === true && googleUser.email) {
 			const matchedUser = await userService.selectByEmailIncludeDel(c, googleUser.email);
 			if (matchedUser && matchedUser.isDel !== 1) {
@@ -269,6 +294,23 @@ const oauthService = {
 		const JwtToken = await loginService.login(c, { email: userRow.email, password: null }, true);
 		return { userInfo: oauthRow, token: JwtToken }
 	},
+
+	/**
+	 * 读取当前会话 userId（/oauth 前缀被 security exclude，需手动校验 JWT）。
+	 * 无有效会话返回 null（不抛错），供 googleLogin 判断是否纯登录场景。
+	 */
+	async getLoggedInUserId(c) {
+		const jwt = c.req.header(constant.TOKEN_HEADER);
+		if (!jwt) return null;
+		const result = await jwtUtils.verifyToken(c, jwt);
+		if (!result) return null;
+		const { userId, token } = result;
+		const authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userId, { type: 'json' });
+		if (!authInfo) return null;
+		if (!authInfo.tokens.includes(token)) return null;
+		return userId;
+	},
+
 
 	// N-01 纯函数：GitHub /user 响应 → oauth 表行（可单测）
 	githubUserToOauth(u) {
