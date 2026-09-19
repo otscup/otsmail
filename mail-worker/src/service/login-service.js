@@ -28,11 +28,6 @@ const loginService = {
 
 		let { regKey, register, registerVerify, regVerifyCount, minEmailPrefix, emailPrefixFilter } = await settingService.query(c)
 
-		if (oauth) {
-			registerVerify = settingConst.registerVerify.CLOSE;
-			register = settingConst.register.OPEN;
-		}
-
 		if (register === settingConst.register.CLOSE) {
 			throw new BizError(t('regDisabled'));
 		}

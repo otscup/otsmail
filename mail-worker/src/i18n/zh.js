@@ -59,6 +59,8 @@ const zh = {
 	oauthAuthFailed: '第三方登录授权失败，请重试',
 	oauthTokenFailed: '换取第三方登录令牌失败，请稍后重试或联系管理员',
 	oauthUserFailed: '获取第三方用户信息失败，请稍后重试',
+	oauthBindRowNotFound: '未找到该第三方账号的绑定记录',
+	oauthBoundOther: '该第三方账号已被其他用户绑定，无法重复绑定',
 	oauthBadCode: '授权码无效或已过期，请重新发起登录',
 	bannedSend: '你没有邮件发送权限',
 	onlyInternalSend: '权限不足，只能给站内邮箱发件',

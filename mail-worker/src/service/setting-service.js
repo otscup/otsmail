@@ -51,6 +51,7 @@ const settingService = {
 
 		let linuxdoSwitch = c.env.linuxdo_switch;
 		let githubSwitch = c.env.github_switch;
+		let googleSwitch = c.env.google_switch;
 		let projectLink = c.env.project_link;
 
 		if (typeof linuxdoSwitch === 'string' && linuxdoSwitch === 'true') {
@@ -70,6 +71,15 @@ const settingService = {
 			githubSwitch = false
 		}
 
+		// N-01 google_switch：同 github_switch 语义，需字符串容错
+		if (typeof googleSwitch === 'string' && googleSwitch === 'true') {
+			googleSwitch = true
+		} else if (googleSwitch === true) {
+			googleSwitch = true
+		} else {
+			googleSwitch = false
+		}
+
 		if (typeof projectLink === 'string' && projectLink === 'false') {
 			projectLink = false
 		} else if (projectLink === false) {
@@ -87,6 +97,10 @@ const settingService = {
 		setting.githubClientId = c.env.github_client_id;
 		setting.githubCallbackUrl = c.env.github_callback_url;
 		setting.githubSwitch = githubSwitch;
+
+		setting.googleClientId = c.env.google_client_id;
+		setting.googleCallbackUrl = c.env.google_callback_url;
+		setting.googleSwitch = googleSwitch;
 
 		setting.emailPrefixFilter = setting.emailPrefixFilter.split(",").filter(Boolean);
 
@@ -255,6 +269,9 @@ const settingService = {
 			githubClientId: settingRow.githubClientId,
 			githubCallbackUrl: settingRow.githubCallbackUrl,
 			githubSwitch: settingRow.githubSwitch,
+			googleClientId: settingRow.googleClientId,
+			googleCallbackUrl: settingRow.googleCallbackUrl,
+			googleSwitch: settingRow.googleSwitch,
 			minEmailPrefix: settingRow.minEmailPrefix,
 			projectLink: settingRow.projectLink
 		};

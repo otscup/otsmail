@@ -34,6 +34,7 @@ const dbInit = {
 		await this.otsmail_2DB(c);
 		await this.otsmail_3DB(c);
 		await this.otsmail_4DB(c);
+		await this.otsmail_5DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
 	},
@@ -78,6 +79,19 @@ async otsmail_4DB(c) {
 			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_subject_nocase ON email(subject COLLATE NOCASE)`),
 			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_to_email_nocase ON email(to_email COLLATE NOCASE)`),
 			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_send_email_nocase ON email(send_email COLLATE NOCASE)`)
+		]);
+	} catch (e) {
+		console.warn(`跳过字段：${e.message}`);
+	}
+},
+
+// otsmail 迁移：oauth 表新增 provider 列（v1.4，区分 github/google/linuxdo 防跨平台撞号）
+async otsmail_5DB(c) {
+	try {
+		await c.env.db.batch([
+			c.env.db.prepare(`ALTER TABLE oauth ADD COLUMN provider text`),
+			c.env.db.prepare(`UPDATE oauth SET provider = 'linuxdo' WHERE provider IS NULL`),
+			c.env.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_provider_user ON oauth(provider, oauth_user_id)`)
 		]);
 	} catch (e) {
 		console.warn(`跳过字段：${e.message}`);

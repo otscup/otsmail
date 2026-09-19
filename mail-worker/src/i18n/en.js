@@ -59,6 +59,8 @@ const en = {
 	oauthAuthFailed: 'Third-party sign-in failed, please try again',
 	oauthTokenFailed: 'Failed to exchange third-party token, please retry later or contact admin',
 	oauthUserFailed: 'Failed to fetch third-party user info, please retry later',
+	oauthBindRowNotFound: 'No binding record found for this third-party account',
+	oauthBoundOther: 'This third-party account is already bound to another user',
 	oauthBadCode: 'Authorization code invalid or expired, please sign in again',
 	bannedSend: 'You can only send emails to internal mailboxes',
 	onlyInternalSend: 'Your current role allows sending internal emails only',
