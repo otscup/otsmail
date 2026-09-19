@@ -50,6 +50,9 @@
           <el-button class="btn" v-if="settingStore.settings.githubSwitch" style="margin-top: 10px" @click="githubLogin">
             <Icon icon="mingcute:github-line" color="var(--el-text-color-primary)" width="18" height="18" style="margin-right: 10px" />GitHub
           </el-button>
+          <el-button class="btn" v-if="settingStore.settings.googleSwitch" style="margin-top: 10px" @click="googleLogin">
+            <Icon icon="flat-color-icons:google" width="18" height="18" style="margin-right: 10px" />Google
+          </el-button>
         </div>
         <div v-show="show !== 'login'">
           <el-input :class="!hideLoginDomain ? 'email-input' : ''" v-model="registerForm.email" type="text" :placeholder="$t('emailAccount')"
@@ -102,6 +105,9 @@
           </el-button>
           <el-button v-if="settingStore.settings.githubSwitch" class="btn" style="margin-top: 10px" @click="githubLogin">
             <Icon icon="mingcute:github-line" color="var(--el-text-color-primary)" width="18" height="18" style="margin-right: 10px" />GitHub
+          </el-button>
+          <el-button v-if="settingStore.settings.googleSwitch" class="btn" style="margin-top: 10px" @click="googleLogin">
+            <Icon icon="flat-color-icons:google" width="18" height="18" style="margin-right: 10px" />Google
           </el-button>
         </div>
         <template v-if="settingStore.settings.register === 0">
@@ -168,7 +174,7 @@ import {cvtR2Url} from "@/utils/convert.js";
 import {loginUserInfo} from "@/request/my.js";
 import {permsToRouter} from "@/perm/perm.js";
 import {useI18n} from "vue-i18n";
-import {oauthBindUser, oauthLinuxDoLogin, oauthGithubLogin} from "@/request/ouath.js";
+import {oauthBindUser, oauthLinuxDoLogin, oauthGithubLogin, oauthGoogleLogin, oauthBind} from "@/request/ouath.js";
 import {setToken} from "@/utils/token-store.js";
 
 const {t} = useI18n();
@@ -185,6 +191,7 @@ const show = ref('login')
 const bindForm = reactive({
   email: '',
   oauthUserId: '',
+  provider: '',
   code: ''
 })
 
@@ -282,6 +289,13 @@ function githubLogin() {
       `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=read:user&state=github`
 }
 
+function googleLogin() {
+  const clientId = settingStore.settings.googleClientId
+  const redirectUri = encodeURIComponent(settingStore.settings.googleCallbackUrl)
+  window.location.href =
+      `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid%20email%20profile&state=google`
+}
+
 oauthGetUser();
 
 async function oauthGetUser() {
@@ -292,13 +306,36 @@ async function oauthGetUser() {
 
   if (code) {
 
-    const isGithub = state === 'github';
+    const providerMap = { github: oauthGithubLogin, google: oauthGoogleLogin, linuxdo: oauthLinuxDoLogin }
+    const loginFn = providerMap[state] || oauthLinuxDoLogin
 
     oauthLoading.value = true
-    const loginFn = isGithub ? oauthGithubLogin : oauthLinuxDoLogin
+
+    // v1.3 登录态绑定（大网站模式）：state=bind 时已登录用户把 OAuth 授权绑到当前账号
+    if (state === 'bind') {
+      loginFn(code).then(data => {
+        if (data.token) {
+          // 已绑定站内账号：直接登录（携带原 token 场景少见，此处视为已登录则绑定当前会话）
+          saveToken(data.token)
+          return
+        }
+        // 授权落库但未绑定 → 登录态绑定到当前账号
+        oauthBind({ oauthUserId: data.userInfo.oauthUserId, provider: data.userInfo.provider }).then(bindData => {
+          ElMessage({ message: '绑定成功', type: 'success', plain: true })
+          saveToken(bindData.token)
+        }).catch(() => {
+          oauthLoading.value = false
+        })
+      }).catch(() => {
+        oauthLoading.value = false
+      })
+      return
+    }
+
     loginFn(code).then(data => {
 
       bindForm.oauthUserId = data.userInfo.oauthUserId;
+      bindForm.provider = data.userInfo.provider;
 
       if (!data.token) {
         showBindForm.value = true
@@ -371,7 +408,7 @@ function bind() {
 
   }
 
-  const form = {email, oauthUserId: bindForm.oauthUserId, code: bindForm.code}
+  const form = {email, oauthUserId: bindForm.oauthUserId, provider: bindForm.provider, code: bindForm.code}
 
   bindLoading.value = true
   oauthBindUser(form).then(data => {

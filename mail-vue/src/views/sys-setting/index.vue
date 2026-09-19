@@ -86,6 +86,40 @@
             </div>
           </div>
 
+          <!-- Account Security / OAuth Bind Card (v1.3 大网站模式) -->
+          <div class="settings-card">
+            <div class="card-title">{{ $t('accountSecurity') || '账号安全' }}</div>
+            <div class="card-content">
+              <div class="setting-item" v-if="setting.githubSwitch">
+                <div><span>GitHub</span></div>
+                <div>
+                  <el-button class="opt-button" size="small" type="primary" @click="bindGithub">
+                    {{ $t('bindOAuth') || '绑定 GitHub' }}
+                  </el-button>
+                </div>
+              </div>
+              <div class="setting-item" v-if="setting.googleSwitch">
+                <div><span>Google</span></div>
+                <div>
+                  <el-button class="opt-button" size="small" type="primary" @click="bindGoogle">
+                    {{ $t('bindOAuth') || '绑定 Google' }}
+                  </el-button>
+                </div>
+              </div>
+              <div class="setting-item" v-if="setting.linuxdoSwitch">
+                <div><span>LinuxDo</span></div>
+                <div>
+                  <el-button class="opt-button" size="small" type="primary" @click="bindLinuxDo">
+                    {{ $t('bindOAuth') || '绑定 LinuxDo' }}
+                  </el-button>
+                </div>
+              </div>
+              <div class="setting-item" v-if="!setting.githubSwitch && !setting.googleSwitch && !setting.linuxdoSwitch">
+                <div><span>{{ $t('noOAuthProvider') || '暂无可用第三方登录提供商' }}</span></div>
+              </div>
+            </div>
+          </div>
+
           <!-- Personalization Settings Card -->
           <div class="settings-card">
             <div class="card-title">{{ $t('customization') }}</div>
@@ -1593,6 +1627,29 @@ function changeField(key, value) {
   if (!settingReady.value) return
   setting.value[key] = value
   editSetting({[key]: value}, false)
+}
+
+// v1.3 登录态绑定（大网站模式）：设置页把当前 GitHub/Google/LinuxDo 授权绑到当前账号
+// 走 state=bind → 回调后 oauthGetUser 分支调 PUT /oauth/bind（login/index.vue 已实现）
+function bindGithub() {
+  const clientId = setting.value.githubClientId
+  const redirectUri = encodeURIComponent(setting.value.githubCallbackUrl)
+  window.location.href =
+      `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=read:user&state=bind`
+}
+
+function bindGoogle() {
+  const clientId = setting.value.googleClientId
+  const redirectUri = encodeURIComponent(setting.value.googleCallbackUrl)
+  window.location.href =
+      `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid%20email%20profile&state=bind`
+}
+
+function bindLinuxDo() {
+  const clientId = setting.value.linuxdoClientId
+  const redirectUri = encodeURIComponent(setting.value.linuxdoCallbackUrl)
+  window.location.href =
+      `https://connect.linux.do/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid+profile+email&state=bind`
 }
 
 function saveTitle() {
