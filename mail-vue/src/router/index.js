@@ -111,6 +111,11 @@ router.beforeEach((to, from, next) => {
     }
 
     if (token && to.name === 'login') {
+        // 已在登录态，但若是第三方 OAuth / 绑定的回调（URL 带 code/state），
+        // 必须放行进 /login 让 oauthGetUser() 处理（绑定/换 token），否则守卫直接跳走、回调永不处理。
+        if (to.query && (to.query.state !== undefined || to.query.code !== undefined)) {
+            return next()
+        }
         return next(from.path)
     }
 
