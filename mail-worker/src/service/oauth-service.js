@@ -134,25 +134,26 @@ const oauthService = {
 		userInfo.avatar = userInfo.avatar_url;
 
 		const  oauthRow = await this.saveUser(c, userInfo);
-		const userRow = await userService.selectByIdIncludeDel(c, oauthRow.userId);
-		// 会话守卫（state=bind 登录态绑定）：已登录时不在此自动登录，
-		// 该 oauth 行归属交由前端 oauthBind() 决定，避免"当前 A 绑定却被登进他人 B"。
-		const sessionUserId = await this.getLoggedInUserId(c);
+				const userRow = await userService.selectByIdIncludeDel(c, oauthRow.userId);
+				// 会话守卫（登录态绑定 state=bind）：仅当用户从个人设置明确发起绑定（state=bind）时，
+				// 才不自动登录、交由前端 oauthBind() 定归属；干净登录（首页点 OAuth，state!=bind）即使已登录也要正常登录。
+				const isBind = params.state === 'bind';
+				const sessionUserId = isBind ? await this.getLoggedInUserId(c) : null;
 
-		if (sessionUserId) {
-			return { userInfo: oauthRow, token: null }
-		}
+				if (sessionUserId) {
+					return { userInfo: oauthRow, token: null }
+				}
 
 
-		if (!userRow) {
-			return { userInfo: oauthRow, token: null }
-		}
+				if (!userRow) {
+					return { userInfo: oauthRow, token: null }
+				}
 
-		const JwtToken = await loginService.login(c, { email: userRow.email, password: null }, true);
-		return { userInfo: oauthRow, token: JwtToken }
-	},
+				const JwtToken = await loginService.login(c, { email: userRow.email, password: null }, true);
+				return { userInfo: oauthRow, token: JwtToken }
+			},
 
-	async githubLogin(c, params) {
+			async githubLogin(c, params) {
 
 		const { code } = params;
 
@@ -196,24 +197,25 @@ const oauthService = {
 		const githubUser = await userRes.json();
 
 		// N-01 字段映射（架构 §3.1）：id/username/name/avatar_url + provider='github'
-		const oauthRow = await this.saveUser(c, this.githubUserToOauth(githubUser));
-		const userRow = await userService.selectByIdIncludeDel(c, oauthRow.userId);
-		// 会话守卫（state=bind 登录态绑定）：已登录时不在此自动登录，
-		// 该 oauth 行归属交由前端 oauthBind() 决定，避免"当前 A 绑定却被登进他人 B"。
-		const sessionUserId = await this.getLoggedInUserId(c);
+				const oauthRow = await this.saveUser(c, this.githubUserToOauth(githubUser));
+				const userRow = await userService.selectByIdIncludeDel(c, oauthRow.userId);
+				// 会话守卫（state=bind 才启用）：干净登录（首页点 OAuth）即使已登录也正常登录；
+				// 仅登录态绑定（个人设置发起 state=bind）不在此自动登录，交由前端 oauthBind() 定归属。
+				const isBind = params.state === 'bind';
+				const sessionUserId = isBind ? await this.getLoggedInUserId(c) : null;
 
-		if (sessionUserId) {
-			return { userInfo: oauthRow, token: null }
-		}
+				if (sessionUserId) {
+					return { userInfo: oauthRow, token: null }
+				}
 
 
-		if (!userRow) {
-			return { userInfo: oauthRow, token: null }
-		}
+				if (!userRow) {
+					return { userInfo: oauthRow, token: null }
+				}
 
-		const JwtToken = await loginService.login(c, { email: userRow.email, password: null }, true);
-		return { userInfo: oauthRow, token: JwtToken }
-	},
+				const JwtToken = await loginService.login(c, { email: userRow.email, password: null }, true);
+				return { userInfo: oauthRow, token: JwtToken }
+			},
 
 	/**
 	 * N-01 Google OAuth 登录（v1.4 新增，OIDC）
@@ -266,10 +268,12 @@ const oauthService = {
 		// N-01 字段映射（架构 §3.1）：sub/email/name/picture + provider='google'
 		const oauthRow = await this.saveUser(c, this.googleUserToOauth(googleUser));
 
-		// 会话判断：带有效会话（登录态绑定 state=bind）时，该行归属完全交由前端
-		// oauthBind() 决定（未绑→绑当前、已绑当前→幂等、已绑他人→oauthBoundOther 拒绝）。
-		// 绝不按 bound-user 或 email 自动登录，杜绝"当前用户 A 绑定却被登进他人 B"的会话劫持。
-		const sessionUserId = await this.getLoggedInUserId(c);
+		// 会话判断：仅登录态绑定（state=bind 已登录用户发起）时不在此自动登录，
+				// 该 oauth 行归属交由前端 oauthBind() 决定（未绑→绑当前、已绑当前→幂等、已绑他人→oauthBoundOther 拒绝）。
+				// 干净登录（首页点 Google，state!=bind）即使已登录也正常登录，杜绝"绑返回 token:null 误弹注册邮箱"。
+				// 绝不按 bound-user 或 email 自动登录，杜绝"当前用户 A 绑定却被登进他人 B"的会话劫持。
+				const isBind = params.state === 'bind';
+				const sessionUserId = isBind ? await this.getLoggedInUserId(c) : null;
 
 		if (sessionUserId) {
 			return { userInfo: oauthRow, token: null }

@@ -313,7 +313,7 @@ async function oauthGetUser() {
 
     // v1.3 登录态绑定（大网站模式）：state=bind 时已登录用户把 OAuth 授权绑到当前账号
     if (state === 'bind') {
-      loginFn(code).then(data => {
+      loginFn(code, state).then(data => {
         if (data.token) {
           // 已绑定站内账号：直接登录（携带原 token 场景少见，此处视为已登录则绑定当前会话）
           saveToken(data.token)
@@ -332,7 +332,7 @@ async function oauthGetUser() {
       return
     }
 
-    loginFn(code).then(data => {
+    loginFn(code, state).then(data => {
 
       bindForm.oauthUserId = data.userInfo.oauthUserId;
       bindForm.provider = data.userInfo.provider;
