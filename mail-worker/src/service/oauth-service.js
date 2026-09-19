@@ -86,6 +86,71 @@ const oauthService = {
 		return { userInfo: oauthRow, token: JwtToken }
 	},
 
+	async githubLogin(c, params) {
+
+		const { code } = params;
+
+		const reqParams = new URLSearchParams()
+		reqParams.append('client_id', c.env.github_client_id)
+		reqParams.append('client_secret', c.env.github_client_secret)
+		reqParams.append('code', code)
+		reqParams.append('redirect_uri', c.env.github_callback_url)
+
+		const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/x-www-form-urlencoded",
+				"Accept": "application/json"
+			},
+			body: reqParams.toString()
+		})
+
+		if (!tokenRes.ok) {
+			throw new BizError(t('oauthTokenFailed'))
+		}
+
+		const token = await tokenRes.json()
+
+		if (!token.access_token) {
+			// GitHub 返回 { error: "bad_verification_code", error_description: ... } 而非 4xx
+			throw new BizError(t('oauthBadCode'))
+		}
+
+		const userRes = await fetch('https://api.github.com/user', {
+			headers: {
+				Authorization: 'Bearer ' + token.access_token,
+				'User-Agent': 'otsmail-worker'	// GitHub API 必填，否则 403
+			}
+		});
+
+		if (!userRes.ok) {
+			throw new BizError(t('oauthUserFailed'))
+		}
+
+		const githubUser = await userRes.json();
+
+		// N-01 字段映射（架构 §3.1）：id/username/name/avatar_url，其余 oauth 表字段留空
+		const oauthRow = await this.saveUser(c, this.githubUserToOauth(githubUser));
+		const userRow = await userService.selectByIdIncludeDel(c, oauthRow.userId);
+
+		if (!userRow) {
+			return { userInfo: oauthRow, token: null }
+		}
+
+		const JwtToken = await loginService.login(c, { email: userRow.email, password: null }, true);
+		return { userInfo: oauthRow, token: JwtToken }
+	},
+
+	// N-01 纯函数：GitHub /user 响应 → oauth 表行（可单测）
+	githubUserToOauth(u) {
+		return {
+			oauthUserId: String(u.id),
+			username: u.login,
+			name: u.name,
+			avatar: u.avatar_url
+		};
+	},
+
 	async saveUser(c, userInfo) {
 
 		const userInfoRow = await this.getById(c, userInfo.oauthUserId);

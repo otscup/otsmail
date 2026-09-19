@@ -50,6 +50,7 @@ const settingService = {
 
 
 		let linuxdoSwitch = c.env.linuxdo_switch;
+		let githubSwitch = c.env.github_switch;
 		let projectLink = c.env.project_link;
 
 		if (typeof linuxdoSwitch === 'string' && linuxdoSwitch === 'true') {
@@ -58,6 +59,15 @@ const settingService = {
 			linuxdoSwitch = true
 		} else {
 			linuxdoSwitch = false
+		}
+
+		// N-01 github_switch：同 linuxdo_switch 语义，需字符串容错（--var 注入为 "true"）
+		if (typeof githubSwitch === 'string' && githubSwitch === 'true') {
+			githubSwitch = true
+		} else if (githubSwitch === true) {
+			githubSwitch = true
+		} else {
+			githubSwitch = false
 		}
 
 		if (typeof projectLink === 'string' && projectLink === 'false') {
@@ -73,6 +83,10 @@ const settingService = {
 		setting.linuxdoClientId = c.env.linuxdo_client_id;
 		setting.linuxdoCallbackUrl = c.env.linuxdo_callback_url;
 		setting.linuxdoSwitch = linuxdoSwitch;
+
+		setting.githubClientId = c.env.github_client_id;
+		setting.githubCallbackUrl = c.env.github_callback_url;
+		setting.githubSwitch = githubSwitch;
 
 		setting.emailPrefixFilter = setting.emailPrefixFilter.split(",").filter(Boolean);
 
@@ -238,6 +252,9 @@ const settingService = {
 			linuxdoClientId: settingRow.linuxdoClientId,
 			linuxdoCallbackUrl: settingRow.linuxdoCallbackUrl,
 			linuxdoSwitch: settingRow.linuxdoSwitch,
+			githubClientId: settingRow.githubClientId,
+			githubCallbackUrl: settingRow.githubCallbackUrl,
+			githubSwitch: settingRow.githubSwitch,
 			minEmailPrefix: settingRow.minEmailPrefix,
 			projectLink: settingRow.projectLink
 		};
