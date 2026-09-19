@@ -30,6 +30,32 @@
         </div>
       </div>
     </div>
+
+    <!-- v1.3 第三方账号绑定（大网站模式）：个人设置入口，普通用户可见 -->
+    <div class="container">
+      <div class="title">第三方账号绑定</div>
+      <div class="item" v-if="settingStore.settings.githubSwitch">
+        <div><span>GitHub</span></div>
+        <div>
+          <el-button type="primary" @click="bindGithub">绑定 GitHub</el-button>
+        </div>
+      </div>
+      <div class="item" v-if="settingStore.settings.googleSwitch">
+        <div><span>Google</span></div>
+        <div>
+          <el-button type="primary" @click="bindGoogle">绑定 Google</el-button>
+        </div>
+      </div>
+      <div class="item" v-if="settingStore.settings.linuxdoSwitch">
+        <div><span>LinuxDo</span></div>
+        <div>
+          <el-button type="primary" @click="bindLinuxDo">绑定 LinuxDo</el-button>
+        </div>
+      </div>
+      <div class="item" v-if="!settingStore.settings.githubSwitch && !settingStore.settings.googleSwitch && !settingStore.settings.linuxdoSwitch">
+        <div><span>暂无可用第三方登录提供商</span></div>
+      </div>
+    </div>
     <div class="language">
       <div class="title">{{$t('language')}}</div>
       <el-select
@@ -87,6 +113,41 @@ defineOptions({
 function showSetName() {
   accountName.value = userStore.user.name
   setNameShow.value = true
+}
+
+// v1.3 登录态绑定（大网站模式）：个人设置页把当前 GitHub/Google/LinuxDo 授权绑到当前账号
+// 走 state=bind → 回调后 login 的 oauthGetUser 分支调 PUT /oauth/bind
+function bindGithub() {
+  const clientId = settingStore.settings.githubClientId
+  const redirectUri = encodeURIComponent(settingStore.settings.githubCallbackUrl)
+  if (!clientId) {
+    ElMessage({ message: 'GitHub 未配置客户端 ID，请管理员先配置', type: 'warning', plain: true })
+    return
+  }
+  window.location.href =
+      `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=read:user&state=bind`
+}
+
+function bindGoogle() {
+  const clientId = settingStore.settings.googleClientId
+  const redirectUri = encodeURIComponent(settingStore.settings.googleCallbackUrl)
+  if (!clientId) {
+    ElMessage({ message: 'Google 未配置客户端 ID，请管理员先配置', type: 'warning', plain: true })
+    return
+  }
+  window.location.href =
+      `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid%20email%20profile&state=bind`
+}
+
+function bindLinuxDo() {
+  const clientId = settingStore.settings.linuxdoClientId
+  const redirectUri = encodeURIComponent(settingStore.settings.linuxdoCallbackUrl)
+  if (!clientId) {
+    ElMessage({ message: 'LinuxDo 未配置客户端 ID，请管理员先配置', type: 'warning', plain: true })
+    return
+  }
+  window.location.href =
+      `https://connect.linux.do/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid+profile+email&state=bind`
 }
 
 function setName() {

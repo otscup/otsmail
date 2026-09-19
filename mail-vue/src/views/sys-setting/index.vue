@@ -86,40 +86,6 @@
             </div>
           </div>
 
-          <!-- Account Security / OAuth Bind Card (v1.3 大网站模式) -->
-          <div class="settings-card">
-            <div class="card-title">{{ $t('accountSecurity') || '账号安全' }}</div>
-            <div class="card-content">
-              <div class="setting-item" v-if="setting.githubSwitch">
-                <div><span>GitHub</span></div>
-                <div>
-                  <el-button class="opt-button" size="small" type="primary" @click="bindGithub">
-                    {{ $t('bindOAuth') || '绑定 GitHub' }}
-                  </el-button>
-                </div>
-              </div>
-              <div class="setting-item" v-if="setting.googleSwitch">
-                <div><span>Google</span></div>
-                <div>
-                  <el-button class="opt-button" size="small" type="primary" @click="bindGoogle">
-                    {{ $t('bindOAuth') || '绑定 Google' }}
-                  </el-button>
-                </div>
-              </div>
-              <div class="setting-item" v-if="setting.linuxdoSwitch">
-                <div><span>LinuxDo</span></div>
-                <div>
-                  <el-button class="opt-button" size="small" type="primary" @click="bindLinuxDo">
-                    {{ $t('bindOAuth') || '绑定 LinuxDo' }}
-                  </el-button>
-                </div>
-              </div>
-              <div class="setting-item" v-if="!setting.githubSwitch && !setting.googleSwitch && !setting.linuxdoSwitch">
-                <div><span>{{ $t('noOAuthProvider') || '暂无可用第三方登录提供商' }}</span></div>
-              </div>
-            </div>
-          </div>
-
           <!-- Personalization Settings Card -->
           <div class="settings-card">
             <div class="card-title">{{ $t('customization') }}</div>
