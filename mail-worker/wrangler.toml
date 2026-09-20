@@ -63,6 +63,10 @@ admin = "admin@atproxy.eu.org"				#管理员邮箱
 ## N-02 分流开关：Google/Gmail 来源邮件只 TG+保存，不转发到 Outlook/QQ（默认 false 零回归）
 ## 曾用 --var 临时注入导致后续部署丢失、N-02 回归；固化到 [vars] 使任何部署都保留（非敏感，可入 git）。
 SKIP_FORWARD_GMAIL_FORWARDED = true
+## OAuth provider 显示开关（git_github_switch/google_switch）：已启用且豆豆实测通过，固化进 toml
+## 防止后续 worker 部署丢开关导致登录按钮消失（同类 --var 注入丢失根因）。
+github_switch = true
+google_switch = true
 #ai_model = ""			#ai模型,不填默认使用@cf/meta/llama-3.1-8b-instruct-fast
 #analysis_cache = false			#是否开启分析数据缓存
 #orm_log = false			#是否sql日志
