@@ -21,7 +21,7 @@ const emailRules = {
 	 * @param {object} env - Worker env（读 SKIP_FORWARD_GMAIL_FORWARDED / GMAIL_FORWARD_HEADERS）
 	 * @returns {boolean}
 	 */
-	isGoogleSourcedEmail(email, env) {
+	isGoogleSourcedEmail(email, env, toEmail) {
 
 		// 开关关闭或未开启：不做任何分流，恒 false（零回归）——字符串容错
 		const flag = env && env.SKIP_FORWARD_GMAIL_FORWARDED;
@@ -29,12 +29,21 @@ const emailRules = {
 			return false;
 		}
 
-		// 判定 1：来源域完整匹配
+		// 判定 0（架构 §4.11 v1.3 主信号）：收件地址命中 Gmail 定向通道地址
+		// GMAIL_ROUTING_INBOX（默认 gmail@otscup.com）。该地址不对外公开，整体视为
+		// "Google 转发通道"→ 只进 TG 不转发。即使 From 是 163 等非 Google 域也归此通道
+		// （419 现成代价样本，豆豆已接受）。
+		const routingInbox = (env && env.GMAIL_ROUTING_INBOX) || 'gmail@otscup.com';
+		if (typeof toEmail === 'string' && toEmail.toLowerCase() === routingInbox.toLowerCase()) {
+			return true;
+		}
+
+		// 判定 1：来源域完整匹配（辅助）
 		if (email && email.from && this.isGoogleDomain(email.from.address)) {
 			return true;
 		}
 
-		// 判定 2：转发签名头
+		// 判定 2：转发签名头（辅助，不依赖——CF 跨域可能剥头且 D1 无 headers 列）
 		if (this.hasTrustedGmailHeader(email && email.headers, env)) {
 			return true;
 		}

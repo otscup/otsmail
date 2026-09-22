@@ -63,6 +63,9 @@ admin = "admin@atproxy.eu.org"				#管理员邮箱
 ## N-02 分流开关：Google/Gmail 来源邮件只 TG+保存，不转发到 Outlook/QQ（默认 false 零回归）
 ## 曾用 --var 临时注入导致后续部署丢失、N-02 回归；固化到 [vars] 使任何部署都保留（非敏感，可入 git）。
 SKIP_FORWARD_GMAIL_FORWARDED = true
+## N-02 分流主信号（架构 §4.11 v1.3）：收件地址命中此 Gmail 定向通道即判 Google 来源只进 TG。
+## 该地址不对外公开，整体视为 Google 转发通道；163 等非 Google 来源直发到此也归此通道(419 代价样本,豆豆已接受)。
+GMAIL_ROUTING_INBOX = "gmail@otscup.com"
 ## OAuth provider 显示开关（git_github_switch/google_switch）：已启用且豆豆实测通过，固化进 toml
 ## 防止后续 worker 部署丢开关导致登录按钮消失（同类 --var 注入丢失根因）。
 github_switch = true

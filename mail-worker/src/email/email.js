@@ -169,8 +169,18 @@ export async function email(message, env, ctx) {
 		}
 
 		//转发到其他邮箱
-				// N-02：Google/Gmail 来源邮件只 TG+保存，跳过 forward（不送 Outlook/QQ）
-				const isGoogleSourced = emailRules.isGoogleSourcedEmail(email, env);
+					// N-02：Google/Gmail 来源邮件只 TG+保存，跳过 forward（不送 Outlook/QQ）
+					// 判定主信号：message.to 命中 GMAIL_ROUTING_INBOX（gmail@otscup.com）即 Google 通道（§4.11 v1.3）
+					const isGoogleSourced = emailRules.isGoogleSourcedEmail(email, env, message.to);
+
+				// N-02 诊断日志（可观测性，不影响业务）：真实样本进来可 tail 到判定依据
+				{
+					const _from = (email && email.from && email.from.address) || '';
+					const _hs = (email && Array.isArray(email.headers)) ? email.headers : [];
+					const _sig = _hs.filter(h => ['x-gm-original-from','x-google-smtp-source','x-google-original-from'].includes((h.key||'').toLowerCase()))
+						.map(h => `${h.key}=${String(h.value||'').slice(0,60)}`).join(' | ');
+					console.log(`[N-02] to=${message.to} from=${_from} flag=${env && env.SKIP_FORWARD_GMAIL_FORWARDED} toEmailRouting=${(env && env.GMAIL_ROUTING_INBOX)||'gmail@otscup.com'} isGoogleSourced=${isGoogleSourced} sig=[${_sig}]`);
+				}
 
 				if (forwardStatus === settingConst.forwardStatus.OPEN && forwardEmail && !isGoogleSourced) {
 

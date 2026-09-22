@@ -25,7 +25,27 @@ describe('isGoogleSourcedEmail — 开关控制（零回归）', () => {
   });
 });
 
-// —— A 类来源域判定 ——
+// —— 主信号：GMAIL_ROUTING_INBOX 收件地址（架构 §4.11 v1.3）——
+describe('主信号 — GMAIL_ROUTING_INBOX 收件地址命中（§4.11 v1.3）', () => {
+  const envRouting = { SKIP_FORWARD_GMAIL_FORWARDED: true, GMAIL_ROUTING_INBOX: 'gmail@otscup.com' };
+  it('toEmail 命中 gmail@otscup.com → true（即使 From 非 Google 域，419 代价样本）', () => {
+    // 163 直发 gmail@otscup.com → 只进 TG（419 已知代价，豆豆已接受）
+    expect(emailRules.isGoogleSourcedEmail({ from: { address: 'vincent_dam@163.com' }, headers: [] }, envRouting, 'gmail@otscup.com')).toBe(true);
+  });
+  it('toEmail 大小写不敏感命中 → true', () => {
+    expect(emailRules.isGoogleSourcedEmail({ from: { address: 'x@g.com' }, headers: [] }, envRouting, 'GMAIL@otscup.com')).toBe(true);
+  });
+  it('未命中路由收件地址（默认 gmail@otscup.com）→ 不判主信号，走辅助判定', () => {
+    // 非 google 来源 + 非路由地址 → false（不误判为 Google）
+    expect(emailRules.isGoogleSourcedEmail({ from: { address: 'vincent_dam@163.com' }, headers: [] }, envRouting, 'other@otscup.com')).toBe(false);
+  });
+  it('toEmail 缺失 → 主信号跳过，不误判（向后兼容）', () => {
+    expect(emailRules.isGoogleSourcedEmail({ from: { address: 'vincent_dam@163.com' }, headers: [] }, envRouting)).toBe(false);
+  });
+  it('env 未配 GMAIL_ROUTING_INBOX 时默认 gmail@otscup.com 生效', () => {
+    expect(emailRules.isGoogleSourcedEmail({ from: { address: 'a@x.com' }, headers: [] }, envOn, 'gmail@otscup.com')).toBe(true);
+  });
+});
 describe('A 类 — Google/Gmail 来源域', () => {
   it('@google.com 直接发（noreply-accounts@google.com）→ true', () => {
     expect(emailRules.isGoogleSourcedEmail({ from: { address: 'noreply-accounts@google.com' }, headers: [] }, envOn)).toBe(true);
