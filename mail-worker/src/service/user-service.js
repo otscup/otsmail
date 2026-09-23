@@ -112,6 +112,9 @@ const userService = {
 			return;
 		}
 		await orm(c).update(user).set({ isDel: isDel.DELETE }).where(eq(user.userId, userId)).run();
+		// 账号注销时同步解绑第三方 OAuth 关联，否则 oauth 行残留 userId 指向软删账号：
+		// 之前注册过的 Google/GitHub 登录会被 login() 命中 isDel → 报"账号已注销"，且无法用该 OAuth 再注册。
+		await oauthService.deleteByUserIds(c, [userId]);
 		await c.env.kv.delete(kvConst.AUTH_INFO + userId)
 	},
 
