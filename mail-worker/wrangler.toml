@@ -70,6 +70,8 @@ GMAIL_ROUTING_INBOX = "gmail@otscup.com"
 ## 防止后续 worker 部署丢开关导致登录按钮消失（同类 --var 注入丢失根因）。
 github_switch = true
 google_switch = true
+## MCP 开关：默认关(OFF)。MCP 是自动化入口，需显式开启；开启后才能用 AI 客户端收发/删邮件。
+mcp_switch = false
 #ai_model = ""			#ai模型,不填默认使用@cf/meta/llama-3.1-8b-instruct-fast
 #analysis_cache = false			#是否开启分析数据缓存
 #orm_log = false			#是否sql日志
