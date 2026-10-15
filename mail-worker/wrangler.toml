@@ -12,6 +12,9 @@
 name = "otsmail"
 main = "src/index.js"
 compatibility_date = "2025-06-04"
+# MCP SDK (@modelcontextprotocol/sdk) 依赖 node:http 等 Node API，需启用 nodejs_compat，
+# 否则部署阶段 Cloudflare API 报 "No such module node:http" (code 10021) 并拒绝该版本。
+compatibility_flags = ["nodejs_compat"]
 keep_vars = true
 
 [observability]
