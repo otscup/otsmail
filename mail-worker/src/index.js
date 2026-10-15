@@ -18,6 +18,11 @@ export default {
 			return app.fetch(req, env, ctx);
 		}
 
+		// MCP HTTP endpoint: path kept as-is (no /api prefix strip), routes into app
+		if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) {
+			return app.fetch(req, env, ctx);
+		}
+
 		 if (['/static/','/attachments/'].some(p => url.pathname.startsWith(p))) {
 			 return await kvObjService.toObjResp( { env }, url.pathname.substring(1));
 		 }
