@@ -98,7 +98,7 @@ export function createMcpServer(c) {
 		if (folder === 'sent') {
 			rows = rows.filter(e => e.type === emailConst.type.SEND);
 		} else if (folder === 'trash') {
-			rows = rows.filter(e => e.isDel === emailConst.isDel.DELETE);
+			rows = rows.filter(e => e.isDel === isDel.DELETE);
 		} else if (folder === 'inbox') {
 			rows = rows.filter(e => e.type === emailConst.type.RECEIVE);
 		} else if (folder === 'draft') {
