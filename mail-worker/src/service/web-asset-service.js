@@ -48,13 +48,17 @@ const webAssetService = {
 					headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }
 				});
 			}
+			// 带 hash 的构建产物可永久缓存；index/SPA 回退不缓存，避免旧壳
+			const immutable = pathname.startsWith('/assets/');
+			const cacheControl = immutable
+				? 'public, max-age=31536000, immutable'
+				: 'no-store';
 			// 流式返回 R2 对象 body (避免 arrayBuffer 大文件偶发空 body)
 			return new Response(obj.body, {
 				headers: {
 					'content-type': this.contentType(pathname),
-					// no-store: 防止 CF/浏览器缓存坏响应导致白屏复发
-					'cache-control': 'no-store',
-					'cdn-cache-control': 'no-store'
+					'cache-control': cacheControl,
+					'cdn-cache-control': cacheControl
 				}
 			});
 		} catch (e) {

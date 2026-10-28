@@ -1,17 +1,18 @@
 
 import * as echarts from 'echarts/core';
 
-import { BarChart,PieChart,LineChart,GaugeChart} from 'echarts/charts';
-// 引入标题，提示框，直角坐标系，数据集，内置数据转换器组件，组件后缀都为 Component
+import { BarChart,PieChart,LineChart,GaugeChart,HeatmapChart} from 'echarts/charts';
+// 寮曞叆鏍囬锛屾彁绀烘锛岀洿瑙掑潗鏍囩郴锛屾暟鎹泦锛屽唴缃暟鎹浆鎹㈠櫒缁勪欢锛岀粍浠跺悗缂€閮戒负 Component
 import {
     TooltipComponent,
     GridComponent,
+    VisualMapComponent,
 } from 'echarts/components';
-// 标签自动布局、全局过渡动画等特性
-// 引入 Canvas 渲染器，注意引入 CanvasRenderer 或者 SVGRenderer 是必须的一步
+// 鏍囩鑷姩甯冨眬銆佸叏灞€杩囨浮鍔ㄧ敾绛夌壒鎬?
+// 寮曞叆 Canvas 娓叉煋鍣紝娉ㄦ剰寮曞叆 CanvasRenderer 鎴栬€?SVGRenderer 鏄繀椤荤殑涓€姝?
 import { CanvasRenderer } from 'echarts/renderers';
 import { LegendComponent } from 'echarts/components';
-// 注册必须的组件
+// 娉ㄥ唽蹇呴』鐨勭粍浠?
 echarts.use([
     GaugeChart,
     LegendComponent,
@@ -20,6 +21,8 @@ echarts.use([
     GridComponent,
     BarChart,
     LineChart,
+    HeatmapChart,
+    VisualMapComponent,
     CanvasRenderer
 ]);
 

@@ -8,7 +8,9 @@
                :star-cancel="starCancel"
                :time-sort="params.timeSort"
                :email-read="emailRead"
+               :email-unread="emailUnread"
                :show-unread="true"
+               :show-categories="true"
                actionLeft="4px"
                @jump="jumpContent"
   >
@@ -27,10 +29,11 @@ import {useAccountStore} from "@/store/account.js";
 import {useEmailStore} from "@/store/email.js";
 import {useSettingStore} from "@/store/setting.js";
 import emailScroll from "@/components/email-scroll/index.vue"
-import {emailList, emailDelete, emailLatest, emailRead} from "@/request/email.js";
+import {emailList, emailDelete, emailLatest, emailRead, emailUnread} from "@/request/email.js";
 import {starAdd, starCancel} from "@/request/star.js";
 import {defineOptions, h, onMounted, reactive, ref, watch} from "vue";
 import {sleep} from "@/utils/time-utils.js";
+import {notifyNewEmail} from "@/utils/notify.js";
 import router from "@/router/index.js";
 import {Icon} from "@iconify/vue";
 import { useRoute } from 'vue-router'
@@ -80,7 +83,8 @@ async function latest() {
     let autoRefresh = settingStore.settings.autoRefresh;
     await sleep(autoRefresh > 1 ? autoRefresh * 1000 : 3000);
 
-    if (route.name !== 'email') {
+    // 搜索中不追加最新邮件：新到的邮件不一定符合搜索条件
+    if (route.name !== 'email' || emailStore.hasSearch || scroll.value.activeCategory !== 'primary') {
       continue;
     }
 
@@ -111,6 +115,7 @@ async function latest() {
 
                 existIds.add(email.emailId)
                 scroll.value.addItem(email)
+                notifyNewEmail(email)
 
                 await sleep(50)
               }
@@ -138,10 +143,10 @@ function cancelStar(email) {
   emailStore.starScroll?.deleteEmail([email.emailId])
 }
 
-function getEmailList(emailId, size) {
+function getEmailList(emailId, size, category, page) {
   const accountId =  accountStore.currentAccountId;
   const allReceive = accountStore.currentAccount.allReceive;
-  return emailList(accountId, allReceive, emailId, params.timeSort, size, 0).then(data => {
+  return emailList(accountId, allReceive, emailId, params.timeSort, size, 0, emailStore.searchParams, undefined, category, page).then(data => {
     data.latestEmail.reqAccountId = accountId;
     data.latestEmail.allReceive = allReceive;
     return data;

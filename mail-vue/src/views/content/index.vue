@@ -1,5 +1,5 @@
 <template>
-  <div class="box">
+  <div class="box mail-detail">
     <div class="header-actions">
       <Icon class="icon" icon="material-symbols-light:arrow-back-ios-new" width="20" height="20" @click="handleBack"/>
       <Icon v-perm="'email:delete'" class="icon" icon="uiw:delete" width="16" height="16" @click="handleDelete"/>
@@ -7,6 +7,12 @@
         <Icon class="icon" @click="changeStar" v-if="email.isStar" icon="fluent-color:star-16" width="20" height="20"/>
         <Icon class="icon" @click="changeStar" v-else icon="solar:star-line-duotone" width="18" height="18"/>
       </span>
+      <el-tooltip v-if="email.type === 0"
+                  :content="email.spam ? $t('unmarkSpam') : $t('markSpam')"
+                  placement="top">
+        <Icon class="icon" @click="toggleSpam"
+              :icon="email.spam ? 'fluent:mail-read-20-regular' : 'mdi:email-remove'" width="20" height="20"/>
+      </el-tooltip>
       <Icon class="icon" v-if="emailStore.contentData.showReply" v-perm="'email:send'"  @click="openReply" icon="la:reply" width="21" height="21" />
       <Icon class="icon" v-if="emailStore.contentData.showReply" v-perm="'email:send'"  @click="openForward" icon="iconoir:arrow-up-right" width="20" height="20" />
       <el-tooltip
@@ -41,6 +47,10 @@
                 <div class="send-name">
                   <span class="send-name-title">{{ email.name }}</span>
                   <span><{{ email.sendEmail }}></span>
+                  <el-tooltip :content="$t('contactAddQuick')" placement="top">
+                    <Icon class="add-contact-inline" icon="mdi:account-plus-outline" width="18" height="18"
+                          @click.stop="addSenderContact"/>
+                  </el-tooltip>
                 </div>
               </div>
               <div class="receive"><span class="source">{{$t('recipient')}}</span><span class="receive-email">{{  formateReceive(email.recipient) }}</span></div>
@@ -65,6 +75,14 @@
             <ShadowHtml class="shadow-html" :html="formatImage(displayContent)" v-if="displayContent" />
             <pre v-else class="email-text" >{{email.text}}</pre>
           </el-scrollbar>
+          <div class="detail-actions" v-if="emailStore.contentData.showReply" v-perm="'email:send'">
+            <el-button round @click="openReply">
+              <Icon icon="la:reply" width="17" height="17"/>&nbsp;{{ $t('reply') }}
+            </el-button>
+            <el-button round @click="openForward">
+              <Icon icon="iconoir:arrow-up-right" width="17" height="17"/>&nbsp;{{ $t('forward') }}
+            </el-button>
+          </div>
           <div class="att" v-if="email.attList.length > 0">
             <div class="att-title">
               <span>{{$t('attachments')}}</span>
@@ -105,7 +123,7 @@ import ShadowHtml from '@/components/shadow-html/index.vue'
 import {reactive, ref, watch, onMounted, onUnmounted} from "vue";
 import {useRouter} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
-import {emailDelete, emailRead, emailDetail} from "@/request/email.js";
+import {emailDelete, emailRead, emailDetail, emailSpam, emailSpamCancel} from "@/request/email.js";
 import {Icon} from "@iconify/vue";
 import {useEmailStore} from "@/store/email.js";
 import {useAccountStore} from "@/store/account.js";
@@ -120,6 +138,7 @@ import {useUiStore} from "@/store/ui.js";
 import {useI18n} from "vue-i18n";
 import {EmailUnreadEnum} from "@/enums/email-enum.js";
 import {translateEmail} from "@/request/translation.js";
+import {contactAdd} from "@/request/contact.js";
 import {computed} from "vue";
 
 const uiStore = useUiStore();
@@ -130,6 +149,17 @@ const router = useRouter()
 const email = emailStore.contentData.email
 const showPreview = ref(false)
 const srcList = reactive([])
+
+async function addSenderContact() {
+  if (!email?.sendEmail) return
+  await contactAdd({
+    name: email.name || '',
+    email: email.sendEmail,
+    groupName: '默认',
+    remark: ''
+  })
+  ElMessage({message: t('contactAddSuccess'), type: 'success', plain: true})
+}
 
 const { t, locale } = useI18n()
 
@@ -223,7 +253,7 @@ onMounted(async () => {
   if (emailStore.contentData.showUnread && email.unread === EmailUnreadEnum.UNREAD) {
     email.unread = EmailUnreadEnum.READ;
     emailStore.markListRead(email.emailId);
-    emailRead([email.emailId]);
+    emailRead([email.emailId]).then(() => emailStore.emailScroll?.loadCategoryCounts?.());
   }
   window.addEventListener('keydown', handleKeyDown);
 })
@@ -301,6 +331,15 @@ function changeStar() {
       email.isStar = 0;
     })
   }
+}
+
+// 标记 / 取消垃圾邮件（仅收到的邮件）
+function toggleSpam() {
+  const target = email.spam ? 0 : 1
+  const req = target ? emailSpam : emailSpamCancel
+  req(email.emailId).then(() => {
+    email.spam = target
+  })
 }
 
 const handleBack = () => {
@@ -496,6 +535,17 @@ const handleDelete = () => {
 
         .send-name-title {
           padding-right: 5px;
+        }
+
+        .add-contact-inline {
+          margin-left: 8px;
+          align-self: center;
+          color: var(--label-3);
+          cursor: pointer;
+
+          &:hover {
+            color: var(--blue);
+          }
         }
       }
 

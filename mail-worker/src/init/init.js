@@ -35,8 +35,221 @@ const dbInit = {
 		await this.otsmail_3DB(c);
 		await this.otsmail_4DB(c);
 		await this.otsmail_5DB(c);
+		await this.otsmail_6DB(c);
+		await this.otsmail_12DB(c);
+		await this.otsmail_7DB(c);
+		await this.otsmail_10DB(c);
+		await this.otsmail_11DB(c);
+		await this.otsmail_aiDB(c);
+		await this.otsmail_13DB(c);
+		await this.otsmail_14DB(c);
+		await this.otsmail_15DB(c);
+		await this.otsmail_16DB(c);
+		await this.otsmail_9DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
+	},
+
+	// otsmail 迁移：企业 SSO（OIDC）字段，后台界面可配
+	async otsmail_6DB(c) {
+		const columns = [
+			`oidc_switch INTEGER NOT NULL DEFAULT 0`,
+			`oidc_name TEXT NOT NULL DEFAULT 'SSO'`,
+			`oidc_issuer TEXT NOT NULL DEFAULT ''`,
+			`oidc_client_id TEXT NOT NULL DEFAULT ''`,
+			`oidc_client_secret TEXT NOT NULL DEFAULT ''`,
+			`oidc_scope TEXT NOT NULL DEFAULT 'openid profile email'`,
+			`oidc_callback_url TEXT NOT NULL DEFAULT ''`
+		];
+		// 逐列执行：已存在的列跳过，不能让一条失败拖掉其余列
+		for (const column of columns) {
+			try {
+				await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN ${column};`).run();
+			} catch (e) {
+				console.warn(`跳过字段：${e.message}`);
+			}
+		}
+	},
+
+	// otsmail 迁移：多 OIDC 服务商列表（JSON 数组，单条 oidc_* 字段保留兼容）
+	async otsmail_12DB(c) {
+		try {
+			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN oidc_providers TEXT NOT NULL DEFAULT '[]';`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+	// otsmail 迁移：AI 助手改用 OpenAI 兼容接口（后台可配地址/Key/模型）
+	async otsmail_13DB(c) {
+		const columns = [
+			`ai_base_url TEXT NOT NULL DEFAULT ''`,
+			`ai_api_key TEXT NOT NULL DEFAULT ''`,
+			`ai_model TEXT NOT NULL DEFAULT ''`
+		];
+		for (const column of columns) {
+			try {
+				await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN ${column};`).run();
+			} catch (e) {
+				console.warn(`跳过字段：${e.message}`);
+			}
+		}
+	},
+
+	// otsmail 迁移：邮件垃圾标记（未读 / 已删除 / 垃圾箱三个列表要用）
+	// otsmail 迁移：Gmail 式收件分类（primary/social/promotion/updates/ads/spam）
+	async otsmail_14DB(c) {
+		try {
+			await c.env.db.prepare(`ALTER TABLE email ADD COLUMN category TEXT NOT NULL DEFAULT 'primary';`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+
+		// 给升级前已有的邮件补一版粗分类，之后新邮件由 AI + 规则分类
+		const rules = [
+			['spam', `spam = 1`],
+			['social', `(send_email LIKE '%facebook.%' OR send_email LIKE '%twitter.%' OR send_email LIKE '%linkedin.%' OR send_email LIKE '%instagram.%' OR send_email LIKE '%pinterest.%' OR send_email LIKE '%reddit.%' OR send_email LIKE '%slack.%')`],
+			['promotion', `(subject LIKE '%sale%' OR subject LIKE '%discount%' OR subject LIKE '%优惠%' OR subject LIKE '%促销%' OR subject LIKE '%折扣%' OR subject LIKE '%限时%')`],
+			['updates', `(subject LIKE '%verify%' OR subject LIKE '%security%' OR subject LIKE '%receipt%' OR subject LIKE '%invoice%' OR subject LIKE '%order%' OR subject LIKE '%验证码%' OR subject LIKE '%账单%' OR subject LIKE '%订单%')`],
+			['ads', `(subject LIKE '%广告%' OR subject LIKE '%推广%' OR subject LIKE '%sponsor%')`]
+		];
+		for (const [category, condition] of rules) {
+			try {
+				await c.env.db.prepare(`UPDATE email SET category = '${category}' WHERE category = 'primary' AND ${condition};`).run();
+			} catch (e) {
+				console.warn(`跳过分类回填：${e.message}`);
+			}
+		}
+	},
+
+	// otsmail 迁移：分类方式 off=本地规则 / auto=收信时 AI / manual=手动按钮触发 AI
+	async otsmail_15DB(c) {
+		try {
+			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN ai_classify_mode TEXT NOT NULL DEFAULT 'off';`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+	// otsmail 迁移：站点副标题、聊天背景、密码登录强制两步验证
+	async otsmail_16DB(c) {
+		const columns = [
+			`subtitle TEXT NOT NULL DEFAULT ''`,
+			`chat_background TEXT`,
+			`chat_opacity INTEGER NOT NULL DEFAULT 0.88`
+		];
+		for (const column of columns) {
+			try {
+				await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN ${column};`).run();
+			} catch (e) {
+				console.warn(`跳过字段：${e.message}`);
+			}
+		}
+		try {
+			await c.env.db.prepare(`ALTER TABLE user ADD COLUMN two_factor_required INTEGER NOT NULL DEFAULT 0;`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+	async otsmail_11DB(c) {
+		try {
+			await c.env.db.prepare(`ALTER TABLE email ADD COLUMN spam INTEGER NOT NULL DEFAULT 0;`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+
+	// otsmail 迁移：AI 助手权限点（默认身份全部授予，升级后老用户不会被 403 挡住）
+	async otsmail_aiDB(c) {
+		try {
+			await c.env.db.prepare(`
+        INSERT INTO perm (perm_id, name, perm_key, pid, type, sort) VALUES
+        (61,'AI 助手', NULL, 0, 1, 5.2),
+        (62,'AI 使用', 'ai:use', 61, 2, 0)`).run();
+		} catch (e) {
+			console.warn(`跳过数据：${e.message}`);
+		}
+
+		try {
+			await c.env.db.prepare(`
+        INSERT INTO role_perm (role_id, perm_id)
+        SELECT role_id, 62 FROM role
+        WHERE role_id NOT IN (SELECT role_id FROM role_perm WHERE perm_id = 62)`).run();
+		} catch (e) {
+			console.warn(`跳过数据：${e.message}`);
+		}
+	},
+
+	// otsmail 迁移：个人设置（头像 + 两步验证）字段
+	async otsmail_9DB(c) {
+		const columns = [
+			`avatar TEXT NOT NULL DEFAULT ''`,
+			`two_factor_switch INTEGER NOT NULL DEFAULT 0`,
+			`two_factor_secret TEXT NOT NULL DEFAULT ''`
+		];
+		for (const column of columns) {
+			try {
+				await c.env.db.prepare(`ALTER TABLE user ADD COLUMN ${column};`).run();
+			} catch (e) {
+				console.warn(`跳过字段：${e.message}`);
+			}
+		}
+	},
+
+	// otsmail 迁移：联系人（分组 + 备注），同一用户下 email 唯一
+	async otsmail_7DB(c) {
+		try {
+			await c.env.db.batch([
+				c.env.db.prepare(`CREATE TABLE IF NOT EXISTS contact (
+					contact_id INTEGER PRIMARY KEY AUTOINCREMENT,
+					user_id INTEGER NOT NULL,
+					name TEXT NOT NULL DEFAULT '',
+					email TEXT NOT NULL,
+					group_name TEXT NOT NULL DEFAULT '默认',
+					remark TEXT NOT NULL DEFAULT '',
+					create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+					is_del INTEGER NOT NULL DEFAULT 0
+				)`),
+				c.env.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_contact_user_email ON contact(user_id, email)`),
+				c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_contact_user_group ON contact(user_id, group_name, is_del)`)
+			]);
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+	// otsmail 迁移：MCP 授权——访问令牌表 + OAuth 客户端表
+	async otsmail_10DB(c) {
+		try {
+			await c.env.db.batch([
+				c.env.db.prepare(`CREATE TABLE IF NOT EXISTS mcp_token (
+					token_id INTEGER PRIMARY KEY AUTOINCREMENT,
+					user_id INTEGER NOT NULL,
+					name TEXT NOT NULL DEFAULT '',
+					token_prefix TEXT NOT NULL DEFAULT '',
+					token_hash TEXT NOT NULL,
+					client_id TEXT NOT NULL DEFAULT '',
+					create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+					last_used_at DATETIME,
+					revoked INTEGER NOT NULL DEFAULT 0
+				)`),
+				c.env.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_token_hash ON mcp_token(token_hash)`),
+				c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_mcp_token_user ON mcp_token(user_id)`),
+				c.env.db.prepare(`CREATE TABLE IF NOT EXISTS mcp_client (
+					client_id TEXT PRIMARY KEY,
+					client_secret_hash TEXT NOT NULL,
+					name TEXT NOT NULL DEFAULT '',
+					user_id INTEGER NOT NULL DEFAULT 0,
+					create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+					revoked INTEGER NOT NULL DEFAULT 0
+				)`),
+				c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_mcp_client_user ON mcp_client(user_id)`)
+			]);
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
 	},
 
 	// otsmail 迁移：管理员可配的 DeepL API key（存 setting，前端设置页可填）

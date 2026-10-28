@@ -15,14 +15,78 @@ const settingService = {
 	async refresh(c) {
 		const settingRow = await orm(c).select().from(setting).get();
 		settingRow.resendTokens = JSON.parse(settingRow.resendTokens);
+		settingRow.oidcProviders = this.parseOidcProviders(settingRow);
 		c.set('setting', settingRow);
 		await c.env.kv.put(KvConst.SETTING, JSON.stringify(settingRow));
+	},
+
+	// OIDC 服务商列表：新字段是 JSON 数组；老库只有单条 oidc_* 字段时自动兜底，
+	// 保证升级用户原来的 SSO 配置不会消失。
+	parseOidcProviders(row) {
+		let list = row.oidcProviders;
+		if (typeof list === 'string') {
+			try {
+				list = JSON.parse(list);
+			} catch (e) {
+				list = [];
+			}
+		}
+		if (!Array.isArray(list)) list = [];
+		list = list.filter(item => item && item.issuer && item.clientId);
+		if (list.length === 0 && row.oidcIssuer && row.oidcClientId) {
+			list = [{
+				id: 'legacy',
+				name: row.oidcName || 'SSO',
+				issuer: row.oidcIssuer,
+				clientId: row.oidcClientId,
+				clientSecret: row.oidcClientSecret || '',
+				scope: row.oidcScope || 'openid profile email',
+				callbackUrl: row.oidcCallbackUrl || '',
+				enabled: row.oidcSwitch === 1
+			}];
+		}
+		return list;
+	},
+
+	// 后台读：secret 不下发，只给 hasSecret；列表顺序即登录页按钮顺序
+	publicOidcProviders(row) {
+		return this.parseOidcProviders(row).map(item => ({
+			id: item.id,
+			name: item.name || 'SSO',
+			issuer: item.issuer || '',
+			clientId: item.clientId || '',
+			scope: item.scope || 'openid profile email',
+			callbackUrl: item.callbackUrl || '',
+			enabled: item.enabled === true || item.enabled === 1,
+			hasSecret: !!item.clientSecret
+		}));
+	},
+
+	enabledOidcProviders(row) {
+		return this.publicOidcProviders(row).filter(item => item.enabled);
+	},
+
+	// OIDC 登录/绑定入口按 id 取服务商；未传 id 时取第一个启用的
+	async resolveOidcProvider(c, providerId) {
+		const row = await this.query(c);
+		const list = this.enabledOidcProviders(row);
+		const provider = providerId
+			? list.find(item => item.id === providerId)
+			: list[0];
+		if (!provider) {
+			throw new BizError(t('oidcNotConfigured') || 'OIDC not configured');
+		}
+		// 内部调用需要 secret，重新从完整列表里取
+		const full = this.parseOidcProviders(row).find(item => item.id === provider.id);
+		return { ...provider, clientSecret: full?.clientSecret || '' };
 	},
 
 	async query(c) {
 
 		if (c.get?.('setting')) {
-			return c.get('setting')
+			const cached = c.get('setting');
+			cached.oidcProviders = this.parseOidcProviders(cached);
+			return cached;
 		}
 
 		const setting = await c.env.kv.get(KvConst.SETTING, { type: 'json' });
@@ -103,6 +167,7 @@ const settingService = {
 		setting.googleSwitch = googleSwitch;
 
 		setting.emailPrefixFilter = setting.emailPrefixFilter.split(",").filter(Boolean);
+		setting.oidcProviders = this.parseOidcProviders(setting);
 
 		c.set?.('setting', setting);
 		return setting;
@@ -129,8 +194,13 @@ const settingService = {
 		settingRow.s3AccessKey = settingRow.s3AccessKey ? `${settingRow.s3AccessKey.slice(0, 12)}******` : null;
 		settingRow.s3SecretKey = settingRow.s3SecretKey ? `${settingRow.s3SecretKey.slice(0, 12)}******` : null;
 		settingRow.tgBotToken = settingRow.tgBotToken ? `${settingRow.tgBotToken.slice(0, 20)}******` : null;
+		// AI API Key 只回显前 8 位，后台保存时靠 ****** 判断未修改
+		settingRow.aiApiKey = settingRow.aiApiKey ? `${settingRow.aiApiKey.slice(0, 8)}******` : '';
 		// DeepL key 脱敏：仅回显前 8 位，避免设置页明文泄露
 		settingRow.deeplKey = settingRow.deeplKey ? `${settingRow.deeplKey.slice(0, 8)}******` : '';
+		// OIDC client_secret 同样脱敏，避免后台接口明文回显
+		settingRow.oidcClientSecret = settingRow.oidcClientSecret ? `${settingRow.oidcClientSecret.slice(0, 6)}******` : '';
+		settingRow.oidcProviders = this.publicOidcProviders(settingRow);
 		settingRow.hasR2 = !!c.env.r2
 		settingRow.hasCfEmail = !!c.env.email
 
@@ -169,39 +239,86 @@ const settingService = {
 			params.aiCodeFilter = params.aiCodeFilter + '';
 		}
 
+		if (params.chatOpacity !== undefined) {
+			params.chatOpacity = Math.min(1, Math.max(0, Number(params.chatOpacity) || 0));
+		}
+
+		if (params.subtitle !== undefined) {
+			params.subtitle = String(params.subtitle || '').slice(0, 80);
+		}
+
+		if (params.aiClassifyMode !== undefined) {
+			const modes = ['off', 'auto', 'manual'];
+			if (!modes.includes(params.aiClassifyMode)) {
+				throw new BizError('Invalid AI classify mode', 400);
+			}
+		}
+
 		// 脱敏字段：前端回传含 ****** 的占位值说明未修改，剔除以免覆盖真实 key
-		['deeplKey', 'secretKey', 'tgBotToken', 's3AccessKey', 's3SecretKey'].forEach(k => {
+		['deeplKey', 'secretKey', 'tgBotToken', 's3AccessKey', 's3SecretKey', 'oidcClientSecret', 'aiApiKey'].forEach(k => {
 			if (typeof params[k] === 'string' && params[k].includes('******')) delete params[k];
 		});
+
+		// 多 OIDC：前端只回传 hasSecret，不回传明文 secret。按 id 合并旧 secret；
+		// 新服务商留空就是空 secret（不允许把上一家的 secret 串到新服务商）。
+		if (params.oidcProviders !== undefined) {
+			const oldList = this.parseOidcProviders(settingData);
+			let list = params.oidcProviders;
+			if (typeof list === 'string') {
+				try { list = JSON.parse(list); } catch (e) { list = []; }
+			}
+			if (!Array.isArray(list)) list = [];
+			params.oidcProviders = JSON.stringify(list
+				.filter(item => item && item.issuer && item.clientId)
+				.map((item, index) => {
+					const old = oldList.find(row => row.id === item.id);
+					let id = String(item.id || '').trim();
+					if (!id) id = 'oidc-' + Date.now().toString(36) + '-' + index;
+					let secret = typeof item.clientSecret === 'string' ? item.clientSecret : '';
+					if (!secret || secret.includes('******')) secret = old?.clientSecret || '';
+					return {
+						id,
+						name: String(item.name || 'SSO').slice(0, 60),
+						issuer: String(item.issuer || '').trim().replace(/\/+$/, ''),
+						clientId: String(item.clientId || '').trim(),
+						clientSecret: secret,
+						scope: String(item.scope || 'openid profile email').trim(),
+						callbackUrl: String(item.callbackUrl || '').trim(),
+						enabled: item.enabled === true || item.enabled === 1
+					};
+				}));
+		}
 
 		params.resendTokens = JSON.stringify(resendTokens);
 		await orm(c).update(setting).set({ ...params }).returning().get();
 		await this.refresh(c);
 	},
 
-	async deleteBackground(c) {
+	async deleteBackground(c, target = 'background') {
 
-		const { background } = await this.query(c);
+		const key = target === 'chatBackground' ? 'chatBackground' : 'background';
+		const { [key]: background } = await this.query(c);
 		if (!background) return
 
 		if (background.startsWith('http')) {
-			await orm(c).update(setting).set({ background: '' }).run();
+			await orm(c).update(setting).set({ [key]: '' }).run();
 			await this.refresh(c)
 			return;
 		}
 
 		if (background) {
 			await r2Service.delete(c,background)
-			await orm(c).update(setting).set({ background: '' }).run();
+			await orm(c).update(setting).set({ [key]: '' }).run();
 			await this.refresh(c)
 		}
 	},
 
 	async setBackground(c, params) {
 
-		let { background } = params
+		const key = params.target === 'chatBackground' ? 'chatBackground' : 'background';
+		let background = params[key] ?? params.background;
 
-		await this.deleteBackground(c);
+		await this.deleteBackground(c, key);
 
 		if (background && !background.startsWith('http')) {
 
@@ -219,7 +336,7 @@ const settingService = {
 
 		}
 
-		await orm(c).update(setting).set({ background }).run();
+		await orm(c).update(setting).set({ [key]: background }).run();
 		await this.refresh(c);
 		return background;
 	},
@@ -240,6 +357,7 @@ const settingService = {
 		return {
 			register: settingRow.register,
 			title: settingRow.title,
+			subtitle: settingRow.subtitle || '',
 			manyEmail: settingRow.manyEmail,
 			addEmail: settingRow.addEmail,
 			autoRefresh: settingRow.autoRefresh,
@@ -249,6 +367,8 @@ const settingService = {
 			r2Domain: settingRow.r2Domain,
 			siteKey: settingRow.siteKey,
 			background: settingRow.background,
+			chatBackground: settingRow.chatBackground || '',
+			chatOpacity: settingRow.chatOpacity,
 			loginOpacity: settingRow.loginOpacity,
 			domainList: settingRow.loginDomain === 1 && !token ? [] : settingRow.domainList,
 			regKey: settingRow.regKey,
@@ -272,6 +392,13 @@ const settingService = {
 			googleClientId: settingRow.googleClientId,
 			googleCallbackUrl: settingRow.googleCallbackUrl,
 			googleSwitch: settingRow.googleSwitch,
+			// 企业 SSO（OIDC）：只下发展示与授权所需的公开字段，client_secret 不出后端
+			oidcName: settingRow.oidcName,
+			oidcSwitch: settingRow.oidcSwitch === 1,
+			oidcClientId: settingRow.oidcClientId,
+			oidcCallbackUrl: settingRow.oidcCallbackUrl,
+			oidcScope: settingRow.oidcScope,
+			oidcProviders: this.enabledOidcProviders(settingRow).map(item => ({ id: item.id, name: item.name })),
 			minEmailPrefix: settingRow.minEmailPrefix,
 			projectLink: settingRow.projectLink
 		};

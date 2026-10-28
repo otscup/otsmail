@@ -1,0 +1,140 @@
+/* ============================================================================
+   ios-tokens.css — otsmail iOS card style design tokens (CONTRACT FILE)
+   Single source of truth for colors/fonts/spacing/radius/shadow/motion.
+   Components MUST reference var(--...) only; no raw hex/font-size/spacing.
+   Adapted from F:\Desktop\MFiles\ios-samples\tokens.css (iOS HIG baseline).
+   Light + dark via html[data-theme="dark"].
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* ---- Font: SF Pro first, system fallback ---- */
+  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+                 "Helvetica Neue", "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+                 "Microsoft YaHei", sans-serif;
+  --text-large-title: 34px;  --lh-large-title: 41px;  --ls-large-title: 0.37px;
+  --text-title2: 22px;       --lh-title2: 28px;       --ls-title2: 0.35px;
+  --text-title3: 20px;       --lh-title3: 25px;       --ls-title3: 0.38px;
+  --text-body: 17px;         --lh-body: 22px;         --ls-body: -0.41px;
+  --text-subhead: 15px;      --lh-subhead: 20px;      --ls-subhead: -0.24px;
+  --text-footnote: 13px;     --lh-footnote: 18px;     --ls-footnote: -0.08px;
+  --text-caption: 12px;      --lh-caption: 16px;      --ls-caption: 0px;
+  --text-caption2: 11px;     --lh-caption2: 13px;
+  --weight-regular: 400; --weight-medium: 500; --weight-semibold: 600; --weight-bold: 700;
+
+  /* ---- Spacing: 8pt grid (half-steps allowed for fine tuning) ---- */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-11: 44px;
+
+  /* ---- Radius: system tiers only ---- */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-icon: 7px;
+  --radius-hero: 14px;
+  --radius-pill: 100px;
+
+  /* ---- Controls & structure ---- */
+  --tap-min: 44px;
+  --row-height: 44px;
+  --row-height-list: 60px;
+  --status-bar-h: 54px;
+  --nav-bar-h: 44px;
+  --tab-bar-h: 49px;
+  --home-indicator-h: 34px;
+  --screen-pad: 16px;
+  --sidebar-w: 352px;
+  --pane-max: 680px;
+
+  /* ---- Motion: iOS push 0.32s, no bounce ---- */
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-push: 0.32s;
+  --dur-sheet: 0.3s;
+  --dur-fade: 0.2s;
+
+  /* ---- Colors: light (system semantic) ---- */
+  --bg-grouped: #f2f2f7;
+  --bg-secondary: #ffffff;
+  --label: #000000;
+  --label-2: rgba(60, 60, 67, 0.6);
+  --label-3: rgba(60, 60, 67, 0.3);
+  --separator: rgba(60, 60, 67, 0.29);
+  --separator-opaque: #c6c6c8;
+  --fill-quaternary: rgba(116, 116, 128, 0.08);
+  --fill-tertiary: rgba(118, 118, 128, 0.12);
+  --highlight: rgba(0, 0, 0, 0.06);
+  --blue: #007aff;
+  --green: #34c759;
+  --orange: #ff9500;
+  --red: #ff3b30;
+  --purple: #af52de;
+  --teal: #30b0c7;
+  --gray: #8e8e93;
+  --bar-bg: rgba(249, 249, 249, 0.82);
+  --blur-bar: saturate(180%) blur(20px);
+  --sheet-scrim: rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 2px rgba(20, 40, 80, 0.04);
+  --shadow-thumb: 0 3px 8px rgba(0, 0, 0, 0.12), 0 3px 1px rgba(0, 0, 0, 0.04);
+  --shadow-knob: 0 3px 8px rgba(0, 0, 0, 0.15);
+  --shadow-page: -3px 0 14px rgba(0, 0, 0, 0.1);
+  --mix-icon: 14%;
+  --mix-badge: 15%;
+  --mix-tint: 12%;
+  --toast-bg: rgba(30, 30, 32, 0.92);
+  --toast-fg: #ffffff;
+
+  /* ---- otsmail semantic (mail domain) ---- */
+  --ots-unread: #007aff;
+  --ots-star: #ff9500;
+  --ots-danger: #ff3b30;
+  --ots-success: #34c759;
+  --ots-warn: #ff9500;
+  --ots-accent: #007aff;
+  --ots-accent-press: #0051d5;
+  --ots-accent-weak: #e5f0ff;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-grouped: #000000;
+  --bg-secondary: #1c1c1e;
+  --label: #ffffff;
+  --label-2: rgba(235, 235, 245, 0.6);
+  --label-3: rgba(235, 235, 245, 0.3);
+  --separator: rgba(84, 84, 88, 0.6);
+  --separator-opaque: #38383a;
+  --fill-quaternary: rgba(118, 118, 128, 0.24);
+  --fill-tertiary: rgba(118, 118, 128, 0.32);
+  --highlight: rgba(255, 255, 255, 0.08);
+  --blue: #0a84ff;
+  --green: #30d158;
+  --orange: #ff9f0a;
+  --red: #ff453a;
+  --purple: #bf5af2;
+  --teal: #40c8e0;
+  --gray: #8e8e93;
+  --bar-bg: rgba(22, 22, 24, 0.8);
+  --sheet-scrim: rgba(0, 0, 0, 0.56);
+  --shadow-card: none;
+  --shadow-page: -3px 0 14px rgba(0, 0, 0, 0.5);
+  --mix-icon: 26%;
+  --mix-badge: 24%;
+  --mix-tint: 20%;
+  --toast-bg: rgba(58, 58, 60, 0.94);
+
+  --ots-unread: #0a84ff;
+  --ots-star: #ff9f0a;
+  --ots-danger: #ff453a;
+  --ots-success: #30d158;
+  --ots-warn: #ff9f0a;
+  --ots-accent: #0a84ff;
+  --ots-accent-press: #0066cc;
+  --ots-accent-weak: #16293f;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-push: 0.01s; --dur-sheet: 0.01s; --dur-fade: 0.01s; }
+}

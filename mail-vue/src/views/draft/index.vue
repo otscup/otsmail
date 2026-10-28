@@ -62,19 +62,15 @@ watch(() => draftStore.setDraft, async () => {
   deep: true
 })
 
-watch(() => draftStore.refreshList, async () => {
-  const {list} = await getEmailList();
-    scroll.value.emailList.length = 0
-    scroll.value.handleList(list);
-    scroll.value.emailList.push(...list)
+watch(() => draftStore.refreshList, () => {
+  scroll.value.refreshList()
 })
 
-function getEmailList() {
-  return new Promise((resolve, reject) => {
-    db.value.draft.orderBy('createTime').reverse().toArray().then(list => {
-      resolve({list})
-    })
-  })
+function getEmailList(emailId, size, category, page = 1) {
+  return db.value.draft.orderBy('createTime').reverse().toArray().then(list => ({
+    list: list.slice((page - 1) * size, page * size),
+    total: list.length
+  }))
 }
 
 async function deleteDraft(draftIds) {

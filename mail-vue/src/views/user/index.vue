@@ -2,14 +2,6 @@
   <div class="user-box">
     <div class="header-actions">
       <Icon class="icon" icon="ion:add-outline" width="23" height="23" @click="openAdd"/>
-      <div class="search">
-        <el-input
-            v-model="params.email"
-            class="search-input"
-            :placeholder="$t('searchByEmail')"
-        >
-        </el-input>
-      </div>
       <el-select v-model="params.status" placeholder="Select" class="status-select"
                  :style="`width: ${locale === 'en' ? 95 : 80 }px`">
         <el-option :key="-1" :label="$t('all')" :value="-1"/>
@@ -153,29 +145,13 @@
         </el-button>
       </div>
     </el-dialog>
-    <el-dialog v-model="showAdd" :title="$t('addUser')" @closed="resetAddForm">
+    <el-dialog v-model="showAdd" class="user-add-dialog" :title="$t('addUser')" @closed="resetAddForm">
       <div class="container">
         <el-input v-model="addForm.email" type="text" :placeholder="$t('emailAccount')" autocomplete="off" @keyup.enter="submit">
           <template #append>
-            <div @click.stop="openSelect">
-              <el-select
-                  ref="mySelect"
-                  v-model="addForm.suffix"
-                  :placeholder="$t('select')"
-                  class="select"
-              >
-                <el-option
-                    v-for="item in domainList"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                />
-              </el-select>
-              <div>
-                <span>{{ addForm.suffix }}</span>
-                <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-              </div>
-            </div>
+            <el-select v-model="addForm.suffix" :placeholder="$t('select')" class="select">
+              <el-option v-for="item in domainList" :key="item" :label="item" :value="item"/>
+            </el-select>
           </template>
         </el-input>
         <el-input type="password" v-model="addForm.password" :placeholder="$t('password')" @keyup.enter="submit"/>
@@ -365,7 +341,7 @@
 </template>
 
 <script setup>
-import {defineOptions, h, reactive, ref, watch} from 'vue'
+import {defineOptions, h, onMounted, onUnmounted, reactive, ref, watch} from 'vue'
 import {
   userList,
   userDelete,
@@ -989,6 +965,20 @@ function changeTimeSort() {
   getUserList()
 }
 
+function onGlobalSearch(event) {
+  params.email = event.detail?.text || ''
+  params.num = 1
+  getUserList()
+}
+
+onMounted(() => {
+  window.addEventListener('otsmail:search', onGlobalSearch)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('otsmail:search', onGlobalSearch)
+})
+
 function numChange(num) {
   params.num = num
   getUserList()
@@ -1070,7 +1060,7 @@ function adjustWidth() {
 }
 
 :deep(.el-dialog) {
-  width: 400px !important;
+  width: 520px !important;
   @media (max-width: 440px) {
     width: calc(100% - 40px) !important;
     margin-right: 20px !important;
@@ -1113,6 +1103,11 @@ function adjustWidth() {
   .icon {
     cursor: pointer;
   }
+}
+
+:global(.el-dialog.user-add-dialog) {
+  width: 520px;
+  max-width: 92vw;
 }
 
 .container {
@@ -1204,11 +1199,7 @@ function adjustWidth() {
 }
 
 .select {
-  position: absolute;
-  right: 30px;
-  width: 100px;
-  opacity: 0;
-  pointer-events: none;
+  width: 170px;
 }
 
 .loading {

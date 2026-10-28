@@ -99,10 +99,23 @@
                   </el-button>
                 </div>
               </div>
+              <div class="setting-item" v-if="setting.subtitle">
+                <div class="title-item"><span>{{ $t('websiteSubtitle') }}</span></div>
+                <div class="email-title">
+                  <span>{{ setting.subtitle }}</span>
+                </div>
+              </div>
               <div class="setting-item">
                 <div class="title-item"><span>{{ $t('loginBoxOpacity') }}</span></div>
                 <div>
                   <el-input-number size="small" v-model="loginOpacity" @change="opacityChange" :precision="2"
+                                   :step="0.01" :max="1" :min="0"/>
+                </div>
+              </div>
+              <div class="setting-item">
+                <div class="title-item"><span>{{ $t('chatBackgroundOpacity') }}</span></div>
+                <div>
+                  <el-input-number size="small" v-model="chatOpacity" @change="saveChatOpacity" :precision="2"
                                    :step="0.01" :max="1" :min="0"/>
                 </div>
               </div>
@@ -123,10 +136,36 @@
                     </template>
                   </el-image>
                   <div class="background-btn">
-                    <el-button class="opt-button" size="small" type="primary" @click="openSetBackground">
+                    <el-button class="opt-button" size="small" type="primary" @click="openSetBackground('background')">
                       <Icon icon="lsicon:edit-outline" width="16" height="16"/>
                     </el-button>
-                    <el-button class="opt-button" size="small" type="primary" @click="delBackground">
+                    <el-button class="opt-button" size="small" type="primary" @click="delBackground('background')">
+                      <Icon icon="material-symbols:delete-outline-rounded" width="16" height="16"/>
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+              <div class="setting-item personalized">
+                <div><span>{{ $t('chatBackground') }}</span></div>
+                <div>
+                  <el-image
+                      class="background"
+                      :src="cvtR2Url(setting.chatBackground)"
+                      :preview-src-list="[cvtR2Url(setting.chatBackground)]"
+                      show-progress
+                      fit="cover"
+                  >
+                    <template #error>
+                      <div class="error-image">
+                        <Icon icon="ph:image" width="24" height="24"/>
+                      </div>
+                    </template>
+                  </el-image>
+                  <div class="background-btn">
+                    <el-button class="opt-button" size="small" type="primary" @click="openSetBackground('chatBackground')">
+                      <Icon icon="lsicon:edit-outline" width="16" height="16"/>
+                    </el-button>
+                    <el-button class="opt-button" size="small" type="primary" @click="delBackground('chatBackground')">
                       <Icon icon="material-symbols:delete-outline-rounded" width="16" height="16"/>
                     </el-button>
                   </div>
@@ -305,6 +344,15 @@
                   </el-button>
                 </div>
               </div>
+              <div class="setting-item">
+                <div><span>企业登录（OIDC）</span></div>
+                <div class="forward">
+                  <span>{{ enabledOidcCount > 0 ? (enabledOidcCount + ' 个服务商') : $t('disabled') }}</span>
+                  <el-button class="opt-button" size="small" type="primary" @click="openOidc">
+                    <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
+                  </el-button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -395,8 +443,74 @@
           </div>
 
           <div class="settings-card">
-            <div class="card-title">Workers AI</div>
+            <div class="card-title">翻译（DeepL）</div>
             <div class="card-content">
+              <div class="setting-item">
+                <div>
+                  <span>DeepL API Key</span>
+                  <el-tooltip effect="dark" content="填入后邮件翻译优先走 DeepL；留空则回退 Workers AI">
+                    <Icon class="warning" icon="fe:warning" width="18" height="18"/>
+                  </el-tooltip>
+                </div>
+                <div class="bot-verify">
+                  <span>{{ setting.deeplKey || '未配置' }}</span>
+                  <el-button class="opt-button" size="small" type="primary" @click="openDeepL">
+                    <Icon icon="lsicon:edit-outline" width="16" height="16"/>
+                  </el-button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-card ai-settings-card">
+            <div class="card-title">AI 接口（OpenAI 兼容）</div>
+            <div class="card-content">
+              <div class="setting-item">
+                <div>
+                  <span>接口地址</span>
+                  <el-tooltip effect="dark" content="填到 /v1 为止，例如 https://api.openai.com/v1；留空则回退 Workers AI">
+                    <Icon class="warning" icon="fe:warning" width="18" height="18"/>
+                  </el-tooltip>
+                </div>
+                <el-input v-model="setting.aiBaseUrl" placeholder="https://api.openai.com/v1"
+                          style="width: 320px" @change="onAiFieldChange('aiBaseUrl', $event)"/>
+              </div>
+              <div class="setting-item">
+                <div><span>API Key</span></div>
+                <el-input v-model="setting.aiApiKey" type="password" show-password placeholder="sk-..."
+                          style="width: 320px" @change="onAiFieldChange('aiApiKey', $event)"/>
+              </div>
+              <div class="setting-item">
+                <div><span>模型</span></div>
+                <div class="ai-model-row">
+                  <el-select v-model="setting.aiModel" filterable allow-create clearable placeholder="先拉取模型"
+                             style="width: 240px" @change="changeField('aiModel', $event)">
+                    <el-option v-for="item in aiModelList" :key="item" :label="item" :value="item"/>
+                  </el-select>
+                  <el-button :loading="aiModelsLoading" @click="fetchAiModels">
+                    {{ aiModelsLoading ? '拉取中…' : '拉取模型' }}
+                  </el-button>
+                </div>
+              </div>
+              <div class="ai-setting-tip">保存后立即生效；已配置接口时优先走该接口，留空回退 Workers AI。</div>
+              <div class="setting-item">
+                <div>
+                  <span>AI 收件分类</span>
+                  <el-tooltip effect="dark" content="关闭时只按本地规则分类；自动模式收信时调用模型；手动模式只在你点按钮时分类最近 20 封。">
+                    <Icon class="warning" icon="fe:warning" width="18" height="18"/>
+                  </el-tooltip>
+                </div>
+                <div class="ai-classify-row">
+                  <el-select v-model="setting.aiClassifyMode" style="width: 180px"
+                             @change="changeField('aiClassifyMode', $event)">
+                    <el-option label="关闭（本地规则）" value="off"/>
+                    <el-option label="自动 AI 分类" value="auto"/>
+                    <el-option label="手动 AI 分类" value="manual"/>
+                  </el-select>
+                  <el-button v-if="setting.aiClassifyMode === 'manual'" :loading="aiClassifyLoading"
+                             @click="classifyNow">分类最近邮件</el-button>
+                </div>
+              </div>
               <div class="setting-item">
                 <div><span>{{ $t('codeRecognition') }}</span></div>
                 <div>
@@ -414,65 +528,14 @@
               </div>
             </div>
           </div>
-
-          <div class="settings-card about">
-            <div class="card-title">{{ $t('about') }}</div>
-            <div class="card-content">
-              <div class="concerning-item">
-                <span>{{ $t('version') }} :</span>
-                <el-badge is-dot :hidden="!hasUpdate">
-                  <el-button @click="jump('https://github.com/maillab/cloud-mail/releases')">
-                    {{ currentVersion }}
-                    <template #icon>
-                      <Icon icon="qlementine-icons:version-control-16" style="font-size: 20px" color="#1890FF"/>
-                    </template>
-                  </el-button>
-                </el-badge>
-              </div>
-              <div class="concerning-item">
-                <span>{{ $t('community') }} : </span>
-                <div class="community">
-                  <el-button @click="jump('https://github.com/maillab/cloud-mail')">
-                    Github
-                    <template #icon>
-                      <Icon icon="codicon:github-inverted" width="22" height="22"/>
-                    </template>
-                  </el-button>
-                  <el-button @click="jump('https://t.me/cloud_mail_tg')">
-                    Telegram
-                    <template #icon>
-                      <Icon icon="logos:telegram" width="30" height="30"/>
-                    </template>
-                  </el-button>
-                </div>
-              </div>
-              <div class="concerning-item">
-                <span>{{ $t('support') }} : </span>
-                <el-button @click="jump('https://doc.skymail.ink/support.html')">
-                  {{ t('supportDesc') }}
-                  <template #icon>
-                    <Icon color="#79D6B5" icon="simple-icons:buymeacoffee" width="20" height="20"/>
-                  </template>
-                </el-button>
-              </div>
-              <div class="concerning-item">
-                <span>{{ $t('help') }} : </span>
-                <el-button @click="jump('https://doc.skymail.ink')">
-                  {{ t('document') }}
-                  <template #icon>
-                    <Icon color="#79D6B5" icon="fluent-color:document-32" width="18" height="18"/>
-                  </template>
-                </el-button>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
       <!-- Dialogs remain the same -->
-      <el-dialog v-model="editTitleShow" :title="$t('changeTitle')" width="340" @closed="editTitle = setting.title">
+      <el-dialog v-model="editTitleShow" :title="$t('changeTitle')" width="340" @open="editSubtitle = setting.subtitle" @closed="editTitle = setting.title">
         <form @submit.prevent>
           <el-input type="text" :placeholder="$t('websiteTitle')" v-model="editTitle" @keyup.enter="saveTitle"/>
+          <el-input type="text" style="margin-top: 12px" maxlength="80" :placeholder="$t('websiteSubtitle')" v-model="editSubtitle" @keyup.enter="saveTitle"/>
           <el-button type="primary" :loading="settingLoading" @click="saveTitle">{{ $t('save') }}</el-button>
         </form>
       </el-dialog>
@@ -512,7 +575,7 @@
       >
         <template #header>
           <span style="font-size: 18px">
-            {{ $t('backgroundTitle') }}
+            {{ backgroundTarget === 'chatBackground' ? $t('chatBackground') : $t('loginBackground') }}
             <el-tooltip>
               <template #content>
                 <span>{{ $t('backgroundWarning') }}</span>
@@ -558,6 +621,7 @@
           <el-input-tag tag-type="warning" :placeholder="$t('toBotTokenDesc')" v-model="tgChatId"
                         @add-tag="addChatTag"></el-input-tag>
           <el-input tag-type="warning" :placeholder="$t('customDomainDesc')" v-model="customDomain" @keyup.enter="tgBotSave"></el-input>
+          <div class="tg-bind-tip">通知和 AI 指令共用这个 Bot；点“绑定 AI 指令”会自动保存并设置 Webhook，之后可直接在 Telegram 对话里操作邮箱。</div>
           <div class="tg-msg-label">
             <span>{{t('from')}}</span>
             <el-select  v-model="tgMsgFrom" >
@@ -596,6 +660,7 @@
           <div class="dialog-footer">
             <el-switch v-model="tgBotStatus" :active-value="0" :inactive-value="1" :active-text="$t('enable')"
                        :inactive-text="$t('disable')"/>
+            <el-button :loading="tgBindLoading" @click="bindTelegram">绑定 AI 指令</el-button>
             <el-button :loading="settingLoading" type="primary" @click="tgBotSave">
               {{ $t('save') }}
             </el-button>
@@ -657,7 +722,23 @@
         </div>
         <template #footer>
           <div class="dialog-footer">
+            <el-button :loading="webhookTesting" @click="testWebhook">{{ webhookTesting ? '测试中…' : '发送测试' }}</el-button>
             <el-button :loading="settingLoading" type="primary" @click="saveWebhook">{{ $t('save') }}</el-button>
+          </div>
+        </template>
+      </el-dialog>
+      <el-dialog v-model="deeplShow" title="DeepL API Key" width="460px">
+        <div class="forward-set-body">
+          <el-input v-model="deeplKey" placeholder="DeepL-Auth-Key，例如 xxxx:fx" type="password" show-password/>
+          <div class="oidc-hint">
+            免费版 key 一般以 <code>:fx</code> 结尾，会自动走 api-free.deepl.com；付费版走 api.deepl.com。
+            留空保存不会覆盖已保存的 key；接口只回显前 8 位。
+          </div>
+        </div>
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="deeplShow = false">{{ $t('cancel') }}</el-button>
+            <el-button :loading="settingLoading" type="primary" @click="saveDeepL">{{ $t('save') }}</el-button>
           </div>
         </template>
       </el-dialog>
@@ -684,6 +765,101 @@
         <template #footer>
           <div class="dialog-footer">
             <el-button :loading="settingLoading" type="primary" @click="saveAutoClean">{{ $t('save') }}</el-button>
+          </div>
+        </template>
+      </el-dialog>
+      <el-dialog
+          v-model="oidcShow"
+          class="forward-dialog oidc-dialog"
+          width="640px"
+      >
+        <template #header>
+          <div class="forward-head">
+            <span class="forward-set-title">企业登录（OIDC）</span>
+            <el-tooltip effect="dark" content="可添加多个标准 OIDC 服务商（Keycloak、Azure AD、Okta、Authentik、Auth0 等），登录页会各显示一个按钮">
+              <Icon class="warning" icon="fe:warning" width="18" height="18"/>
+            </el-tooltip>
+          </div>
+        </template>
+        <div class="forward-set-body">
+          <div class="oidc-empty" v-if="oidcProviders.length === 0">
+            还没有 OIDC 服务商，点下方「新增服务商」开始配置。
+          </div>
+          <el-collapse v-model="oidcOpenIds">
+            <el-collapse-item v-for="(provider, index) in oidcProviders" :key="provider.id" :name="provider.id">
+              <template #title>
+                <div class="oidc-item-title">
+                  <span class="oidc-item-name">{{ provider.name || '未命名服务商' }}</span>
+                  <el-tag size="small" :type="provider.enabled ? 'success' : 'info'" round>
+                    {{ provider.enabled ? '已启用' : '已停用' }}
+                  </el-tag>
+                </div>
+              </template>
+
+              <div class="forward-set-row">
+                <span>启用</span>
+                <el-switch v-model="provider.enabled" @click.stop/>
+              </div>
+
+              <div class="oidc-field">
+                <span>显示名称</span>
+                <el-input v-model="provider.name" placeholder="SSO"/>
+                <div class="oidc-hint">登录页按钮上显示的文字，例如「企业登录」「公司 SSO」</div>
+              </div>
+
+              <div class="oidc-field">
+                <span>Issuer 地址</span>
+                <el-input v-model="provider.issuer" placeholder="https://idp.example.com/realms/company"/>
+                <div class="oidc-hint">
+                  身份提供方（IdP）的 Issuer，不要带结尾斜杠。系统会自动请求
+                  <code>/.well-known/openid-configuration</code> 取授权、令牌、用户信息端点。
+                  微软 Entra ID 形如 https://login.microsoftonline.com/{租户ID}/v2.0
+                </div>
+              </div>
+
+              <div class="oidc-field">
+                <span>Client ID</span>
+                <el-input v-model="provider.clientId" placeholder="在 IdP 创建的 Web 应用 Client ID"/>
+              </div>
+
+              <div class="oidc-field">
+                <span>Client Secret</span>
+                <el-input v-model="provider.clientSecret" type="password" show-password
+                          :placeholder="provider.hasSecret ? '已保存，留空不修改' : '留空则不修改已保存的密钥'"/>
+                <div class="oidc-hint">只存服务端，后台接口不回显明文；留空保存不会覆盖原密钥</div>
+              </div>
+
+              <div class="oidc-field">
+                <span>Scope</span>
+                <el-input v-model="provider.scope" placeholder="openid profile email"/>
+                <div class="oidc-hint">默认 openid profile email；不需要额外权限就别改</div>
+              </div>
+
+              <div class="oidc-field">
+                <span>回调地址</span>
+                <el-input v-model="provider.callbackUrl" :placeholder="defaultOidcCallback"/>
+                <div class="oidc-hint">
+                  与 Google / GitHub 一样填「站点 + /login」：<span class="oidc-code">{{ defaultOidcCallback }}</span>
+                  <br>
+                  这个值必须和 IdP 应用里登记的 Redirect URI 完全一致（含结尾斜杠），否则 IdP 会拒绝回调。
+                </div>
+              </div>
+
+              <el-button link type="danger" @click.stop="removeOidc(index)">删除此服务商</el-button>
+            </el-collapse-item>
+          </el-collapse>
+
+          <el-button class="oidc-add" plain @click="addOidc">+ 新增服务商</el-button>
+
+          <div class="oidc-hint oidc-note">
+            IdP 应用类型请选「Web 应用 / 机密客户端」并开启授权码模式（Authorization Code）。
+            登录时仅当 IdP 返回 email_verified=true 才自动关联已有账号，否则要求用户绑定。
+          </div>
+        </div>
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="oidcShow = false">{{ $t('cancel') }}</el-button>
+            <el-button :loading="settingLoading" type="primary" @click="saveOidc">{{ $t('save') }}</el-button>
           </div>
         </template>
       </el-dialog>
@@ -894,7 +1070,8 @@
 
 <script setup>
 import {computed, defineOptions, nextTick, reactive, ref} from "vue";
-import {deleteBackground, setBackground, setBlackList, settingQuery, settingSet} from "@/request/setting.js";
+import {aiModels, deleteBackground, setBackground, setBlackList, settingQuery, settingSet, tgWebhook, webhookTest} from "@/request/setting.js";
+import {aiClassify} from "@/request/ai.js";
 import {useSettingStore} from "@/store/setting.js";
 import {useUiStore} from "@/store/ui.js";
 import {useUserStore} from "@/store/user.js";
@@ -908,15 +1085,11 @@ import loading from "@/components/loading/index.vue";
 import {getTextWidth} from "@/utils/text.js";
 import {fileToBase64} from "@/utils/file-utils.js"
 import {useI18n} from 'vue-i18n';
-import axios from "axios";
 
 defineOptions({
   name: 'sys-setting'
 })
 
-const currentVersion = 'v3.0.0'
-const hasUpdate = ref(false)
-let getUpdateErrorCount = 1;
 const {t, locale} = useI18n();
 const firstLoading = ref(true)
 const settingReady = ref(false)
@@ -928,6 +1101,10 @@ const editTitleShow = ref(false)
 const resendTokenFormShow = ref(false)
 const blackFormShow = ref(false)
 const aiCodeFilterShow = ref(false)
+const aiModelList = ref([])
+const aiModelsLoading = ref(false)
+const aiClassifyLoading = ref(false)
+const tgBindLoading = ref(false)
 const r2DomainShow = ref(false)
 const turnstileShow = ref(false)
 const tgSettingShow = ref(false)
@@ -939,19 +1116,37 @@ const webhookUrl = ref('')
 const webhookStatus = ref(1)
 const webhookRetry = ref(0)
 const webhookSecret = ref('')
+const webhookTesting = ref(false)
+const deeplShow = ref(false)
+const deeplKey = ref('')
 const autoCleanShow = ref(false)
 const autoCleanDays = ref(0)
 const autoCleanExclude = ref([])
+const oidcShow = ref(false)
+const oidcProviders = ref([])
+const oidcOpenIds = ref([])
+// 与 Google / GitHub 一致：回调落在登录页，由登录页拿 code 换 token
+const defaultOidcCallback = window.location.origin + '/login'
+const enabledOidcCount = computed(() => {
+  const fromDialog = oidcProviders.value.filter(item => item.enabled).length
+  if (fromDialog > 0) return fromDialog
+  const saved = Array.isArray(setting.value.oidcProviders) ? setting.value.oidcProviders : []
+  if (saved.length > 0) return saved.filter(item => item.enabled === true || item.enabled === 1).length
+  return setting.value.oidcSwitch === 1 ? 1 : 0
+})
 const emailPrefixShow = ref(false)
 const showResendList = ref(false)
 const settingStore = useSettingStore();
 const uiStore = useUiStore();
 const {settings: setting} = storeToRefs(settingStore);
 const editTitle = ref('')
+const editSubtitle = ref('')
 const settingLoading = ref(false)
 const clearS3Loading = ref(false)
 const r2DomainInput = ref('')
 const loginOpacity = ref(0)
+const chatOpacity = ref(0.88)
+const backgroundTarget = ref('background')
 const minEmailPrefix = ref(0)
 const emailPrefixFilter = ref([])
 const backgroundUrl = ref('')
@@ -1034,15 +1229,17 @@ const tgMsgTextOption = [{label: t('show'), value: 'show'}, {label: t('hide'), v
 const tgMsgLabelWidth = computed(() => locale.value === 'en' ? '120px' : '100px');
 
 getSettings()
-getUpdate()
 
 function getSettings() {
   settingReady.value = false
   settingQuery().then(settingData => {
     setting.value = settingData
+    setting.value.aiClassifyMode = setting.value.aiClassifyMode || 'off'
+    aiModelList.value = setting.value.aiModel ? [setting.value.aiModel] : []
     settingStore.domainList = settingData.domainList;
     resendTokenForm.domain = setting.value.domainList[0]
     loginOpacity.value = setting.value.loginOpacity
+    chatOpacity.value = setting.value.chatOpacity ?? 0.88
     minEmailPrefix.value = setting.value.minEmailPrefix
     firstLoading.value = false
     backgroundUrl.value = setting.value.background?.startsWith('http') ? setting.value.background : ''
@@ -1107,20 +1304,6 @@ const resendList = computed(() => {
   return list;
 });
 
-function getUpdate() {
-  if (getUpdateErrorCount > 5 || !getUpdateErrorCount) return
-  axios.get('https://api.github.com/repos/maillab/cloud-mail/releases/latest').then(({data}) => {
-    hasUpdate.value = data.name !== currentVersion
-    getUpdateErrorCount = 0
-  }).catch(e => {
-    getUpdateErrorCount++
-    setTimeout(() => {
-      getUpdate()
-    }, 2000)
-    console.error('检查更新失败：', e)
-  })
-}
-
 function saveAddVerifyCount() {
   if (!addVerifyCount.value) {
     addVerifyCount.value = 1
@@ -1165,6 +1348,117 @@ function saveAutoClean() {
     autoCleanDays: autoCleanDays.value,
     autoCleanExclude: autoCleanExclude.value.join(',')
   }, true)
+}
+
+function openOidc() {
+  const list = Array.isArray(setting.value.oidcProviders) ? setting.value.oidcProviders : []
+  oidcProviders.value = list.map(item => ({
+    id: item.id,
+    name: item.name || 'SSO',
+    issuer: item.issuer || '',
+    clientId: item.clientId || '',
+    clientSecret: '',
+    hasSecret: !!item.hasSecret,
+    scope: item.scope || 'openid profile email',
+    callbackUrl: item.callbackUrl || defaultOidcCallback,
+    enabled: item.enabled === true || item.enabled === 1
+  }))
+  // 老库只有单条 oidc_* 配置时也展示出来，保存后即转成列表
+  if (oidcProviders.value.length === 0 && setting.value.oidcIssuer && setting.value.oidcClientId) {
+    oidcProviders.value.push({
+      id: 'legacy',
+      name: setting.value.oidcName || 'SSO',
+      issuer: setting.value.oidcIssuer,
+      clientId: setting.value.oidcClientId,
+      clientSecret: '',
+      hasSecret: !!setting.value.oidcClientSecret,
+      scope: setting.value.oidcScope || 'openid profile email',
+      callbackUrl: setting.value.oidcCallbackUrl || defaultOidcCallback,
+      enabled: setting.value.oidcSwitch === 1
+    })
+  }
+  // 打开时全部折叠，先看到服务商列表；保存后也会自动收起
+  oidcOpenIds.value = []
+  oidcShow.value = true
+}
+
+function addOidc() {
+  const id = 'oidc-' + Date.now().toString(36)
+  oidcProviders.value.push({
+    id,
+    name: 'SSO',
+    issuer: '',
+    clientId: '',
+    clientSecret: '',
+    hasSecret: false,
+    scope: 'openid profile email',
+    callbackUrl: defaultOidcCallback,
+    enabled: true
+  })
+  oidcOpenIds.value.push(id)
+}
+
+function removeOidc(index) {
+  const [removed] = oidcProviders.value.splice(index, 1)
+  oidcOpenIds.value = oidcOpenIds.value.filter(id => id !== removed?.id)
+}
+
+function saveOidc() {
+  const list = oidcProviders.value
+  if (list.some(item => item.enabled && (!item.issuer.trim() || !item.clientId.trim() || !item.callbackUrl.trim()))) {
+    ElMessage({message: '启用的服务商必须填写 Issuer、Client ID 和回调地址', type: 'error', plain: true})
+    return
+  }
+  const form = {
+    oidcProviders: list.map(item => ({
+      id: item.id,
+      name: item.name || 'SSO',
+      issuer: item.issuer.trim().replace(/\/+$/, ''),
+      clientId: item.clientId.trim(),
+      clientSecret: item.clientSecret || '',
+      scope: item.scope || 'openid profile email',
+      callbackUrl: item.callbackUrl.trim(),
+      enabled: !!item.enabled
+    }))
+  }
+  editSetting(form, true)
+  oidcOpenIds.value = []
+}
+
+function openDeepL() {
+  deeplKey.value = ''
+  deeplShow.value = true
+}
+
+function saveDeepL() {
+  if (!deeplKey.value.trim()) {
+    deeplShow.value = false
+    return
+  }
+  editSetting({deeplKey: deeplKey.value.trim()}, true)
+  deeplShow.value = false
+}
+
+async function testWebhook() {
+  if (webhookTesting.value) return
+  if (!webhookUrl.value.trim()) {
+    ElMessage({message: '请先填写 Webhook URL', type: 'error', plain: true})
+    return
+  }
+  webhookTesting.value = true
+  try {
+    const res = await webhookTest({
+      url: webhookUrl.value.trim(),
+      secret: webhookSecret.value.includes('******') ? '' : webhookSecret.value
+    })
+    ElMessage({
+      message: `${res.message}（HTTP ${res.status || '-'}，${res.latencyMs}ms）`,
+      type: res.ok ? 'success' : 'error',
+      plain: true
+    })
+  } finally {
+    webhookTesting.value = false
+  }
 }
 
 function autoCleanExcludeAddTag(val) {
@@ -1335,7 +1629,7 @@ function saveS3() {
   editSetting(form)
 }
 
-function tgBotSave() {
+async function tgBotSave() {
   const form = {
     customDomain: customDomain.value,
     tgBotStatus: tgBotStatus.value,
@@ -1345,7 +1639,28 @@ function tgBotSave() {
     tgMsgTo: tgMsgTo.value
   }
   if (tgBotToken.value) form.tgBotToken = tgBotToken.value
-  editSetting(form)
+  const ok = await editSetting(form)
+  if (ok && tgBotStatus.value === 0) {
+    try {
+      const data = await tgWebhook({})
+      ElMessage({message: `Telegram 已绑定：${data.url}`, type: 'success', plain: true})
+    } catch (e) {
+      ElMessage({message: e?.response?.data?.msg || e.message || 'Telegram Webhook 设置失败，请检查 Bot Token', type: 'warning', plain: true})
+    }
+  }
+  return ok
+}
+
+async function bindTelegram() {
+  if (tgBindLoading.value) return
+  tgBindLoading.value = true
+  try {
+    await tgBotSave()
+  } catch (e) {
+    ElMessage({message: e?.response?.data?.msg || e.message || 'Telegram 绑定失败', type: 'error', plain: true})
+  } finally {
+    tgBindLoading.value = false
+  }
 }
 
 function forwardEmailSave() {
@@ -1455,15 +1770,20 @@ function aiCodeFilterAddTag(val) {
 }
 
 
-function delBackground() {
+async function saveChatOpacity() {
+  if (!settingReady.value) return
+  editSetting({chatOpacity: chatOpacity.value}, true)
+}
+
+function delBackground(target = 'background') {
   ElMessageBox.confirm(t('delBackgroundConfirm'), {
     confirmButtonText: t('confirm'),
     cancelButtonText: t('cancel'),
     type: 'warning'
   }).then(() => {
-    deleteBackground().then(() => {
+    deleteBackground(target).then(() => {
       backgroundUrl.value = ''
-      setting.value.background = null
+      setting.value[target] = null
       ElMessage({
         message: t('delSuccessMsg'),
         type: "success",
@@ -1501,8 +1821,8 @@ async function saveBackground() {
   }
   settingLoading.value = true
 
-  setBackground(image).then(key => {
-    setting.value.background = key
+  setBackground(image, backgroundTarget.value).then(key => {
+    setting.value[backgroundTarget.value] = key
     showSetBackground.value = false
     ElMessage({
       message: t('saveSuccessMsg'),
@@ -1517,7 +1837,11 @@ async function saveBackground() {
 
 }
 
-function openSetBackground() {
+function openSetBackground(target = 'background') {
+  backgroundTarget.value = target
+  backgroundUrl.value = setting.value[target]?.startsWith('http') ? setting.value[target] : ''
+  localUpShow.value = false
+  backgroundImage.value = ''
   showSetBackground.value = true
 }
 
@@ -1590,9 +1914,51 @@ function change(e) {
 }
 
 function changeField(key, value) {
-  if (!settingReady.value) return
+  if (!settingReady.value) return Promise.resolve(false)
   setting.value[key] = value
-  editSetting({[key]: value}, false)
+  return editSetting({[key]: value}, false)
+}
+
+async function onAiFieldChange(key, value) {
+  const saved = await changeField(key, value)
+  if (saved !== false && setting.value.aiBaseUrl && setting.value.aiApiKey) {
+    await fetchAiModels()
+  }
+}
+
+async function classifyNow() {
+  if (aiClassifyLoading.value) return
+  aiClassifyLoading.value = true
+  try {
+    const data = await aiClassify()
+    ElMessage({
+      message: `已扫描 ${data.scanned} 封，更新 ${data.changed} 封分类`,
+      type: 'success',
+      plain: true
+    })
+  } catch (e) {
+    ElMessage({message: e?.response?.data?.msg || e.message || 'AI 分类失败', type: 'error', plain: true})
+  } finally {
+    aiClassifyLoading.value = false
+  }
+}
+
+async function fetchAiModels() {
+  if (aiModelsLoading.value) return
+  aiModelsLoading.value = true
+  try {
+    const data = await aiModels({baseUrl: setting.value.aiBaseUrl, apiKey: setting.value.aiApiKey})
+    aiModelList.value = data.models || []
+    if (aiModelList.value.length === 0) {
+      ElMessage({message: '接口没有返回模型', type: 'warning', plain: true})
+    } else if (!aiModelList.value.includes(setting.value.aiModel)) {
+      changeField('aiModel', aiModelList.value[0])
+    }
+  } catch (e) {
+    ElMessage({message: e?.response?.data?.msg || e.message || '拉取模型失败', type: 'error', plain: true})
+  } finally {
+    aiModelsLoading.value = false
+  }
 }
 
 // v1.3 登录态绑定（大网站模式）：设置页把当前 GitHub/Google/LinuxDo 授权绑到当前账号
@@ -1619,21 +1985,14 @@ function bindLinuxDo() {
 }
 
 function saveTitle() {
-  editSetting({title: editTitle.value})
-}
-
-function jump(href) {
-  const doc = document.createElement('a')
-  doc.href = href
-  doc.target = '_blank'
-  doc.click()
+  editSetting({title: editTitle.value, subtitle: editSubtitle.value})
 }
 
 function editSetting(settingForm, refreshStatus = true) {
-  if (settingLoading.value) return
+  if (settingLoading.value) return Promise.resolve(false)
   settingLoading.value = true
 
-  settingSet(settingForm).then(() => {
+  return settingSet(settingForm).then(() => {
     settingLoading.value = false
     ElMessage({
       message: t('saveSuccessMsg'),
@@ -1659,9 +2018,14 @@ function editSetting(settingForm, refreshStatus = true) {
     addS3Show.value = false
     emailPrefixShow.value = false
     aiCodeFilterShow.value = false
+    oidcShow.value = false
+    deeplShow.value = false
+    return true
   }).catch((e) => {
     loginOpacity.value = setting.value.loginOpacity
+    chatOpacity.value = setting.value.chatOpacity ?? 0.88
     setting.value = {...setting.value, ...JSON.parse(backup)}
+    return false
   }).finally(() => {
     settingLoading.value = false
     clearS3Loading.value = false
@@ -1749,6 +2113,23 @@ function editSetting(settingForm, refreshStatus = true) {
   margin-left: 10px;
 }
 
+.ai-settings-card {
+  grid-column: 1 / -1;
+
+  :deep(.setting-item > div:first-child) {
+    white-space: nowrap;
+  }
+
+  :deep(.setting-item > div:last-child) {
+    min-width: 0;
+  }
+
+  :deep(.el-input),
+  :deep(.el-select) {
+    max-width: 320px;
+  }
+}
+
 .settings-card {
   background-color: var(--el-bg-color);
   border-radius: 6px;
@@ -1792,6 +2173,28 @@ function editSetting(settingForm, refreshStatus = true) {
     justify-items: flex-end;
     font-weight: normal;
   }
+}
+
+.ai-model-row,
+.ai-classify-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+
+  .el-button {
+    flex: 0 0 auto;
+    width: auto !important;
+    min-width: 88px !important;
+    padding: 0 14px !important;
+    white-space: nowrap;
+  }
+}
+
+.ai-setting-tip {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  padding-left: 2px;
 }
 
 .r2domain-item {
@@ -1908,6 +2311,15 @@ function editSetting(settingForm, refreshStatus = true) {
 }
 
 
+:deep(.oidc-dialog.el-dialog) {
+  width: 640px !important;
+  @media (max-width: 700px) {
+    width: calc(100% - 40px) !important;
+    margin-right: 20px !important;
+    margin-left: 20px !important;
+  }
+}
+
 :deep(.forward-dialog.el-dialog) {
   width: 500px !important;
   @media (max-width: 540px) {
@@ -1918,6 +2330,13 @@ function editSetting(settingForm, refreshStatus = true) {
 }
 
 .forward-dialog {
+  // 字段多的设置弹窗（OIDC）内容内部滚动，页脚保存键始终可见
+  .forward-set-body {
+    max-height: 62vh;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
   .forward-head {
     display: flex;
     align-items: center;
@@ -1994,6 +2413,92 @@ function editSetting(settingForm, refreshStatus = true) {
     .el-select {
       width: v-bind(tgMsgLabelWidth);
     }
+  }
+
+  .tg-bind-tip {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--el-text-color-secondary);
+  }
+
+  // 设置弹窗里「标签 + 控件」的一行（Webhook / 自动清理 / OIDC 共用）
+  .forward-set-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .oidc-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 14px;
+
+    > span {
+      font-size: 14px;
+      color: var(--el-text-color-regular);
+    }
+  }
+
+  .oidc-hint {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--el-text-color-secondary);
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      word-break: break-all;
+    }
+  }
+
+  .oidc-code {
+    display: inline-block;
+    color: var(--el-color-primary);
+    word-break: break-all;
+  }
+
+  .oidc-note {
+    margin-top: 16px;
+    padding: 10px 12px;
+    background: var(--el-fill-color-light);
+    border-radius: 8px;
+  }
+
+  .oidc-empty {
+    padding: 22px 12px;
+    text-align: center;
+    color: var(--el-text-color-secondary);
+    background: var(--el-fill-color-lighter);
+    border-radius: 10px;
+  }
+
+  .oidc-item-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .oidc-item-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  .oidc-add {
+    margin-top: 12px;
+    width: 100%;
+  }
+
+  :deep(.el-collapse) {
+    border: none;
+  }
+
+  :deep(.el-collapse-item__header),
+  :deep(.el-collapse-item__wrap) {
+    background: transparent;
   }
 }
 

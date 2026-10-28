@@ -19,6 +19,7 @@ import dayjs from 'dayjs';
 import { toUtc } from '../utils/date-uitil';
 import { t } from '../i18n/i18n.js';
 import verifyRecordService from './verify-record-service';
+import totpUtils from '../utils/totp-utils';
 
 const loginService = {
 
@@ -201,7 +202,7 @@ const loginService = {
 
 	async login(c, params, noVerifyPwd = false) {
 
-		const { email, password } = params;
+		const { email, password, twoFactorCode } = params;
 
 		if ((!email || !password) && !noVerifyPwd) {
 			throw new BizError(t('emailAndPwdEmpty'));
@@ -233,6 +234,17 @@ const loginService = {
 				await userService.updatePwd(c, userRow.userId, hash, salt);
 			} catch (e) {
 				console.warn('password rehash failed (non-fatal):', e.message);
+			}
+		}
+
+		// 两步验证：密码通过后还要一次性验证码；twoFactorRequired 让密码登录强制走验证码。
+		// 缺码/错码都回 428，前端据此弹输入框重提；OAuth 登录（noVerifyPwd）不走这里。
+		if (!noVerifyPwd && (userRow.twoFactorSwitch === 1 || userRow.twoFactorRequired === 1)) {
+			if (!twoFactorCode) {
+				throw new BizError(t('needTwoFactorCode'), 428);
+			}
+			if (!await totpUtils.verify(userRow.twoFactorSecret, twoFactorCode)) {
+				throw new BizError(t('twoFactorCodeInvalid'), 428);
 			}
 		}
 

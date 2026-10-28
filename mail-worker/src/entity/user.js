@@ -17,6 +17,10 @@ const user = sqliteTable('user', {
 	sort: text('sort').default(0),
 	sendCount: text('send_count').default(0),
 	regKeyId: integer('reg_key_id').default(0).notNull(),
+	avatar: text('avatar').default(''),
+	twoFactorSwitch: integer('two_factor_switch').default(0),
+	twoFactorSecret: text('two_factor_secret').default(''),
+	twoFactorRequired: integer('two_factor_required').default(0).notNull(),
 	isDel: integer('is_del').default(0).notNull()
 });
 export default user

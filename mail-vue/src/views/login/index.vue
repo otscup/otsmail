@@ -7,7 +7,7 @@
       <div class="x4 cloud"></div>
       <div class="x5 cloud"></div>
     </div>
-    <div v-else :style="background"></div>
+    <div v-else class="login-bg" :style="background"></div>
     <div class="form-wrapper">
       <div class="container">
         <span class="form-title">{{ settingStore.settings.title }}</span>
@@ -17,30 +17,33 @@
           <el-input :class="!hideLoginDomain ? 'email-input' : ''" v-model="form.email"
                     type="text" :placeholder="$t('emailAccount')" autocomplete="off" @keyup.enter="submit">
             <template #append v-if="!hideLoginDomain">
-              <div @click.stop="openSelect">
-                <el-select
-                    v-if="show === 'login'"
-                    ref="mySelect"
-                    v-model="suffix"
-                    :placeholder="$t('select')"
-                    class="select"
-                >
-                  <el-option
+              <div class="domain-picker" :class="{ 'domain-picker-open': domainPickerOpen }" @click="domainPickerOpen = !domainPickerOpen" ref="domainPickerRef">
+                <span class="domain-picker-label">{{ suffix || $t('select') }}</span>
+                <Icon icon="mingcute:down-line" width="14" height="14" class="domain-picker-arrow" />
+                <transition name="domain-picker-fade">
+                  <div v-if="domainPickerOpen" class="domain-picker-dropdown">
+                    <div
                       v-for="item in domainList"
                       :key="item"
-                      :label="item"
-                      :value="item"
-                  />
-                </el-select>
-                <div style="color: var(--el-text-color-primary)">
-                  <span>{{ suffix }}</span>
-                  <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-                </div>
+                      class="domain-picker-option"
+                      :class="{ active: suffix === item }"
+                      @click.stop="suffix = item; domainPickerOpen = false"
+                    >
+                      {{ item }}
+                      <Icon v-if="suffix === item" icon="mingcute:check-line" width="16" height="16" />
+                    </div>
+                  </div>
+                </transition>
               </div>
             </template>
           </el-input>
           <el-input v-model="form.password" :placeholder="$t('password')" type="password" autocomplete="off" @keyup.enter="submit">
           </el-input>
+          <template v-if="twoFactorShow">
+            <el-input v-model="twoFactorCode" maxlength="6" inputmode="numeric"
+                      :placeholder="$t('verifyCode')" autocomplete="one-time-code" @keyup.enter="submit"/>
+            <div class="two-factor-hint">{{ $t('twoFactorLoginHint') }}</div>
+          </template>
           <el-button class="btn" type="primary" @click="submit" :loading="loginLoading"
           >{{ $t('loginBtn') }}
           </el-button>
@@ -48,35 +51,37 @@
             <el-avatar src="/image/linuxdo.webp" :size="18" style="margin-right: 10px" />LinuxDo
           </el-button>
           <el-button class="btn" v-if="settingStore.settings.githubSwitch" style="margin-top: 10px" @click="githubLogin">
-            <Icon icon="mingcute:github-line" color="var(--el-text-color-primary)" width="18" height="18" style="margin-right: 10px" />GitHub
+            <Icon icon="mingcute:github-line" width="18" height="18" style="margin-right: 10px; color: var(--label)" />GitHub
           </el-button>
           <el-button class="btn" v-if="settingStore.settings.googleSwitch" style="margin-top: 10px" @click="googleLogin">
             <Icon icon="flat-color-icons:google" width="18" height="18" style="margin-right: 10px" />Google
+          </el-button>
+          <el-button class="btn" v-for="provider in oidcProviders" :key="provider.id" style="margin-top: 10px"
+                     @click="oidcLogin(provider.id)">
+            <Icon icon="mingcute:shield-check-line" width="18" height="18" style="margin-right: 10px; color: var(--label)" />{{ provider.name || 'SSO' }}
           </el-button>
         </div>
         <div v-show="show !== 'login'">
           <el-input :class="!hideLoginDomain ? 'email-input' : ''" v-model="registerForm.email" type="text" :placeholder="$t('emailAccount')"
                     autocomplete="off" @keyup.enter="submitRegister">
             <template #append v-if="!hideLoginDomain">
-              <div @click.stop="openSelect">
-                <el-select
-                    v-if="show !== 'login'"
-                    ref="mySelect"
-                    v-model="suffix"
-                    :placeholder="$t('select')"
-                    class="select"
-                >
-                  <el-option
+              <div class="domain-picker" :class="{ 'domain-picker-open': domainPickerOpen }" @click="domainPickerOpen = !domainPickerOpen" ref="domainPickerRef">
+                <span class="domain-picker-label">{{ suffix || $t('select') }}</span>
+                <Icon icon="mingcute:down-line" width="14" height="14" class="domain-picker-arrow" />
+                <transition name="domain-picker-fade">
+                  <div v-if="domainPickerOpen" class="domain-picker-dropdown">
+                    <div
                       v-for="item in domainList"
                       :key="item"
-                      :label="item"
-                      :value="item"
-                  />
-                </el-select>
-                <div>
-                  <span>{{ suffix }}</span>
-                  <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-                </div>
+                      class="domain-picker-option"
+                      :class="{ active: suffix === item }"
+                      @click.stop="suffix = item; domainPickerOpen = false"
+                    >
+                      {{ item }}
+                      <Icon v-if="suffix === item" icon="mingcute:check-line" width="16" height="16" />
+                    </div>
+                  </div>
+                </transition>
               </div>
             </template>
           </el-input>
@@ -104,7 +109,7 @@
             <el-avatar src="/image/linuxdo.webp" :size="18" style="margin-right: 10px" />LinuxDo
           </el-button>
           <el-button v-if="settingStore.settings.githubSwitch" class="btn" style="margin-top: 10px" @click="githubLogin">
-            <Icon icon="mingcute:github-line" color="var(--el-text-color-primary)" width="18" height="18" style="margin-right: 10px" />GitHub
+            <Icon icon="mingcute:github-line" width="18" height="18" style="margin-right: 10px; color: var(--label)" />GitHub
           </el-button>
           <el-button v-if="settingStore.settings.googleSwitch" class="btn" style="margin-top: 10px" @click="googleLogin">
             <Icon icon="flat-color-icons:google" width="18" height="18" style="margin-right: 10px" />Google
@@ -122,26 +127,23 @@
       <div class="bind-container">
         <el-input :class="!hideLoginDomain ? 'email-input' : ''" v-model="bindForm.email" type="text" :placeholder="$t('emailAccount')" autocomplete="off" @keyup.enter="bind">
           <template #append v-if="!hideLoginDomain">
-            <div @click.stop="openSelect">
-              <el-select
-                  ref="mySelect"
-                  v-model="suffix"
-                  :placeholder="$t('select')"
-                  class="select"
-              >
-                <el-option
+              <div class="domain-picker" @click="domainPickerOpen = !domainPickerOpen">
+                <span class="domain-picker-label">{{ suffix || $t('select') }}</span>
+                <Icon icon="mingcute:down-line" width="14" height="14" class="domain-picker-arrow" />
+                <div v-if="domainPickerOpen" class="domain-picker-dropdown">
+                  <div
                     v-for="item in domainList"
                     :key="item"
-                    :label="item"
-                    :value="item"
-                />
-              </el-select>
-              <div>
-                <span>{{ suffix }}</span>
-                <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
+                    class="domain-picker-option"
+                    :class="{ active: suffix === item }"
+                    @click.stop="suffix = item; domainPickerOpen = false"
+                  >
+                    {{ item }}
+                    <Icon v-if="suffix === item" icon="mingcute:check-line" width="16" height="16" />
+                  </div>
+                </div>
               </div>
-            </div>
-          </template>
+            </template>
         </el-input>
         <el-input v-if="settingStore.settings.regKey === 0" v-model="bindForm.code" :placeholder="$t('regKey')"
                   type="text" autocomplete="off" @keyup.enter="bind"/>
@@ -152,15 +154,12 @@
         </el-button>
       </div>
     </el-dialog>
-    <a v-show="settingStore.settings.projectLink" class="github" href="https://github.com/maillab/cloud-mail">
-      <Icon icon="mingcute:github-line" color="#1890ff" width="20" height="20" />
-    </a>
   </div>
 </template>
 
 <script setup>
 import router from "@/router";
-import {computed, nextTick, reactive, ref} from "vue";
+import {computed, nextTick, onBeforeUnmount, onMounted, reactive, ref} from "vue";
 import {login} from "@/request/login.js";
 import {register} from "@/request/login.js";
 import {websiteConfig} from "@/request/setting.js";
@@ -174,7 +173,15 @@ import {cvtR2Url} from "@/utils/convert.js";
 import {loginUserInfo} from "@/request/my.js";
 import {permsToRouter} from "@/perm/perm.js";
 import {useI18n} from "vue-i18n";
-import {oauthBindUser, oauthLinuxDoLogin, oauthGithubLogin, oauthGoogleLogin, oauthBind} from "@/request/ouath.js";
+import {
+  oauthBindUser,
+  oauthLinuxDoLogin,
+  oauthGithubLogin,
+  oauthGoogleLogin,
+  oauthBind,
+  oauthOidcLogin,
+  oidcConfig
+} from "@/request/ouath.js";
 import {setToken} from "@/utils/token-store.js";
 
 const {t} = useI18n();
@@ -183,8 +190,18 @@ const userStore = useUserStore();
 const uiStore = useUiStore();
 const settingStore = useSettingStore();
 const loginLoading = ref(false)
+const twoFactorShow = ref(false)
+const twoFactorCode = ref('')
 const bindLoading = ref(false)
 const oauthLoading = ref(false);
+const oidcProviders = computed(() => {
+  const list = settingStore.settings.oidcProviders
+  if (Array.isArray(list) && list.length > 0) return list
+  // 兼容老后端：只有单条 oidc_* 配置
+  return settingStore.settings.oidcSwitch
+      ? [{id: '', name: settingStore.settings.oidcName || 'SSO'}]
+      : []
+})
 const showBindForm = ref(false);
 const show = ref('login')
 
@@ -200,8 +217,24 @@ const form = reactive({
   password: '',
 
 });
-const mySelect = ref()
 const suffix = ref('')
+const domainPickerOpen = ref(false)
+const domainPickerRef = ref(null)
+
+const handleClickOutside = (e) => {
+  if (domainPickerRef.value && !domainPickerRef.value.contains(e.target)) {
+    domainPickerOpen.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
+
 const registerForm = reactive({
   email: '',
   password: '',
@@ -263,10 +296,6 @@ const background = computed(() => {
   } : ''
 })
 
-const openSelect = () => {
-  mySelect.value.toggleMenu()
-}
-
 const getFullEmail = (email) => {
   return hideLoginDomain.value ? email : email + suffix.value
 }
@@ -296,6 +325,20 @@ function googleLogin() {
       `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid%20email%20profile&state=google`
 }
 
+function oidcLogin(providerId) {
+  // 授权端点由后端 discovery 取，后台改配置不用动前端
+  oidcConfig(providerId).then(config => {
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: config.callbackUrl,
+      response_type: 'code',
+      scope: config.scope || 'openid profile email',
+      state: providerId ? 'oidc:' + providerId : 'oidc'
+    })
+    window.location.href = config.authorizationEndpoint + '?' + params.toString()
+  }).catch(() => {})
+}
+
 oauthGetUser();
 
 async function oauthGetUser() {
@@ -306,33 +349,36 @@ async function oauthGetUser() {
 
   if (code) {
 
-    const providerMap = { github: oauthGithubLogin, google: oauthGoogleLogin, linuxdo: oauthLinuxDoLogin }
-    const loginFn = providerMap[state] || oauthLinuxDoLogin
+    const providerMap = { github: oauthGithubLogin, google: oauthGoogleLogin, linuxdo: oauthLinuxDoLogin, oidc: oauthOidcLogin }
+    // state 形如 github / oidc:<id>（登录）或 bind-github / bind-oidc:<id>（个人设置里绑定）
+    const isBindState = (state || '').startsWith('bind')
+    const rawProvider = isBindState ? state.replace(/^bind-/, '') : (state || '')
+    const [provider, ...providerIdParts] = rawProvider.split(':')
+    const providerId = providerIdParts.join(':')
+    const loginFn = providerMap[provider] || oauthLinuxDoLogin
 
     oauthLoading.value = true
 
     // v1.3 登录态绑定（大网站模式）：state=bind 时已登录用户把 OAuth 授权绑到当前账号
-    if (state === 'bind') {
-      loginFn(code, state).then(data => {
-        if (data.token) {
-          // 已绑定站内账号：直接登录（携带原 token 场景少见，此处视为已登录则绑定当前会话）
-          saveToken(data.token)
-          return
-        }
-        // 授权落库但未绑定 → 登录态绑定到当前账号
-        oauthBind({ oauthUserId: data.userInfo.oauthUserId, provider: data.userInfo.provider }).then(bindData => {
+    if (isBindState) {
+      loginFn(code, state, providerId).then(data => {
+        // 授权落库但未绑定 → 绑到当前登录账号；这里绝不能用返回的 token 换会话（那是别人的账号）
+        oauthBind({ oauthUserId: data.userInfo.oauthUserId, provider: data.userInfo.provider }).then(() => {
           ElMessage({ message: '绑定成功', type: 'success', plain: true })
-          saveToken(bindData.token)
+          router.replace('/settings')
         }).catch(() => {
+          router.replace('/settings')
+        }).finally(() => {
           oauthLoading.value = false
         })
       }).catch(() => {
         oauthLoading.value = false
+        router.replace('/settings')
       })
       return
     }
 
-    loginFn(code, state).then(data => {
+    loginFn(code, state, providerId).then(data => {
 
       bindForm.oauthUserId = data.userInfo.oauthUserId;
       bindForm.provider = data.userInfo.provider;
@@ -452,8 +498,18 @@ const submit = () => {
   }
 
   loginLoading.value = true
-  login(email, form.password).then(async data => {
+  login(email, form.password, twoFactorCode.value).then(async data => {
     await saveToken(data.token)
+  }).catch(e => {
+    if (e?.code === 428) {
+      twoFactorShow.value = true
+      twoFactorCode.value = ''
+      ElMessage({
+        message: e.message || t('twoFactorLoginHint'),
+        type: 'warning',
+        plain: true
+      })
+    }
   }).finally(() => {
     loginLoading.value = false
   })
@@ -704,6 +760,13 @@ function submitRegister() {
     color: var(--form-desc-color);
   }
 
+  .two-factor-hint {
+    margin: -8px 0 12px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--label-3, var(--form-desc-color));
+  }
+
   .form-title {
     font-weight: bold;
     font-size: 22px !important;
@@ -725,8 +788,10 @@ function submitRegister() {
   }
 
   .email-input :deep(.el-input__wrapper) {
-    border-radius: 6px 0 0 6px;
-    background: var(--el-bg-color);
+    border-radius: 10px 0 0 10px;
+    background: var(--fill-tertiary);
+    border: none !important;
+    box-shadow: none !important;
   }
 
   .el-input {
@@ -764,29 +829,11 @@ function submitRegister() {
   top: 6px;
 }
 
-.github {
-  position: fixed;
-  width: 35px;
-  height: 35px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-radius: 50%;
-  background: var(--el-bg-color);
-  bottom: 10px;
-  right: 10px;
-  z-index: 1000;
-  border: 1px solid var(--el-border-color-light);
-  box-shadow: var(--el-box-shadow-light);
-  cursor: pointer;
-}
-
 :deep(.el-input-group__append) {
   padding: 0 !important;
-  padding-left: 8px !important;
-  padding-right: 4px !important;
-  background: var(--el-bg-color);
-  border-radius: 0 8px 8px 0;
+  background: var(--fill-tertiary);
+  border: none !important;
+  border-radius: 0 10px 10px 0;
 }
 
 :deep(.el-button+.el-button) {
@@ -795,15 +842,6 @@ function submitRegister() {
 
 .register-turnstile {
   margin-bottom: 18px;
-}
-
-.select {
-  position: absolute;
-  right: 30px;
-  width: 100px;
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
 }
 
 .custom-style {
@@ -828,7 +866,12 @@ function submitRegister() {
 }
 
 
-#background-wrap {
+/* 自定义背景图与云层都要铺满整屏：flex 布局下子元素不会自动撑开 */
+#background-wrap,
+.login-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
   height: 100%;
   z-index: 0;
 }

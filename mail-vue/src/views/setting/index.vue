@@ -2,17 +2,24 @@
   <div class="box">
     <div class="container">
       <div class="title">{{$t('profile')}}</div>
+      <div class="item wide">
+        <div>{{$t('avatar')}}</div>
+        <div class="row-flex">
+          <el-avatar :size="44" :src="userStore.user.avatar || undefined" class="avatar-preview">{{ avatarLetter }}</el-avatar>
+          <el-button type="primary" @click="openAvatar">{{$t('changeAvatar')}}</el-button>
+        </div>
+      </div>
       <div class="item">
         <div>{{$t('username')}}</div>
-        <div>
-          <span v-if="setNameShow" class="edit-name-input">
-            <el-input v-model="accountName"  ></el-input>
+        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0;">
+          <span v-if="setNameShow" style="display: flex; align-items: center; gap: 8px;">
+            <el-input v-model="accountName" style="width: 120px;"></el-input>
             <span class="edit-name" @click="setName">
              {{$t('save')}}
             </span>
           </span>
-          <span v-else class="user-name">
-            <span >{{ userStore.user.name }}</span>
+          <span v-else style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ userStore.user.name }}</span>
             <span class="edit-name" @click="showSetName">
              {{$t('change')}}
             </span>
@@ -27,6 +34,27 @@
         <div>{{$t('password')}}</div>
         <div>
           <el-button type="primary" @click="pwdShow = true">{{$t('changePwdBtn')}}</el-button>
+        </div>
+      </div>
+      <div class="item wide">
+        <div>{{$t('twoFactor')}}</div>
+        <div class="row-flex">
+          <span>{{ twoFactorEnabled ? $t('enabled') : $t('disabled') }}</span>
+          <el-button type="primary" @click="openTwoFactor">{{ twoFactorEnabled ? $t('disable') : $t('enable') }}</el-button>
+        </div>
+      </div>
+      <div class="item wide">
+        <div>{{$t('twoFactorRequired')}}</div>
+        <div class="row-flex">
+          <el-switch :model-value="twoFactorRequired" :disabled="!twoFactorEnabled" @change="toggleTwoFactorRequired"/>
+          <span class="row-desc">{{$t('twoFactorRequiredDesc')}}</span>
+        </div>
+      </div>
+      <div class="item wide">
+        <div>{{$t('browserNotify')}}</div>
+        <div class="row-flex">
+          <el-switch :model-value="notifyOn" @change="toggleNotify"/>
+          <span class="row-desc">{{$t('browserNotifyDesc')}}</span>
         </div>
       </div>
     </div>
@@ -52,7 +80,13 @@
           <el-button type="primary" @click="bindLinuxDo">绑定 LinuxDo</el-button>
         </div>
       </div>
-      <div class="item" v-if="!settingStore.settings.githubSwitch && !settingStore.settings.googleSwitch && !settingStore.settings.linuxdoSwitch">
+      <div class="item" v-for="provider in enabledOidcProviders" :key="provider.id">
+        <div><span>{{ provider.name || 'SSO' }}</span></div>
+        <div>
+          <el-button type="primary" @click="bindOidc(provider.id)">绑定 {{ provider.name || 'SSO' }}</el-button>
+        </div>
+      </div>
+      <div class="item" v-if="!settingStore.settings.githubSwitch && !settingStore.settings.googleSwitch && !settingStore.settings.linuxdoSwitch && enabledOidcProviders.length === 0">
         <div><span>暂无可用第三方登录提供商</span></div>
       </div>
     </div>
@@ -84,11 +118,66 @@
         <el-button type="primary" :loading="setPwdLoading" @click="submitPwd">{{$t('save')}}</el-button>
       </div>
     </el-dialog>
+    <el-dialog v-model="avatarShow" :title="$t('changeAvatar')" width="360">
+      <div class="form-col">
+        <div class="avatar-center">
+          <el-avatar :size="64" :src="avatarDraft || userStore.user.avatar || undefined" class="avatar-preview">{{ avatarLetter }}</el-avatar>
+        </div>
+        <el-input v-model="avatarDraft" :placeholder="$t('imageLink')" clearable/>
+        <div class="row-flex row-start">
+          <input ref="avatarFileRef" type="file" style="display: none"
+                 accept="image/png,image/jpeg,image/webp,image/gif" @change="pickAvatarFile"/>
+          <el-button @click="avatarFileRef.click()">{{$t('uploadImage')}}</el-button>
+          <span class="row-desc">{{$t('avatarUploadTip')}}</span>
+        </div>
+        <div class="actions">
+          <el-button @click="avatarShow = false">{{$t('cancel')}}</el-button>
+          <el-button type="primary" :loading="avatarSaving" @click="saveAvatarLink">{{$t('save')}}</el-button>
+        </div>
+      </div>
+    </el-dialog>
+    <el-dialog v-model="twoFactorShow" :title="$t('twoFactor')" width="380">
+      <div class="form-col">
+        <template v-if="!twoFactorEnabled">
+          <span class="row-desc">{{$t('twoFactorSetupDesc')}}</span>
+          <div class="secret-box">
+            <div class="secret-row">
+              <span class="secret-label">{{$t('secretKeyLabel')}}</span>
+              <span class="secret-value">{{ twoFactorSecret || '...' }}</span>
+              <span class="edit-name" @click="copySecret">{{$t('copy')}}</span>
+            </div>
+            <div class="secret-url">{{ twoFactorUrl }}</div>
+          </div>
+          <el-input v-model="twoFactorCode" maxlength="6" :placeholder="$t('verifyCode')" @keyup.enter="confirmTwoFactor"/>
+          <div class="actions">
+            <el-button @click="twoFactorShow = false">{{$t('cancel')}}</el-button>
+            <el-button type="primary" :loading="twoFactorLoading" @click="confirmTwoFactor">{{$t('enable')}}</el-button>
+          </div>
+        </template>
+        <template v-else>
+          <span class="row-desc">{{$t('twoFactorDisableDesc')}}</span>
+          <el-input v-model="twoFactorCode" maxlength="6" :placeholder="$t('verifyCode')" @keyup.enter="disableTwoFactor"/>
+          <div class="actions">
+            <el-button @click="twoFactorShow = false">{{$t('cancel')}}</el-button>
+            <el-button type="primary" :loading="twoFactorLoading" @click="disableTwoFactor">{{$t('disable')}}</el-button>
+          </div>
+        </template>
+      </div>
+    </el-dialog>
   </div>
 </template>
 <script setup>
-import {reactive, ref, defineOptions} from 'vue'
-import {resetPassword, userDelete} from "@/request/my.js";
+import {computed, reactive, ref, defineOptions} from 'vue'
+import {
+  resetPassword,
+  userDelete,
+  setAvatar,
+  uploadAvatar,
+  twoFactorSetup,
+  twoFactorEnable,
+  twoFactorDisable,
+  setTwoFactorRequired
+} from "@/request/my.js";
 import {useUserStore} from "@/store/user.js";
 import router from "@/router/index.js";
 import {accountSetName} from "@/request/account.js";
@@ -96,6 +185,8 @@ import {useAccountStore} from "@/store/account.js";
 import {useI18n} from "vue-i18n";
 import {useSettingStore} from "@/store/setting.js";
 import {clearToken} from "@/utils/token-store.js";
+import {oidcConfig} from "@/request/ouath.js";
+import {notifyEnabled, enableNotify, disableNotify} from "@/utils/notify.js";
 
 const { t } = useI18n()
 const accountStore = useAccountStore()
@@ -105,6 +196,26 @@ const setPwdLoading = ref(false)
 const setNameShow = ref(false)
 const accountName = ref(null)
 const langSelect = ref(settingStore.lang)
+const enabledOidcProviders = computed(() => {
+  const list = settingStore.settings.oidcProviders
+  if (Array.isArray(list) && list.length > 0) return list
+  return settingStore.settings.oidcSwitch
+      ? [{id: '', name: settingStore.settings.oidcName || 'SSO'}]
+      : []
+})
+
+// 回调必须落在登录页，登录页才能拿 code；老配置里填站点根的要纠正
+function oidcCallback(url) {
+  const fallback = window.location.origin + '/login'
+  if (!url) return fallback
+  try {
+    const parsed = new URL(url)
+    if (parsed.pathname === '/' || parsed.pathname === '') return parsed.origin + '/login'
+    return url
+  } catch (e) {
+    return fallback
+  }
+}
 
 defineOptions({
   name: 'setting'
@@ -125,7 +236,7 @@ function bindGithub() {
     return
   }
   window.location.href =
-      `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=read:user&state=bind`
+      `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=read:user&state=bind-github`
 }
 
 function bindGoogle() {
@@ -136,7 +247,7 @@ function bindGoogle() {
     return
   }
   window.location.href =
-      `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid%20email%20profile&state=bind`
+      `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid%20email%20profile&state=bind-google`
 }
 
 function bindLinuxDo() {
@@ -147,7 +258,21 @@ function bindLinuxDo() {
     return
   }
   window.location.href =
-      `https://connect.linux.do/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid+profile+email&state=bind`
+      `https://connect.linux.do/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid+profile+email&state=bind-linuxdo`
+}
+
+// 企业 SSO 绑定：授权端点与 client_id 由后端 discovery 提供，后台改配置不用动前端
+function bindOidc(providerId) {
+  oidcConfig(providerId).then(config => {
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: oidcCallback(config.callbackUrl),
+      response_type: 'code',
+      scope: config.scope || 'openid profile email',
+      state: providerId ? 'bind-oidc:' + providerId : 'bind-oidc'
+    })
+    window.location.href = config.authorizationEndpoint + '?' + params.toString()
+  }).catch(() => {})
 }
 
 function setName() {
@@ -268,6 +393,148 @@ function submitPwd() {
 
 }
 
+// ---- 头像 ----
+
+const avatarShow = ref(false)
+const avatarDraft = ref('')
+const avatarSaving = ref(false)
+const avatarFileRef = ref(null)
+
+const avatarLetter = computed(() =>
+    (userStore.user.name || userStore.user.email || '?').charAt(0).toUpperCase())
+
+function openAvatar() {
+  avatarDraft.value = userStore.user.avatar || ''
+  avatarShow.value = true
+}
+
+function saveAvatarLink() {
+  if (avatarSaving.value) return
+  const avatar = avatarDraft.value.trim()
+  if (avatar && !/^https?:\/\//i.test(avatar)) {
+    ElMessage({message: t('avatarLinkInvalid'), type: 'error', plain: true})
+    return
+  }
+  avatarSaving.value = true
+  setAvatar(avatar).then(() => {
+    ElMessage({message: t('saveSuccessMsg'), type: 'success', plain: true})
+    userStore.refreshUserInfo()
+    avatarShow.value = false
+  }).catch(() => {}).finally(() => {
+    avatarSaving.value = false
+  })
+}
+
+function pickAvatarFile(event) {
+  const file = event.target.files && event.target.files[0]
+  event.target.value = ''
+  if (!file) return
+  if (file.size > 2 * 1024 * 1024) {
+    ElMessage({message: t('avatarTooLarge'), type: 'error', plain: true})
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    avatarSaving.value = true
+    uploadAvatar(reader.result).then(() => {
+      ElMessage({message: t('saveSuccessMsg'), type: 'success', plain: true})
+      userStore.refreshUserInfo()
+      avatarShow.value = false
+    }).catch(() => {}).finally(() => {
+      avatarSaving.value = false
+    })
+  }
+  reader.readAsDataURL(file)
+}
+
+// ---- 两步验证 ----
+
+const twoFactorEnabled = computed(() => userStore.user.twoFactor === true)
+const twoFactorRequired = computed(() => userStore.user.twoFactorRequired === true)
+const twoFactorShow = ref(false)
+const twoFactorSecret = ref('')
+const twoFactorUrl = ref('')
+const twoFactorCode = ref('')
+const twoFactorLoading = ref(false)
+
+function openTwoFactor() {
+  twoFactorCode.value = ''
+  twoFactorSecret.value = ''
+  twoFactorUrl.value = ''
+  twoFactorShow.value = true
+  if (twoFactorEnabled.value) return
+  twoFactorSetup().then(res => {
+    twoFactorSecret.value = res.secret
+    twoFactorUrl.value = res.otpauthUrl
+  }).catch(() => {
+    twoFactorShow.value = false
+  })
+}
+
+function checkCode() {
+  if (!/^\d{6}$/.test(twoFactorCode.value)) {
+    ElMessage({message: t('verifyCodeInvalid'), type: 'error', plain: true})
+    return false
+  }
+  return true
+}
+
+function confirmTwoFactor() {
+  if (!checkCode() || twoFactorLoading.value) return
+  twoFactorLoading.value = true
+  twoFactorEnable(twoFactorCode.value).then(() => {
+    ElMessage({message: t('saveSuccessMsg'), type: 'success', plain: true})
+    userStore.refreshUserInfo()
+    twoFactorShow.value = false
+  }).catch(() => {}).finally(() => {
+    twoFactorLoading.value = false
+  })
+}
+
+function disableTwoFactor() {
+  if (!checkCode() || twoFactorLoading.value) return
+  twoFactorLoading.value = true
+  twoFactorDisable({code: twoFactorCode.value}).then(() => {
+    ElMessage({message: t('saveSuccessMsg'), type: 'success', plain: true})
+    userStore.refreshUserInfo()
+    twoFactorShow.value = false
+  }).catch(() => {}).finally(() => {
+    twoFactorLoading.value = false
+  })
+}
+
+async function toggleTwoFactorRequired(value) {
+  try {
+    await setTwoFactorRequired(value)
+    await userStore.refreshUserInfo()
+    ElMessage({message: t('saveSuccessMsg'), type: 'success', plain: true})
+  } catch (e) {}
+}
+
+function copySecret() {
+  if (!twoFactorSecret.value) return
+  navigator.clipboard.writeText(twoFactorSecret.value).then(() => {
+    ElMessage({message: t('copySuccessMsg'), type: 'success', plain: true})
+  }).catch(() => {})
+}
+
+// ---- 浏览器通知 ----
+
+const notifyOn = ref(notifyEnabled())
+
+async function toggleNotify(value) {
+  if (!value) {
+    disableNotify()
+    notifyOn.value = false
+    return
+  }
+  const ok = await enableNotify()
+  notifyOn.value = ok
+  if (!ok) {
+    ElMessage({message: t('notifyDenied'), type: 'warning', plain: true})
+  }
+}
+
 </script>
 <style scoped lang="scss">
 .box {
@@ -336,6 +603,94 @@ function submitPwd() {
         white-space: nowrap;
         text-overflow: ellipsis;
       }
+    }
+
+    /* 头像 / 两步验证 / 通知行：标签更长，收窄固定列 */
+    .item.wide {
+      grid-template-columns: 84px 1fr;
+      gap: 106px;
+
+      @media (max-width: 767px) {
+        grid-template-columns: 84px 1fr;
+        gap: 36px;
+      }
+    }
+  }
+
+  .row-flex {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .row-flex.row-start {
+    justify-content: flex-start;
+  }
+
+  .row-desc {
+    color: var(--label-2, #8e8e93);
+    font-size: var(--text-footnote, 13px);
+    line-height: 1.4;
+    white-space: normal;
+  }
+
+  .avatar-preview {
+    flex: none;
+    background: var(--fill-quaternary, #f2f2f7);
+  }
+
+  .form-col {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .avatar-center {
+    display: flex;
+    justify-content: center;
+  }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .secret-box {
+    padding: 12px;
+    border-radius: var(--radius-md, 12px);
+    background: var(--bg-grouped, #f2f2f7);
+
+    .secret-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: var(--text-subhead, 15px);
+    }
+
+    .secret-label {
+      color: var(--label-2, #8e8e93);
+      flex: none;
+    }
+
+    .secret-value {
+      font-family: ui-monospace, Menlo, monospace;
+      word-break: break-all;
+    }
+
+    .secret-row .edit-name {
+      color: var(--blue, #007aff);
+      cursor: pointer;
+      flex: none;
+    }
+
+    .secret-url {
+      margin-top: 8px;
+      color: var(--label-3, #aeaeb2);
+      font-size: var(--text-footnote, 13px);
+      word-break: break-all;
     }
   }
 

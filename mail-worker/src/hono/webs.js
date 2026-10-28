@@ -22,4 +22,7 @@ import '../api/telegram-api'
 import '../api/mcp-api'
 import '../api/oauth-api'
 import '../api/translation-api'
+import '../api/contact-api'
+import '../api/ai-api'
+import '../api/push-api'
 export default app;

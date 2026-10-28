@@ -4,6 +4,7 @@ import {oauth} from "../entity/oauth";
 import { eq, and, inArray } from 'drizzle-orm';
 import userService from "./user-service";
 import loginService from "./login-service";
+import settingService from "./setting-service";
 import cryptoUtils from "../utils/crypto-utils";
 import jwtUtils from "../utils/jwt-utils";
 import KvConst from "../const/kv-const";
@@ -137,7 +138,7 @@ const oauthService = {
 				const userRow = await userService.selectByIdIncludeDel(c, oauthRow.userId);
 				// 会话守卫（登录态绑定 state=bind）：仅当用户从个人设置明确发起绑定（state=bind）时，
 				// 才不自动登录、交由前端 oauthBind() 定归属；干净登录（首页点 OAuth，state!=bind）即使已登录也要正常登录。
-				const isBind = params.state === 'bind';
+				const isBind = String(params.state || '').startsWith('bind');
 				const sessionUserId = isBind ? await this.getLoggedInUserId(c) : null;
 
 				if (sessionUserId) {
@@ -201,7 +202,7 @@ const oauthService = {
 				const userRow = await userService.selectByIdIncludeDel(c, oauthRow.userId);
 				// 会话守卫（state=bind 才启用）：干净登录（首页点 OAuth）即使已登录也正常登录；
 				// 仅登录态绑定（个人设置发起 state=bind）不在此自动登录，交由前端 oauthBind() 定归属。
-				const isBind = params.state === 'bind';
+				const isBind = String(params.state || '').startsWith('bind');
 				const sessionUserId = isBind ? await this.getLoggedInUserId(c) : null;
 
 				if (sessionUserId) {
@@ -272,7 +273,7 @@ const oauthService = {
 				// 该 oauth 行归属交由前端 oauthBind() 决定（未绑→绑当前、已绑当前→幂等、已绑他人→oauthBoundOther 拒绝）。
 				// 干净登录（首页点 Google，state!=bind）即使已登录也正常登录，杜绝"绑返回 token:null 误弹注册邮箱"。
 				// 绝不按 bound-user 或 email 自动登录，杜绝"当前用户 A 绑定却被登进他人 B"的会话劫持。
-				const isBind = params.state === 'bind';
+				const isBind = String(params.state || '').startsWith('bind');
 				const sessionUserId = isBind ? await this.getLoggedInUserId(c) : null;
 
 		if (sessionUserId) {
@@ -297,6 +298,174 @@ const oauthService = {
 
 		const JwtToken = await loginService.login(c, { email: userRow.email, password: null }, true);
 		return { userInfo: oauthRow, token: JwtToken }
+	},
+
+	/**
+	 * 企业 SSO（OIDC）：拉取 IdP 的 .well-known/openid-configuration。
+	 * 按 issuer 缓存 1 小时，避免每次登录都打 IdP；配置为空则视为未开启。
+	 */
+	async oidcDiscovery(c, provider) {
+		const setting = await settingService.query(c);
+		provider = provider || await settingService.resolveOidcProvider(c);
+		const issuer = (provider.issuer || '').trim().replace(/\/+$/, '');
+
+		if (!issuer) {
+			throw new BizError(t('oidcNotConfigured') || 'OIDC not configured');
+		}
+
+		const cacheKey = KvConst.OIDC_DISCOVERY + issuer;
+		const cached = await c.env.kv.get(cacheKey, { type: 'json' });
+
+		if (cached) {
+			return cached;
+		}
+
+		const res = await fetch(issuer + '/.well-known/openid-configuration');
+
+		if (!res.ok) {
+			throw new BizError(t('oidcDiscoveryFailed') || 'OIDC discovery failed');
+		}
+
+		const doc = await res.json();
+
+		if (!doc.authorization_endpoint || !doc.token_endpoint || !doc.userinfo_endpoint) {
+			throw new BizError(t('oidcDiscoveryFailed') || 'OIDC discovery failed');
+		}
+
+		await c.env.kv.put(cacheKey, JSON.stringify(doc), { expirationTtl: 3600 });
+		return doc;
+	},
+
+	/**
+	 * 登录页按钮要用的授权信息：端点来自 discovery，client_secret 不下发。
+	 */
+	async oidcConfig(c, providerId) {
+		const setting = await settingService.query(c);
+		const provider = await settingService.resolveOidcProvider(c, providerId);
+		const doc = await this.oidcDiscovery(c, provider);
+
+		return {
+			id: provider.id,
+			name: provider.name || 'SSO',
+			clientId: provider.clientId,
+			callbackUrl: this.normalizeCallback(provider.callbackUrl || setting.oidcCallbackUrl || ''),
+			scope: provider.scope || 'openid profile email',
+			authorizationEndpoint: doc.authorization_endpoint
+		};
+	},
+
+	// 回调必须落到 /login，登录页才能处理 code；兼容老配置里填站点根的情况
+	normalizeCallback(url) {
+		if (!url) return '';
+		try {
+			const parsed = new URL(url);
+			if (parsed.pathname === '/' || parsed.pathname === '') {
+				return parsed.origin + '/login';
+			}
+			return url;
+		} catch (e) {
+			return url;
+		}
+	},
+
+	/**
+	 * 企业 SSO（OIDC）登录：code → token_endpoint → userinfo_endpoint → 落 oauth 表（provider='oidc'）。
+	 * 只有 IdP 明确返回 email_verified=true 且邮箱是站内用户时才自动关联登录（同 Google 语义），
+	 * 否则 token 置空，交给前端走注册/绑定，杜绝未验证邮箱的账号接管。
+	 */
+	async oidcLogin(c, params) {
+
+		const { code } = params;
+		const state = String(params.state || '');
+		const setting = await settingService.query(c);
+		// 多服务商：state 形如 oidc:<id> / bind-oidc:<id>，显式 provider 参数优先
+		const stateProviderId = state.includes(':') ? state.split(':').slice(1).join(':') : '';
+		const provider = await settingService.resolveOidcProvider(c, params.provider || stateProviderId);
+		const providerKey = provider.id === 'legacy' ? 'oidc' : 'oidc:' + provider.id;
+		const doc = await this.oidcDiscovery(c, provider);
+
+		const reqParams = new URLSearchParams()
+		reqParams.append('grant_type', 'authorization_code')
+		reqParams.append('code', code)
+		reqParams.append('redirect_uri', this.normalizeCallback(provider.callbackUrl || setting.oidcCallbackUrl))
+		reqParams.append('client_id', provider.clientId)
+		reqParams.append('client_secret', provider.clientSecret)
+
+		const tokenRes = await fetch(doc.token_endpoint, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/x-www-form-urlencoded",
+				"Accept": "application/json"
+			},
+			body: reqParams.toString()
+		})
+
+		if (!tokenRes.ok) {
+			throw new BizError(t('oauthTokenFailed'))
+		}
+
+		const token = await tokenRes.json()
+
+		if (!token.access_token) {
+			throw new BizError(t('oauthBadCode'))
+		}
+
+		const userRes = await fetch(doc.userinfo_endpoint, {
+			headers: {
+				Authorization: 'Bearer ' + token.access_token,
+				"Accept": "application/json"
+			}
+		});
+
+		if (!userRes.ok) {
+			throw new BizError(t('oauthUserFailed'))
+		}
+
+		const oidcUser = await userRes.json();
+		const oauthRow = await this.saveUser(c, this.oidcUserToOauth(oidcUser, providerKey));
+
+		// 登录态绑定（state=bind）不在此自动登录，归属交由前端 oauthBind() 决定
+		const isBind = state.startsWith('bind');
+		const sessionUserId = isBind ? await this.getLoggedInUserId(c) : null;
+
+		if (isBind && !sessionUserId) {
+			// 绑定必须落到当前登录账号：会话失效时直接报错，绝不能让下面的自动关联把会话换成别人的账号
+			throw new BizError('登录状态已失效，请重新登录后再绑定');
+		}
+
+		if (sessionUserId) {
+			return { userInfo: oauthRow, token: null }
+		}
+
+		// 纯登录：仅 IdP 明确验证过的邮箱才自动关联已有账号
+		if (oidcUser.email_verified === true && oidcUser.email) {
+			const matchedUser = await userService.selectByEmailIncludeDel(c, oidcUser.email);
+			if (matchedUser && matchedUser.isDel !== 1) {
+				await orm(c).update(oauth).set({ userId: matchedUser.userId }).where(and(eq(oauth.oauthUserId, String(oidcUser.sub)), eq(oauth.provider, providerKey))).run();
+				const JwtToken = await loginService.login(c, { email: oidcUser.email, password: null }, true);
+				return { userInfo: oauthRow, token: JwtToken }
+			}
+		}
+
+		const userRow = await userService.selectByIdIncludeDel(c, oauthRow.userId);
+
+		if (!userRow) {
+			return { userInfo: oauthRow, token: null }
+		}
+
+		const JwtToken = await loginService.login(c, { email: userRow.email, password: null }, true);
+		return { userInfo: oauthRow, token: JwtToken }
+	},
+
+	// N-01 纯函数：OIDC userinfo 响应 → oauth 表行
+	oidcUserToOauth(u, provider = 'oidc') {
+		return {
+			oauthUserId: String(u.sub),
+			provider,
+			username: u.email || u.preferred_username || String(u.sub),
+			name: u.name || u.preferred_username || '',
+			avatar: u.picture || ''
+		};
 	},
 
 	/**

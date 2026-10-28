@@ -1,105 +1,97 @@
 <p align="center">
-    <img src="doc/demo/logo.png" width="80px" />
-    <h1 align="center">otsmail</h1>
-    <p align="center">基于 Cloudflare 的自建邮箱服务 —— 安全加固与独立维护版</p>
-    <p align="center">
-        <img src="https://img.shields.io/badge/license-MIT-green" />
-        <img src="https://img.shields.io/badge/platform-Cloudflare%20Workers-orange" />
-    </p>
+  <img src="doc/demo/logo.png" width="80px" />
+  <h1 align="center">otsmail</h1>
+  <p align="center">基于 Cloudflare Workers 的自建邮箱</p>
+  <p align="center">
+    <img src="https://img.shields.io/badge/license-MIT-green" />
+    <img src="https://img.shields.io/badge/platform-Cloudflare%20Workers-orange" />
+  </p>
 </p>
 
-## 这是什么
+otsmail 是一个运行在 Cloudflare 上的自建邮箱系统：收件走 Email Routing，发件走 Resend / Cloudflare Email Service，数据存放在 D1、KV 和 R2，不需要自己的服务器。
 
-otsmail 基于 [maillab/cloud-mail](https://github.com/maillab/cloud-mail)（MIT）开发，
-只需一个域名就能在 Cloudflare Workers 上跑起自己的邮箱服务：收件走 Email Routing，
-发件走 Resend / Cloudflare Email Service，数据存 D1 + KV + R2，没有服务器成本。
+项目 fork 自 [maillab/cloud-mail](https://github.com/maillab/cloud-mail)，保留其 MIT 协议和 Cloudflare 原生架构，并在此基础上做了安全加固与功能扩展。感谢原作者。
 
-**为什么不直接用上游**：上游 `main` 分支长期停更（新功能全堆在 `dev` 未合并），
-仓库历史被 force-push 重写过，且多个安全修复 PR 被关闭而未合并（#493 修 SQL 注入、
-#501 安全加固）。本项目从上游 `dev` 分支切出独立维护，优先补齐安全问题，
-再按社区 issue 呼声推进功能。
+## 相比上游新增或增强的功能
 
-## 与上游的差异
+| 功能 | 说明 |
+|---|---|
+| AI 助手 | 支持 OpenAI 兼容接口，可配置 Base URL、API Key 和模型；支持写信、回复、润色、按自然语言整理邮件；AI 面板支持自定义背景和透明度。 |
+| Telegram 管理 | 绑定同一个 Bot 后，可在 Telegram 里查看未读、读信、搜索、标记已读/未读、删除、归档，并直接用自然语言让 AI 操作邮箱。 |
+| MCP 服务 | 内置 MCP Server，支持 Bearer Token、查询参数 Token 和 OAuth `client_credentials`；可接入 Claude Desktop、Cursor 等客户端。 |
+| 翻译 | 集成 DeepL，可在读信页直接翻译邮件正文。 |
+| 通知 | 浏览器桌面通知、提示音和 Web Push；关闭页面后仍可收到新邮件通知。 |
+| 邮件分类 | 收件箱分为主要、社交、推广、动态、广告、垃圾邮件；默认使用本地规则，也可切换为自动 AI 分类或手动触发分类。 |
+| 子账户 | 支持多邮箱账户，按域名分组展示，可快速切换当前发件账户。 |
+| 登录与安全 | 多 OIDC 提供商、登录态绑定、2FA、密码登录强制 2FA；参数化 SQL、DOMPurify、PBKDF2、CORS 白名单等加固。 |
+| 使用体验 | Gmail 风格邮件列表、分页、搜索命中高亮、分类未读计数、快捷已读/删除、移动端适配、原版分析页。 |
 
-### 安全加固（上游至今仍存在的问题）
+## 截图
 
-| 问题 | 上游现状 | 本项目 |
-|---|---|---|
-| **SQL 注入**（CWE-89，未授权可达） | `/public/addUser` 把 User-Agent、IP、email 直接字符串拼进 `INSERT`，D1 的 `prepare()` 不转义 | 全部改为 `.bind()` 参数化 |
-| **存储型 XSS**（未授权可达） | 邮件正文经 `shadowRoot.innerHTML` 直插，仅移除 `<script>`。Shadow DOM 不是安全边界 | 前端 DOMPurify 消毒 + 后端 `html-sanitize.js` 双层；拦 `onerror` / `javascript:` / `iframe` / `srcdoc` / `meta refresh` 等（26 项测试覆盖） |
-| **CORS 全开** | `app.use('*', cors())` 等于 `Allow-Origin: *`，任意站点可带用户视角调 API | 默认仅同源，额外来源走 `allow_origin` 白名单 |
-| **口令哈希过弱** | 单轮 SHA-256，GPU 每秒可算数十亿次 | PBKDF2-HMAC-SHA256（轮数可配，默认 210000）；旧哈希登录时自动升级，用户无感 |
-| **随机口令可预测** | `Math.random()` 生成用户初始密码 | `crypto.getRandomValues()` + 拒绝采样去偏置 |
-| **token 存储分散** | 7 处直接读写 `localStorage`，XSS 即失窃 | 收拢到 `utils/token-store.js` 单一入口，为后续切 httpOnly Cookie 留好改造点 |
-| **jwt_secret 明文入库** | 写在 `wrangler.toml` 的 `[vars]`，进 git 也在 Dashboard 明文可见 | 改用 `wrangler secret put`，配置文件只留说明 |
-| **内部错误原文外泄** | 非业务异常直接把 `err.message` 返回客户端 | 非 `BizError` 统一返回 `Internal error` |
+### 收件箱与分类
 
-### Bug 修复
+![收件箱](doc/demo/otsmail-inbox.png)
 
-- **注销过的邮箱无法重新注册**（上游 #433 / #426 / #494，三个重复 issue）：
-  上游遇到 `is_del=1` 的历史记录直接抛「该邮箱已被注销」，地址被永久锁死。
-  现在会清理软删残留后允许重新注册，注册 / 添加邮箱 / 管理员加用户三条路径已统一。
+### AI 助手
 
-### 工程改进
+![AI 助手](doc/demo/otsmail-ai.png)
 
-- **测试能跑了**：上游 `vitest.config.js` 指向一个不存在的 `wrangler.jsonc`，
-  `vitest run` 直接 ParseError。现改为 node 环境，38 项测试覆盖口令哈希与 HTML 消毒。
-- **Worker 名改为 `otsmail`**，与上游及其分叉（都叫 `cloud-mail`）彻底脱钩，
-  避免同名 `wrangler deploy` 覆盖生产 Worker 导致邮件中断。
-- 清掉了上游配置里作者自己的 D1/KV ID 和写死的 `jwt_secret`。
+### 分析页
+
+![分析页](doc/demo/otsmail-analysis.png)
+
+### MCP 服务
+
+![MCP 服务](doc/demo/otsmail-mcp.png)
 
 ## 快速开始
 
+需要 Node.js、pnpm 和 Cloudflare 账号。
+
 ```bash
-cd mail-worker
+git clone https://github.com/otscup/otsmail.git
+cd otsmail/mail-worker
+
 npx wrangler d1 create otsmail
 npx wrangler kv namespace create otsmail-kv
 npx wrangler r2 bucket create otsmail-r2
 ```
 
-把输出的 ID 填进 `wrangler.toml` 的对应注释块，然后：
+把生成的 D1 / KV / R2 ID 填入 `mail-worker/wrangler.toml`，然后设置密钥：
 
 ```bash
-npx wrangler secret put jwt_secret     # 不要写进 wrangler.toml
+npx wrangler secret put jwt_secret
 npx wrangler deploy
-# 浏览器打开（GET 请求）初始化表结构：
-# https://<你的worker域名>/api/init/<jwt_secret>
 ```
 
-最后在 Cloudflare Dashboard → Email → Email Routing 里把 catch-all 指向 `otsmail` Worker。
+首次部署后访问 `https://<你的域名>/api/init/<jwt_secret>` 初始化数据库表。
 
-> ⚠️ **Workers 免费档必读**：免费档限制 10ms CPU/请求，而 PBKDF2 210000 轮约需 120ms，
-> 登录会 CPU 超时。免费档请在 `[vars]` 里设 `pwd_iterations = 8000`（约 5ms，
-> 仍远强于上游的单轮 SHA-256）。轮数写在哈希里，日后升级到付费档改配置即可，不影响老用户登录。
+前端构建：
 
-## 从旧的 cloud-mail 迁移
+```bash
+cd ../mail-vue
+pnpm install
+pnpm build
+```
 
-新旧两套可以完全并行、互不影响。详见 **[docs/MIGRATION.md](docs/MIGRATION.md)**，
-里面有分阶段步骤、数据核对 SQL 和每一步的回滚方案。要点：
+构建产物会写入 `mail-worker/dist`，随 Worker 一起部署。生产环境也可以把 `mail-worker/dist` 上传到 R2，由 Worker 直接提供静态资源；本项目当前使用这种方式。
 
-- 旧 Worker 和它的 D1/KV/R2 全程保留，只读不改
-- 先用测试子域验证新系统，生产域名不动
-- 旧库的 SHA-256 口令哈希被兼容，**老用户用原密码就能登录**
-- 唯一不可逆的一步是最后切换 Email Routing 的 catch-all 指向
+最后在 Cloudflare Dashboard 的 Email Routing 中把 catch-all 指向 `otsmail` Worker，并配置好发件服务。
+
+> 免费 Workers 套餐的 CPU 时间很紧，PBKDF2 轮数请按需调低；付费套餐可以使用默认值。
 
 ## 开发
 
 ```bash
-cd mail-worker && pnpm install && pnpm test     # 单元测试
-cd mail-vue   && pnpm install && pnpm run build # 构建前端（产物进 mail-worker/dist）
-cd mail-worker && pnpm run check                # 部署前干跑校验
+cd mail-worker && pnpm install && pnpm test
+cd mail-vue   && pnpm install && pnpm build
+cd mail-worker && npx wrangler deploy --dry-run
 ```
 
 ## 技术栈
 
-Cloudflare Workers · Hono · Drizzle ORM · Vue 3 · Element Plus · D1 · KV · R2 · Resend
+Cloudflare Workers · Hono · Drizzle ORM · Vue 3 · Element Plus · D1 · KV · R2 · Resend · DeepL
 
-## 致谢与许可
+## License
 
-本项目基于 [maillab/cloud-mail](https://github.com/maillab/cloud-mail)（MIT License，
-Copyright (c) 2025 eoao）开发，感谢原作者的开源工作。
-
-同类分叉 [AndrewYukon/cloud-mail-plus](https://github.com/AndrewYukon/cloud-mail-plus)
-在 Cloudflare 原生发件、External API 等方向做了很好的探索，本项目后续会参考其实现。
-
-MIT License，见 [LICENSE](LICENSE)。
+MIT License，见 [LICENSE](LICENSE)。原项目版权归 [maillab/cloud-mail](https://github.com/maillab/cloud-mail) 作者所有。

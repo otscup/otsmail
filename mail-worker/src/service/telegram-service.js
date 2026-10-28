@@ -7,17 +7,26 @@ import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 dayjs.extend(utc);
 dayjs.extend(timezone);
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
+import user from '../entity/user';
+import { isDel } from '../const/entity-const';
 import jwtUtils from '../utils/jwt-utils';
 import emailMsgTemplate from '../template/email-msg';
 import emailTextTemplate from '../template/email-text';
 import emailHtmlTemplate from '../template/email-html';
 import verifyUtils from '../utils/verify-utils';
 import domainUtils from "../utils/domain-uitls";
+import BizError from '../error/biz-error';
 
 // sendPhoto：每封邮件最多发的内嵌图数（避免多图刷屏）
 const MAX_PHOTOS_PER_EMAIL = 5;
 const PHOTO_CAPTION_LIMIT = 900;
+
+// 引用消息正文末尾的 #邮件ID（模板写入）；取最后一个，避免正文里的 #数字 干扰
+export function parseQuotedEmailId(text) {
+	const ids = [...String(text || '').matchAll(/#(\d+)\b/g)];
+	return Number(ids.at(-1)?.[1]) || null;
+}
 
 const telegramService = {
 
@@ -46,6 +55,39 @@ const telegramService = {
 			return emailTextTemplate('The email does not exist')
 		}
 
+	},
+
+	// 通知和 AI 指令共用同一个 Bot：这里只把 webhook 指到本 Worker
+	async setWebhook(c, url) {
+		const { tgBotToken } = await settingService.query(c);
+
+		if (!tgBotToken) {
+			throw new BizError('请先保存 Telegram Bot Token', 400);
+		}
+
+		const target = String(url || '').trim() || `${new URL(c.req.url).origin}/api/telegram/webhook`;
+
+		if (!/^https:\/\//i.test(target)) {
+			throw new BizError('Webhook 必须是 https 地址', 400);
+		}
+
+		const res = await fetch(`https://api.telegram.org/bot${tgBotToken}/setWebhook`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				url: target,
+				secret_token: c.env.jwt_secret,
+				allowed_updates: ['message']
+			})
+		});
+
+		const data = await res.json().catch(() => null);
+
+		if (!res.ok || !data?.ok) {
+			throw new BizError(data?.description || 'Telegram Webhook 设置失败', 502);
+		}
+
+		return { url: target };
 	},
 
 	async sendEmailToBot(c, email) {
@@ -144,7 +186,7 @@ const telegramService = {
 			for (let i = 0; i < inlineImages.length; i++) {
 				const att = inlineImages[i];
 				const photoUrl = `${baseUrl}/${att.key}`;
-				const caption = `${captionPrefix}\n📷 ${i + 1}/${inlineImages.length}`.slice(0, PHOTO_CAPTION_LIMIT);
+				const caption = `${captionPrefix}\n📷 ${i + 1}/${inlineImages.length}`.slice(0, PHOTO_CAPTION_LIMIT - 12) + `\n#${email.emailId}`;
 				try {
 					const res = await fetch(`https://api.telegram.org/bot${tgBotToken}/sendPhoto`, {
 						method: 'POST',
@@ -169,6 +211,99 @@ const telegramService = {
 				}
 			}
 		}));
+	},
+
+	/**
+	 * Telegram Bot webhook：/ai 前缀或纯自然语言 → aiService.command() → 把结果回发聊天。
+	 * 只接受后台 tgChatId 里配置的 chat；chat 没有用户绑定表，因此固定操作管理员自己的邮箱。
+	 */
+	async webhook(c, update) {
+		const message = update?.message || update?.edited_message;
+		const chatId = String(message?.chat?.id || '');
+		const text = String(message?.text || '').trim();
+		const quotedText = String(message?.reply_to_message?.text || message?.reply_to_message?.caption || message?.quote?.text || '');
+		const quotedEmailId = parseQuotedEmailId(quotedText);
+
+		// 机器人自己发的消息 / 非文本消息直接忽略，避免自激循环
+		if (!chatId || !text || message?.from?.is_bot) {
+			return;
+		}
+
+		const { tgBotToken, tgChatId } = await settingService.query(c);
+
+		if (!tgBotToken) {
+			return;
+		}
+
+		const tgChatIds = String(tgChatId || '').split(',').map(item => item.trim()).filter(Boolean);
+
+		if (!tgChatIds.includes(chatId)) {
+			await this.sendBotText(tgBotToken, chatId, 'Access denied');
+			return;
+		}
+
+		const admin = await orm(c).select({ userId: user.userId }).from(user)
+			.where(and(eq(user.email, c.env.admin), eq(user.isDel, isDel.NORMAL)))
+			.get();
+
+		if (!admin) {
+			await this.sendBotText(tgBotToken, chatId, 'Admin user not found');
+			return;
+		}
+
+		// 动态引入：ai-service 和 telegram-service 之间有 email-service 的静态依赖环
+		const { default: aiService } = await import('./ai-service');
+
+		const input = text.replace(/^\/ai\s*/i, '').trim();
+
+		let answer;
+		try {
+			answer = await aiService.command(c, {
+				text: input || text,
+				userId: admin.userId,
+				replyEmailId: quotedEmailId,
+				quotedText
+			});
+		} catch (e) {
+			await this.sendBotText(tgBotToken, chatId, `AI error: ${e.message || e}`);
+			return;
+		}
+
+		await this.sendBotText(tgBotToken, chatId, this.commandReplyText(answer));
+	},
+
+	// 动作结果拼成可读文本：回复 + 成功数 + 失败原因
+	commandReplyText({ reply, actions }) {
+		const failed = actions.filter(item => !item.ok);
+		const lines = [reply || ''];
+
+		if (actions.length > 0) {
+			lines.push(`✅ ${actions.length - failed.length}/${actions.length}`);
+		}
+
+		failed.forEach(item => {
+			const target = item.to ? ` ${item.to}` : item.emailId ? ` #${item.emailId}` : '';
+			lines.push(`❌ ${item.type}${target}: ${item.error || ''}`);
+		});
+
+		return lines.filter(Boolean).join('\n') || '-';
+	},
+
+	async sendBotText(tgBotToken, chatId, text) {
+		try {
+			const res = await fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ chat_id: chatId, text })
+			});
+			if (!res.ok) {
+				console.error(`Telegram 回复失败 status: ${res.status} response: ${await res.text()}`);
+			}
+		} catch (e) {
+			console.error('Telegram 回复失败:', e.message);
+		}
 	}
 
 }

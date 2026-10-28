@@ -40,4 +40,9 @@ describe('emailMsgTemplate — TG 正文摘要（折叠长行 + 截断）', () =
     const out = emailMsgTemplate({ ...base, text: '', content: '' }, 'show', 'show', 'show');
     expect(out).not.toContain('undefined');
   });
+
+  it('附带邮件 ID，供 Telegram 引用回复识别原邮件', () => {
+    const out = emailMsgTemplate({ ...base, emailId: 1025, text: 'hi', content: '' }, 'show', 'show', 'show');
+    expect(out).toContain('#1025');
+  });
 });

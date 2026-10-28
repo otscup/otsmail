@@ -10,6 +10,7 @@
 ##    代码读的还是 env.jwt_secret，无需改动。
 
 name = "otsmail"
+account_id = "f475b3dcf291c33ae82ab0b595f81958"
 main = "src/index.js"
 compatibility_date = "2025-06-04"
 # MCP SDK (@modelcontextprotocol/sdk) 依赖 node:http 等 Node API，需启用 nodejs_compat，
@@ -53,8 +54,8 @@ binding = "ai"
 
 ## [triggers] cron 每日刷分析缓存 —— 免费档「每账号 5 个 cron」已满，暂不启用。
 ## 需要的话改用本机 Hermes cron 定时打 /api 端点（不占 CF 配额）。
-#[triggers]
-#crons = ["0 16 * * *"]	#每天晚上12点执行每日任务,刷新分析缓存
+[triggers]
+crons = ["*/30 * * * *"]	#每天晚上12点执行每日任务,刷新分析缓存
 
 
 [vars]
@@ -74,7 +75,7 @@ GMAIL_ROUTING_INBOX = "gmail@otscup.com"
 github_switch = true
 google_switch = true
 ## MCP 开关：默认关(OFF)。MCP 是自动化入口，需显式开启；开启后才能用 AI 客户端收发/删邮件。
-mcp_switch = false
+mcp_switch = true
 #ai_model = ""			#ai模型,不填默认使用@cf/meta/llama-3.1-8b-instruct-fast
 #analysis_cache = false			#是否开启分析数据缓存
 #orm_log = false			#是否sql日志
@@ -96,3 +97,7 @@ mcp_switch = false
 ## 需要重建前端时单独跑上面那条命令，别让 wrangler 的 build hook 触发。
 #[build]
 #command = "pnpm --prefix ../mail-vue install && pnpm --prefix ../mail-vue run build"
+
+# Web Push��VAPID����Կ�ɹ�����˽Կ�� wrangler secret put VAPID_PRIVATE_KEY ����
+VAPID_SUBJECT = "mailto:admin@otscup.com"
+VAPID_PUBLIC_KEY = "BA_zaTbd_KgUzukJLyVZ5QLRx4eNtxzXL0q9ZGAj51XS4m-uuIwInmxSXejnBnFHxvhkY4j8A-Fo46xuoLUqvfM"

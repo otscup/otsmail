@@ -3,6 +3,7 @@
     <emailScroll ref="sysEmailScroll"
                  :get-emailList="getEmailList"
                  :email-delete="allEmailDelete"
+                 :email-unread="emailUnread"
                  :star-add="starAdd"
                  :star-cancel="starCancel"
                  :show-star="false"
@@ -19,31 +20,17 @@
 
     >
       <template #first>
-        <el-input
-            v-model="searchValue"
-            :placeholder="$t('searchByContent')"
-            class="search-input"
+        <el-select
+            ref="mySelect"
+            v-model="params.searchType"
+            :placeholder="$t('select')"
+            class="select"
         >
-          <template #prefix>
-            <div @click.stop="openSelect">
-              <el-select
-                  ref="mySelect"
-                  v-model="params.searchType"
-                  :placeholder="$t('select')"
-                  class="select"
-              >
-                <el-option key="3" :label="$t('sender')" :value="'name'"/>
-                <el-option key="4" :label="$t('subject')" :value="'subject'"/>
-                <el-option key="1" :label="$t('user')" :value="'user'"/>
-                <el-option key="2" :label="$t('selectEmail')" :value="'account'"/>
-              </el-select>
-              <div class="search-type">
-                <span>{{ selectTitle }}</span>
-                <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-              </div>
-            </div>
-          </template>
-        </el-input>
+          <el-option key="3" :label="$t('sender')" :value="'name'"/>
+          <el-option key="4" :label="$t('subject')" :value="'subject'"/>
+          <el-option key="1" :label="$t('user')" :value="'user'"/>
+          <el-option key="2" :label="$t('selectEmail')" :value="'account'"/>
+        </el-select>
         <el-select v-model="params.type" placeholder="Select" class="status-select" @change="typeSelectChange">
           <el-option key="1" :label="$t('all')" value="all"/>
           <el-option key="3" :label="$t('received')" value="receive"/>
@@ -51,7 +38,6 @@
           <el-option key="4" :label="$t('selectDeleted')" value="delete"/>
           <el-option key="4" :label="$t('noRecipientTitle')" value="noone"/>
         </el-select>
-        <Icon class="icon" icon="iconoir:search" @click="search" width="20" height="20"/>
         <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-down-outline"
               v-if="params.timeSort === 0" width="28" height="28"/>
         <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-up-outline" v-else
@@ -89,8 +75,9 @@
 
 <script setup>
 import {starAdd, starCancel} from "@/request/star.js";
+import {emailUnread} from "@/request/email.js";
 import emailScroll from "@/components/email-scroll/index.vue"
-import {computed, defineOptions, reactive, ref, watch, onMounted} from "vue";
+import {computed, defineOptions, reactive, ref, watch, onMounted, onUnmounted} from "vue";
 import {useEmailStore} from "@/store/email.js";
 import {
   allEmailList,
@@ -122,7 +109,12 @@ const showBathDelete = ref(false)
 const clearLoading = ref(false)
 
 onMounted(() => {
+  window.addEventListener('otsmail:search', search)
   latest();
+})
+
+onUnmounted(() => {
+  window.removeEventListener('otsmail:search', search)
 })
 
 const openSelect = () => {
@@ -136,6 +128,7 @@ const params = reactive({
   accountEmail: null,
   name: null,
   subject: null,
+  keyword: null,
   searchType: 'name'
 })
 
@@ -243,30 +236,35 @@ function refreshBefore() {
   params.accountEmail = null
   params.name = null
   params.subject = null
+  params.keyword = null
   params.searchType = 'name'
 }
 
 function search() {
+  searchValue.value = emailStore.searchParams.text || ''
 
   params.userEmail = null
   params.accountEmail = null
   params.name = null
   params.subject = null
+  params.keyword = null
 
-  if (params.searchType === 'user') {
-    params.userEmail = searchValue.value
-  }
+  const type = emailStore.searchParams.type || 'all'
 
-  if (params.searchType === 'account') {
-    params.accountEmail = searchValue.value
-  }
-
-  if (params.searchType === 'name') {
-    params.name = searchValue.value
-  }
-
-  if (params.searchType === 'subject') {
+  if (type === 'subject') {
     params.subject = searchValue.value
+    params.searchType = 'subject'
+  } else if (type === 'sender' || type === 'name') {
+    params.name = searchValue.value
+    params.searchType = 'name'
+  } else if (type === 'senderAddress' || type === 'recipientAddress' || type === 'email') {
+    params.accountEmail = searchValue.value
+    params.searchType = 'account'
+  } else if (type === 'user') {
+    params.userEmail = searchValue.value
+    params.searchType = 'user'
+  } else {
+    params.keyword = searchValue.value
   }
 
   sysEmailScroll.value.refreshList();
@@ -290,8 +288,8 @@ function jumpContent(email) {
 }
 
 
-function getEmailList(emailId, size) {
-  return allEmailList({emailId, size, ...params})
+function getEmailList(emailId, size, category, page) {
+  return allEmailList({emailId, size, page, ...params})
 }
 
 async function latest() {

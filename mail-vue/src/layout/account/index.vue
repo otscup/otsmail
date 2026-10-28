@@ -1,20 +1,32 @@
 <template>
   <div class="account-box">
     <div class="head-opt">
-      <Icon v-perm="'account:add'" class="icon add" icon="ion:add-outline" width="23" height="23" @click="add"/>
-      <Icon class="icon refresh" icon="ion:reload" width="18" height="18" @click="refresh"/>
+      <div class="add-account" v-perm="'account:add'" @click="add">
+        <Icon icon="ion:add-outline" width="18" height="18"/>
+        <span>{{ $t('addAnotherAccount') }}</span>
+      </div>
+      <Icon class="icon refresh" icon="ion:reload" width="13" height="13" :title="$t('refresh')" @click="refresh"/>
     </div>
     <el-scrollbar class="scrollbar" ref="scrollbarRef">
       <div v-infinite-scroll="getAccountList" :infinite-scroll-distance="600" :infinite-scroll-immediate="false">
-        <el-card class="item" :class="itemBg(item.accountId)" v-for="(item, index) in accounts" :key="item.accountId"
+        <div class="group" v-for="group in groups" :key="group.domain">
+          <div class="group-head" @click="toggleGroup(group.domain)">
+            <Icon class="group-chevron" :class="{ open: !isCollapsed(group.domain) }" icon="mingcute:down-small-fill" width="16" height="16"/>
+            <span class="group-domain">{{ group.domain }}</span>
+            <span class="group-count">{{ group.list.length }}</span>
+          </div>
+        <div v-show="!isCollapsed(group.domain)">
+        <el-card class="item" :class="itemBg(item.accountId)" v-for="item in group.list" :key="item.accountId"
                  @click="changeAccount(item)">
-          <div class="account">
-            {{ item.email }}
+          <div class="account" :title="item.email">
+            {{ item.email.split('@')[0] }}
           </div>
           <div class="opt">
             <div class="send-email" @click.stop>
-              <Icon @click="setAllReceive(item)" v-if="!item.allReceive" icon="eva:email-fill" width="22" height="22" color="#fccb1a"/>
-              <Icon @click="setAllReceive(item)" v-else icon="flat-color-icons:folder" width="22" height="22" color="#23c4f1" />
+              <el-tooltip :content="item.allReceive ? $t('allReceiveOn') : $t('allReceiveOff')" placement="top">
+                <Icon @click="setAllReceive(item)" v-if="!item.allReceive" icon="eva:email-fill" width="18" height="18" color="#fccb1a"/>
+                <Icon @click="setAllReceive(item)" v-else icon="mdi:email-multiple" width="18" height="18" color="#23c4f1"/>
+              </el-tooltip>
             </div>
             <div class="settings" @click.stop>
               <Icon icon="fluent-color:clipboard-24" width="22" height="22" @click.stop="copyAccount(item.email)"/>
@@ -25,7 +37,7 @@
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item v-if="hasPerm('email:send')" @click="openSetName(item)">{{ $t('rename') }}</el-dropdown-item>
-                    <el-dropdown-item v-if="item.accountId !== userStore.user.account.accountId" @click="setAsTop(item, index)">{{ $t('pin') }}</el-dropdown-item>
+                    <el-dropdown-item v-if="item.accountId !== userStore.user.account.accountId" @click="setAsTop(item)">{{ $t('pin') }}</el-dropdown-item>
                     <el-dropdown-item v-if="item.accountId !== userStore.user.account.accountId && hasPerm('account:delete')"
                                       @click="remove(item)">{{ $t('delete') }}
                     </el-dropdown-item>
@@ -34,7 +46,9 @@
               </el-dropdown>
             </div>
           </div>
-        </el-card>
+            </el-card>
+        </div>
+        </div>
 
         <!-- Initial Loading Skeleton -->
         <template v-if="loading">
@@ -79,25 +93,22 @@
       <div class="container">
         <el-input v-model="addForm.email" ref="addRef" type="text" :placeholder="$t('emailAccount')" autocomplete="off" @keyup.enter="submit">
           <template #append>
-            <div @click.stop="openSelect">
-              <el-select
-                  ref="mySelect"
-                  v-model="addForm.suffix"
-                  :placeholder="$t('select')"
-                  class="select"
-              >
-                <el-option
-                    v-for="item in domainList"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                />
-              </el-select>
-              <div>
-                <span>{{ addForm.suffix }}</span>
-                <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-              </div>
-            </div>
+            <el-select
+                v-model="addForm.suffix"
+                :placeholder="$t('select')"
+                class="select"
+                filterable
+                allow-create
+                default-first-option
+                @change="normalizeSuffix"
+            >
+              <el-option
+                  v-for="item in domainList"
+                  :key="item"
+                  :label="item"
+                  :value="item"
+              />
+            </el-select>
           </template>
         </el-input>
         <el-button class="btn" type="primary" @click="submit" :loading="addLoading"
@@ -179,7 +190,35 @@ const queryParams = {
   size: 30
 }
 
-const mySelect = ref()
+// 子邮箱按域名分组；折叠状态存 localStorage，刷新后保持
+const groupCollapsed = ref(new Set((() => {
+  try {
+    return JSON.parse(localStorage.getItem('acctGroupCollapsed') || '[]')
+  } catch (e) {
+    return []
+  }
+})()))
+
+const groups = computed(() => {
+  const map = new Map()
+  for (const item of accounts) {
+    const domain = (item.email.split('@')[1] || '').toLowerCase()
+    if (!map.has(domain)) map.set(domain, {domain, list: []})
+    map.get(domain).list.push(item)
+  }
+  return [...map.values()]
+})
+
+function isCollapsed(domain) {
+  return groupCollapsed.value.has(domain)
+}
+
+function toggleGroup(domain) {
+  const next = new Set(groupCollapsed.value)
+  next.has(domain) ? next.delete(domain) : next.add(domain)
+  groupCollapsed.value = next
+  localStorage.setItem('acctGroupCollapsed', JSON.stringify([...next]))
+}
 
 if (hasPerm('account:query')) {
   getAccountList()
@@ -195,10 +234,6 @@ watch(() => settingStore.domainList, (list) => {
   }
 }, {immediate: true})
 
-
-const openSelect = () => {
-  mySelect.value.toggleMenu()
-}
 
 window.onTurnstileError = (e) => {
   if (verifyErrorCount >= 4) {
@@ -345,6 +380,10 @@ function changeAccount(account) {
   accountStore.currentAccount = account
 }
 
+function normalizeSuffix(value) {
+  addForm.suffix = value && !value.startsWith('@') ? '@' + value : value
+}
+
 function add() {
   addForm.suffix = addForm.suffix || settingStore.domainList[0]
   showAdd.value = true
@@ -353,7 +392,9 @@ function add() {
   }, 100)
 }
 
-function setAsTop(account, index) {
+function setAsTop(account) {
+  const index = accounts.indexOf(account)
+  if (index < 0) return
   accountSetAsTop(account.accountId).then(() => {
     ElMessage({
       message: t('setSuccess'),
@@ -539,18 +580,78 @@ path[fill="#ffdda1"] {
 
     .icon {
       cursor: pointer;
+      color: var(--label-2);
+      flex: 0 0 auto;
     }
 
     .refresh {
-      margin-left: 10px;
+      margin-left: auto;
+      width: 20px !important;
+      height: 20px !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+
+      &:hover {
+        background: var(--fill-quaternary);
+      }
     }
 
-    .add {
-      margin-left: 2px;
+    .add-account {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      height: 26px;
+      padding: 0 6px;
+      border-radius: 6px;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+
+      &:hover {
+        background: var(--fill-quaternary);
+      }
+    }
+  }
+
+  .group-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 6px 10px 2px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    color: var(--label-3);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+
+    &:hover {
+      background: var(--fill-quaternary);
     }
 
-    .head-opt:not(.add) .refresh {
-      margin-left: 5px;
+    .group-chevron {
+      color: var(--label-3);
+      transition: transform .15s;
+
+      &.open {
+        transform: rotate(180deg);
+      }
+    }
+
+    .group-domain {
+      flex: 1;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .group-count {
+      font-weight: 400;
+      color: var(--label-3);
     }
   }
 
@@ -654,11 +755,7 @@ path[fill="#ffdda1"] {
 }
 
 .select {
-  position: absolute;
-  right: 30px;
-  width: 100px;
-  opacity: 0;
-  pointer-events: none;
+  width: 160px;
 }
 
 :deep(.el-pagination .el-select) {

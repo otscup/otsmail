@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import userService from '../service/user-service';
 import permService from '../service/perm-service';
 import { t } from '../i18n/i18n'
+import mcpService from '../service/mcp-service';
 import app from '../hono/hono';
 
 const exclude = [
@@ -18,7 +19,9 @@ const exclude = [
 	'/public/genToken',
 	'/telegram',
 	'/test',
-	'/oauth'
+	'/oauth',
+	'/push/key',
+	'/.well-known'
 ];
 
 const requirePerms = [
@@ -44,6 +47,7 @@ const requirePerms = [
 	'/setting/set',
 	'/setting/query',
 	'/setting/setBlacklist',
+	'/setting/webhookTest',
 	'/user/delete',
 	'/user/setPwd',
 	'/user/setStatus',
@@ -58,7 +62,8 @@ const requirePerms = [
 	'/regKey/list',
 	'/regKey/delete',
 	'/regKey/clearNotUse',
-	'/regKey/history'
+	'/regKey/history',
+	'/ai'
 ];
 
 const premKey = {
@@ -82,11 +87,12 @@ const premKey = {
 	'all-email:query': ['/allEmail/list','/allEmail/latest'],
 	'all-email:delete': ['/allEmail/delete','/allEmail/batchDelete'],
 	'setting:query': ['/setting/query'],
-	'setting:set': ['/setting/set', '/setting/setBackground','/setting/deleteBackground','/setting/setBlacklist'],
+	'setting:set': ['/setting/set', '/setting/setBackground','/setting/deleteBackground','/setting/setBlacklist','/setting/webhookTest'],
 	'analysis:query': ['/analysis/echarts'],
 	'reg-key:add': ['/regKey/add'],
 	'reg-key:query': ['/regKey/list','/regKey/history'],
 	'reg-key:delete': ['/regKey/delete','/regKey/clearNotUse'],
+	'ai:use': ['/ai/reply', '/ai/polish', '/ai/command'],
 };
 
 app.use('*', async (c, next) => {
@@ -112,9 +118,16 @@ app.use('*', async (c, next) => {
 	}
 
 
-	const jwt = c.req.header(constant.TOKEN_HEADER);
+	// MCP 客户端常只给 URL，允许 ?token= 和 x-api-key，普通 API 仍只认请求头
+	let jwt = c.req.header(constant.TOKEN_HEADER);
+	if (!jwt && c.req.path.startsWith('/mcp')) {
+		jwt = c.req.query('token') || c.req.header('x-api-key');
+	}
 
-	const result = await jwtUtils.verifyToken(c, jwt);
+	// MCP 访问令牌（mcp_ 前缀）：与 JWT 共用同一套用户上下文与权限校验，只是不查 KV 会话表
+	const mcpAuth = await mcpService.verifyBearer(c, jwt);
+
+	const result = mcpAuth ? { userId: mcpAuth.userId, token: null, viaMcp: true } : await jwtUtils.verifyToken(c, jwt);
 
 	if (!result) {
 		throw new BizError(t('authExpired'), 401);
@@ -127,7 +140,7 @@ app.use('*', async (c, next) => {
 		throw new BizError(t('authExpired'), 401);
 	}
 
-	if (!authInfo.tokens.includes(token)) {
+	if (!result.viaMcp && !authInfo.tokens.includes(token)) {
 		throw new BizError(t('authExpired'), 401);
 	}
 

@@ -3,6 +3,7 @@ export const setting = sqliteTable('setting', {
 	register: integer('register').default(0).notNull(),
 	receive: integer('receive').default(0).notNull(),
 	title: text('title').default('').notNull(),
+	subtitle: text('subtitle').default('').notNull(),
 	manyEmail: integer('many_email').default(0).notNull(),
 	addEmail: integer('add_email').default(0).notNull(),
 	autoRefresh: integer('auto_refresh').default(0).notNull(),
@@ -16,6 +17,8 @@ export const setting = sqliteTable('setting', {
 	siteKey: text('site_key'),
 	regKey: integer('reg_key').default(1).notNull(),
 	background: text('background'),
+	chatBackground: text('chat_background'),
+	chatOpacity: integer('chat_opacity').default(0.88),
 	tgBotToken: text('tg_bot_token').default('').notNull(),
 	tgChatId: text('tg_chat_id').default('').notNull(),
 	tgBotStatus: integer('tg_bot_status').default(1).notNull(),
@@ -52,6 +55,10 @@ export const setting = sqliteTable('setting', {
 	blackFrom: text('black_from').default('').notNull(),
 	aiCode: integer('ai_code').default(1).notNull(),
 	aiCodeFilter: text('ai_code_filter').default('').notNull(),
+	aiBaseUrl: text('ai_base_url').default('').notNull(),
+	aiApiKey: text('ai_api_key').default('').notNull(),
+	aiModel: text('ai_model').default('').notNull(),
+	aiClassifyMode: text('ai_classify_mode').default('off').notNull(),
 	syncDelete: integer('sync_delete').default(1).notNull(),
 	deeplKey: text('deepl_key').default('').notNull(),
 	webhookUrl: text('webhook_url').default('').notNull(),
@@ -59,6 +66,15 @@ export const setting = sqliteTable('setting', {
 	webhookRetry: integer('webhook_retry').default(0).notNull(),
 	webhookSecret: text('webhook_secret').default('').notNull(),
 	autoCleanDays: integer('auto_clean_days').default(0).notNull(),
-	autoCleanExclude: text('auto_clean_exclude').default('').notNull()
+	autoCleanExclude: text('auto_clean_exclude').default('').notNull(),
+	// otsmail：企业 SSO（标准 OIDC），全部后台可配
+	oidcSwitch: integer('oidc_switch').default(0).notNull(),
+	oidcName: text('oidc_name').default('SSO').notNull(),
+	oidcIssuer: text('oidc_issuer').default('').notNull(),
+	oidcClientId: text('oidc_client_id').default('').notNull(),
+	oidcClientSecret: text('oidc_client_secret').default('').notNull(),
+	oidcScope: text('oidc_scope').default('openid profile email').notNull(),
+	oidcCallbackUrl: text('oidc_callback_url').default('').notNull(),
+	oidcProviders: text('oidc_providers').default('[]').notNull()
 });
 export default setting

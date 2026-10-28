@@ -23,6 +23,11 @@ export default {
 			return app.fetch(req, env, ctx);
 		}
 
+		// MCP OAuth 元数据发现（RFC 8414 / 9728），必须挂在站点根上
+		if (url.pathname.startsWith('/.well-known/')) {
+			return app.fetch(req, env, ctx);
+		}
+
 		 if (['/static/','/attachments/'].some(p => url.pathname.startsWith(p))) {
 			 return await kvObjService.toObjResp( { env }, url.pathname.substring(1));
 		 }
@@ -31,8 +36,14 @@ export default {
 	},
 	email: email,
 	async scheduled(c, env, ctx) {
-		if (c.cron === '*/30 * * * *') {
-			await analysisService.refreshEchartsCache({ env })
+		const now = new Date(c.scheduledTime || Date.now());
+		const minute = now.getUTCMinutes();
+
+		// cron 可能被配成每分钟触发；缓存刷新只在整点/半点，日任务只在 UTC 16:00
+		if (minute === 0 || minute === 30) {
+			await analysisService.refreshEchartsCache({ env });
+		}
+		if (now.getUTCHours() !== 16 || minute > 5) {
 			return;
 		}
 
@@ -41,6 +52,5 @@ export default {
 		await emailService.completeReceiveAll({ env })
 		await emailService.autoClean({ env })
 		await oauthService.clearNoBindOathUser({ env })
-		await analysisService.refreshEchartsCache({ env })
 	},
 };

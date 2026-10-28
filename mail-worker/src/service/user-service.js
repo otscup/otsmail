@@ -2,7 +2,7 @@ import BizError from '../error/biz-error';
 import accountService from './account-service';
 import orm from '../entity/orm';
 import user from '../entity/user';
-import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, like, or, sql } from 'drizzle-orm';
 import { emailConst, isDel, roleConst, settingConst, userConst } from '../const/entity-const';
 import kvConst from '../const/kv-const';
 import KvConst from '../const/kv-const';
@@ -20,6 +20,10 @@ import {oauth} from "../entity/oauth";
 import oauthService from "./oauth-service";
 import settingService from './setting-service';
 import starService from './star-service';
+import r2Service from './r2-service';
+import totpUtils from '../utils/totp-utils';
+import fileUtils from '../utils/file-utils';
+import domainUtils from '../utils/domain-uitls';
 
 const userService = {
 
@@ -46,6 +50,9 @@ const userService = {
 		user.permKeys = permKeys;
 		user.role = roleRow;
 		user.type = userRow.type;
+		user.avatar = userRow.avatar || '';
+		user.twoFactor = userRow.twoFactorSwitch === 1;
+		user.twoFactorRequired = userRow.twoFactorRequired === 1;
 
 		if (c.env.admin === userRow.email) {
 			user.role = constant.ADMIN_ROLE
@@ -150,7 +157,11 @@ const userService = {
 
 
 		if (email) {
-			conditions.push(sql`${user.email} COLLATE NOCASE LIKE ${'%'+ email + '%'}`);
+			const keyword = '%' + email + '%';
+			conditions.push(or(
+				sql`${user.email} COLLATE NOCASE LIKE ${keyword}`,
+				sql`${oauth.name} COLLATE NOCASE LIKE ${keyword}`
+			));
 		}
 
 
@@ -180,6 +191,7 @@ const userService = {
 		const { total } = await orm(c)
 			.select({ total: count() })
 			.from(user)
+			.leftJoin(oauth, eq(oauth.userId, user.userId))
 			.where(and(...conditions)).get();
 		const userIds = list.map(user => user.userId);
 
@@ -204,6 +216,9 @@ const userService = {
 		const delAccountMap = Object.fromEntries(delAccountCounts.map(item => [item.userId, item.count]));
 
 		for (const user of list) {
+
+			// 列表响应里绝不能带两步验证密钥
+			delete user.twoFactorSecret;
 
 			const userId = user.userId;
 
@@ -388,6 +403,98 @@ const userService = {
 			await accountService.restoreByUserId(c, userId);
 		}
 
+	},
+
+	// ---- 个人设置：头像 ----
+
+	async setAvatar(c, params, userId) {
+		const avatar = String(params.avatar || '').trim();
+		// 只允许外链：javascript: / data: 写进 <img src> 就是 XSS
+		if (avatar.length > 1000 || (avatar && !/^https?:\/\//i.test(avatar))) {
+			throw new BizError(t('avatarUrlInvalid'));
+		}
+		await orm(c).update(user).set({ avatar }).where(eq(user.userId, userId)).run();
+		return { avatar };
+	},
+
+	async uploadAvatar(c, params, userId) {
+		const base64 = String(params.base64 || params.avatar || '');
+		const match = /^data:image\/(png|jpeg|jpg|webp|gif);base64,/i.exec(base64);
+		if (!match) {
+			throw new BizError(t('avatarFormatInvalid'));
+		}
+		const buff = fileUtils.base64ToUint8Array(fileUtils.base64ToDataStr(base64));
+		if (buff.length > 2 * 1024 * 1024) {
+			throw new BizError(t('avatarTooLarge'));
+		}
+		const ext = match[1].toLowerCase() === 'jpeg' ? 'jpg' : match[1].toLowerCase();
+		const key = `avatar/${userId}.${ext}`;
+		await r2Service.putObj(c, key, buff, {
+			contentType: 'image/' + ext,
+			cacheControl: 'max-age=2592000'
+		});
+		const { r2Domain } = await settingService.query(c);
+		// 没配 r2Domain 时回落到 Worker 自带的 /oss 路由
+		const url = (domainUtils.toOssDomain(r2Domain) || new URL(c.req.url).origin) + '/' + key;
+		await orm(c).update(user).set({ avatar: url }).where(eq(user.userId, userId)).run();
+		return { url };
+	},
+
+	// ---- 个人设置：两步验证（TOTP） ----
+
+	async twoFactorStatus(c, userId) {
+		const userRow = await this.selectById(c, userId);
+		return { enabled: userRow?.twoFactorSwitch === 1, required: userRow?.twoFactorRequired === 1 };
+	},
+
+	// 密码登录是否强制两步验证；没开 2FA 时不允许打开，避免把自己锁在门外
+	async setTwoFactorRequired(c, required, userId) {
+		const userRow = await this.selectById(c, userId);
+		if (required && userRow?.twoFactorSwitch !== 1) {
+			throw new BizError(t('twoFactorEnableFirst'));
+		}
+		await orm(c).update(user)
+			.set({ twoFactorRequired: required ? 1 : 0 })
+			.where(eq(user.userId, userId)).run();
+	},
+
+	// 只写 secret 不开启开关：用户拿着密钥加进认证器、再调 enable 才真正生效
+	async twoFactorSetup(c, userId) {
+		const userRow = await this.selectById(c, userId);
+		if (userRow.twoFactorSwitch === 1) {
+			throw new BizError(t('twoFactorAlreadyOpen'));
+		}
+		const secret = totpUtils.randomSecret();
+		await orm(c).update(user).set({ twoFactorSecret: secret, twoFactorSwitch: 0 })
+			.where(eq(user.userId, userId)).run();
+		return { secret, otpauthUrl: totpUtils.otpauthUrl(secret, userRow.email) };
+	},
+
+	async twoFactorEnable(c, params, userId) {
+		const userRow = await this.selectById(c, userId);
+		if (!userRow.twoFactorSecret) {
+			throw new BizError(t('twoFactorNotSetup'));
+		}
+		if (!await totpUtils.verify(userRow.twoFactorSecret, params.code)) {
+			throw new BizError(t('twoFactorCodeInvalid'));
+		}
+		await orm(c).update(user).set({ twoFactorSwitch: 1 }).where(eq(user.userId, userId)).run();
+	},
+
+	// 验证码或登录密码任一即可关闭：手机丢了还能用密码自救
+	async twoFactorDisable(c, params, userId) {
+		const userRow = await this.selectById(c, userId);
+		if (userRow.twoFactorSwitch !== 1) {
+			return;
+		}
+		const byCode = await totpUtils.verify(userRow.twoFactorSecret, params.code);
+		const byPwd = !!params.password
+			&& await cryptoUtils.verifyPassword(params.password, userRow.salt, userRow.password);
+		if (!byCode && !byPwd) {
+			throw new BizError(t('twoFactorCodeInvalid'));
+		}
+		await orm(c).update(user).set({ twoFactorSwitch: 0, twoFactorSecret: '', twoFactorRequired: 0 })
+			.where(eq(user.userId, userId)).run();
 	},
 
 	listByRegKeyId(c, regKeyId) {

@@ -17,6 +17,17 @@ app.post('/oauth/google/login', async (c) => {
 	return c.json(result.ok(loginInfo))
 });
 
+// 企业 SSO（OIDC）：登录页按钮先取授权端点（discovery 结果，缓存 1h）
+app.get('/oauth/oidc/config', async (c) => {
+	const config = await oauthService.oidcConfig(c, c.req.query('provider'));
+	return c.json(result.ok(config))
+});
+
+app.post('/oauth/oidc/login', async (c) => {
+	const loginInfo = await oauthService.oidcLogin(c, await c.req.json());
+	return c.json(result.ok(loginInfo))
+});
+
 app.put('/oauth/bind', async (c) => {
 	const loginInfo = await oauthService.bind(c, await c.req.json());
 	return c.json(result.ok(loginInfo))

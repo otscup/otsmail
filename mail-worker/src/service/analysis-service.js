@@ -103,6 +103,36 @@ const analysisService = {
 		};
 	},
 
+	async insight(c, params) {
+		const range = params.range === '24h' ? 1 : params.range === '30d' ? 30 : 7;
+		const timeZone = params.timeZone || 'UTC';
+		const diffHours = Number(dayjs().tz(timeZone).utcOffset() / 60);
+		const categoryRows = await c.env.db.prepare(`
+			SELECT
+				CASE WHEN spam = 1 THEN 'spam' ELSE COALESCE(category, 'primary') END AS category,
+				COUNT(*) AS total
+			FROM email
+			WHERE type = 0 AND is_del = 0 AND create_time >= datetime('now', ?)
+			GROUP BY 1
+		`).bind(`-${range} days`).all();
+
+		const heatRows = await c.env.db.prepare(`
+			SELECT
+				CAST(strftime('%w', create_time, '+${diffHours} hours') AS INTEGER) AS dow,
+				CAST(strftime('%H', create_time, '+${diffHours} hours') AS INTEGER) AS hour,
+				COUNT(*) AS total
+			FROM email
+			WHERE type = 0 AND is_del = 0 AND create_time >= datetime('now', ?)
+			GROUP BY dow, hour
+		`).bind(`-${range} days`).all();
+
+		const categories = { primary: 0, social: 0, promotion: 0, updates: 0, ads: 0, spam: 0 };
+		(categoryRows.results || []).forEach(row => {
+			if (row.category in categories) categories[row.category] = Number(row.total) || 0;
+		});
+		return { range, categories, heatmap: heatRows.results || [] };
+	},
+
 	filterEmptyDay(data, timeZone) {
 		const today = toUtc().tz(timeZone).subtract(1, 'day');
 		const previousDays = Array.from({ length: 15 }, (_, i) => {

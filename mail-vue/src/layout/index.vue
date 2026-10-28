@@ -1,8 +1,10 @@
 <template>
-  <el-container class="layout">
+  <el-container class="layout" :class="{ 'layout-collapsed': uiStore.asideCollapsed && !isMobile }"\n                :style="{ gridTemplateColumns: (!isMobile && uiStore.asideCollapsed) ? '1fr' : (isMobile ? '1fr' : '280px 1fr') }">
     <el-aside
+        v-if="!uiStore.asideCollapsed || isMobile"
         class="aside"
-        :class="uiStore.asideShow ? 'aside-show' : 'el-aside-hide'">
+        :width="uiStore.asideCollapsed && !isMobile ? '64px' : '280px'"
+        :class="[uiStore.asideShow ? 'aside-show' : 'el-aside-hide', { 'aside-collapsed': uiStore.asideCollapsed && !isMobile }]">
       <Aside />
     </el-aside>
     <div
@@ -18,10 +20,20 @@
       </el-main>
     </el-container>
   </el-container>
+  <button
+      v-if="isMobile && !uiStore.asideShow"
+      type="button"
+      class="layout-menu-fab"
+      title="展开菜单"
+      @click="isMobile ? uiStore.asideShow = true : uiStore.asideCollapsed = false"
+  >
+    <Icon icon="mingcute:menu-line" width="20" height="20"/>
+  </button>
   <writer ref="writerRef" />
 </template>
 
 <script setup>
+import { Icon } from '@iconify/vue'
 import Aside from '@/layout/aside/index.vue'
 import Header from '@/layout/header/index.vue'
 import Main from '@/layout/main/index.vue'
@@ -76,8 +88,35 @@ onBeforeUnmount(() => {
 }
 
 .el-aside {
-  width: auto;
+  width: 280px;
   transition: all 100ms ease;
+  overflow: hidden;
+}
+
+.aside-collapsed {
+  :deep(.title) {
+    margin: 10px 8px;
+    padding: 0;
+  }
+  :deep(.title-text),
+  :deep(.acct-label),
+  :deep(.acct-chevron),
+  :deep(.menu-name),
+  :deep(.manage-title) {
+    display: none !important;
+  }
+  :deep(.acct) {
+    margin: 0 8px 6px;
+  }
+  :deep(.acct-toggle) {
+    justify-content: center;
+    padding: 0;
+  }
+  :deep(.el-menu-item) {
+    justify-content: center;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
 }
 
 .layout {
@@ -90,20 +129,42 @@ onBeforeUnmount(() => {
 }
 
 .main-container {
-  min-height: 100%;
+  height: 100vh;
   background: var(--el-bg-color);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
+}
+
+.layout-menu-fab {
+  position: fixed;
+  left: 14px;
+  bottom: 16px;
+  z-index: 90;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color);
+  color: var(--label);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.14);
+  cursor: pointer;
 }
 
 .el-main {
   padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .el-header {
+  flex: 0 0 60px;
   background: var(--el-bg-color);
   border-bottom: solid 1px var(--el-border-color);
-  padding: 0 0 0 0;
+  padding: 0;
 }
 
 .overlay-show {
@@ -123,3 +184,5 @@ onBeforeUnmount(() => {
   opacity: 0;
 }
 </style>
+
+

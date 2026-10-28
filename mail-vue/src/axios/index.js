@@ -5,7 +5,9 @@ import {useSettingStore} from "@/store/setting.js";
 import {getToken, clearToken} from "@/utils/token-store.js";
 
 let http = axios.create({
-    baseURL: import.meta.env.VITE_BASE_URL
+    baseURL: import.meta.env.VITE_BASE_URL,
+    // 没有超时的话接口一挂就一直转圈（退出登录卡住的根因之一），30s 兜底
+    timeout: 30000
 });
 
 http.interceptors.request.use(config => {
@@ -47,6 +49,9 @@ http.interceptors.response.use((res) => {
                 })
                 reject(data)
 
+            } else if (data.code === 428) {
+                // 两步验证：由登录页展示验证码输入框，不弹通用错误
+                reject(data)
             } else if (data.code === 502) {
                 ElMessage({
                     dangerouslyUseHTMLString: true,
@@ -96,7 +101,6 @@ http.interceptors.response.use((res) => {
                 plain: true,
                 grouping: true
             })
-            ElMessage.error('')
         } else if (error.response) {
             ElMessage({
                 message: i18n.global.t('serverBusyErrorMsg'),

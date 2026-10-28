@@ -88,6 +88,15 @@ const routers = {
             name: 'sys-setting',
             menu: true
         }
+    }, {
+        path: '/mcp',
+        name: 'mcp',
+        component: () => import('@/views/mcp/index.vue'),
+        meta: {
+            title: 'mcpService',
+            name: 'mcp',
+            menu: true
+        }
     }],
     'reg-key:query': [{
         path: '/invite-code',

@@ -7,15 +7,28 @@
             <Icon icon="hugeicons:quill-write-01" width="28" height="28"/>
           </span>
           <span class="sender">{{ $t('sender') }}:</span>
-          <span class="sender-name">{{ form.name }}</span>
-          <span class="send-email"><{{ form.sendEmail }}></span>
+          <el-select
+              v-model="form.accountId"
+              class="compose-account"
+              popper-class="compose-account-popper"
+              size="small"
+              :teleported="false"
+              @change="changeComposeAccount"
+          >
+            <el-option
+                v-for="item in composeAccounts"
+                :key="item.accountId"
+                :label="item.email"
+                :value="item.accountId"
+            />
+          </el-select>
         </div>
         <div @click="close" style="cursor: pointer;">
           <Icon icon="material-symbols-light:close-rounded" width="22" height="22"/>
         </div>
       </div>
       <div class="container">
-        <el-input-tag  @add-tag="addTagChange" tag-type="primary" @input="inputChange" size="default" v-model="form.receiveEmail" >
+        <el-input-tag :key="recipientInputKey" @add-tag="addTagChange" tag-type="primary" @input="inputChange" size="default" v-model="form.receiveEmail" >
           <template #prefix>
             <div class="item-title" >{{ $t('recipient') }}</div>
             <el-select
@@ -31,16 +44,36 @@
               <el-option
                   v-for="item in selectRecipientList"
                   :key="item"
-                  :label="item"
+                  :label="contactLabel(item)"
                   :value="item"
                   style="color: #999896;"
+                  @mousedown.prevent
+                  @click.stop="selectChange(item)"
               />
             </el-select>
           </template>
           <template #suffix>
-            <div style="display: flex;margin-right: 3px;">
-              <Icon icon="fa7-solid:user-plus" width="20" height="20" class="add-contact" @click.stop="openContacts" />
+            <div style="display: flex;align-items: center;margin-right: 3px;">
+              <span class="cc-toggle" :class="{ 'is-open': showCc }" @click.stop="showCc = !showCc">{{ $t('cc') }}</span>
+              <span class="cc-toggle" :class="{ 'is-open': showBcc }" @click.stop="showBcc = !showBcc">{{ $t('bcc') }}</span>
+              <Icon icon="fa7-solid:user-plus" width="20" height="20" class="add-contact" @click.stop="openContacts('to')" />
             </div>
+          </template>
+        </el-input-tag>
+        <el-input-tag class="cc-input" v-if="showCc" v-model="form.cc" tag-type="info">
+          <template #prefix>
+            <div class="item-title">{{ $t('cc') }}</div>
+          </template>
+          <template #suffix>
+            <Icon icon="fa7-solid:user-plus" width="20" height="20" class="add-contact" @click.stop="openContacts('cc')" />
+          </template>
+        </el-input-tag>
+        <el-input-tag class="cc-input" v-if="showBcc" v-model="form.bcc" tag-type="info">
+          <template #prefix>
+            <div class="item-title">{{ $t('bcc') }}</div>
+          </template>
+          <template #suffix>
+            <Icon icon="fa7-solid:user-plus" width="20" height="20" class="add-contact" @click.stop="openContacts('bcc')" />
           </template>
         </el-input-tag>
         <el-input v-model="form.subject" :placeholder="t('subject')" />
@@ -70,7 +103,7 @@
       </div>
     </div>
     <el-dialog top="10vh" v-model="showContacts" @closed="clearSelectContact" :title="t('recentContacts')">
-      <el-table ref="contactsTabRef" row-key="email" :data="contacts" style="height: 445px">
+      <el-table ref="contactsTabRef" row-key="email" :data="contacts" style="height: 445px" @cell-click="cellClick">
         <el-table-column type="selection" width="32" />
         <el-table-column property="email" :label="t('emailAccount')" >
           <template #default="props">
@@ -100,12 +133,14 @@ import {useUserStore} from "@/store/user.js";
 import {emailSend} from "@/request/email.js";
 import {isEmail} from "@/utils/verify-utils.js";
 import {useAccountStore} from "@/store/account.js";
+import {accountList} from "@/request/account.js";
 import {useEmailStore} from "@/store/email.js";
 import {fileToBase64, formatBytes} from "@/utils/file-utils.js";
 import {getIconByName} from "@/utils/icon-utils.js";
 import sendPercent from "@/components/send-percent/index.vue"
 import {toOssDomain} from "@/utils/convert.js";
 import {formatDetailDate} from "@/utils/day.js";
+import {contactList} from "@/request/contact.js";
 import {useSettingStore} from "@/store/setting.js";
 import {userDraftStore} from "@/store/draft.js";
 import {useWriterStore} from "@/store/writer.js";
@@ -120,7 +155,8 @@ defineExpose({
   open,
   openReply,
   openForward,
-  openDraft
+  openDraft,
+  openAiReply
 })
 
 const {t} = useI18n()
@@ -138,6 +174,8 @@ let sending = false
 const defValue = ref('')
 const contactsTabRef = ref({})
 const showContacts = ref(false)
+const showCc = ref(false)
+const showBcc = ref(false)
 const mySelect = ref()
 let selectStatus = false
 const backReply = reactive({
@@ -149,6 +187,8 @@ const backReply = reactive({
 const form = reactive({
   sendEmail: '',
   receiveEmail: [],
+  cc: [],
+  bcc: [],
   accountId: -1,
   name: '',
   subject: '',
@@ -161,15 +201,78 @@ const form = reactive({
 })
 
 const selectRecipientList = ref([])
+const composeAccounts = ref([])
+const recipientInputKey = ref(0)
+const contactTarget = ref('to')
 
-const contacts = computed(() => writerStore.sendRecipientRecord.map(item => ({email: item})))
+function currentSender() {
+  if (accountStore.currentAccount.email) {
+    return accountStore.currentAccount
+  }
+  return {...userStore.user.account, email: userStore.user.email, name: userStore.user.name}
+}
 
-function openContacts() {
+function changeComposeAccount(accountId) {
+  const account = composeAccounts.value.find(item => item.accountId === accountId)
+  if (!account) return
+  form.sendEmail = account.email
+  form.name = account.name
+}
+
+async function loadComposeAccounts() {
+  const current = currentSender()
+  composeAccounts.value = [{...current, email: current.email}]
+  try {
+    const list = await accountList(0, 100, null)
+    const merged = new Map([[current.accountId, composeAccounts.value[0]]])
+    list.forEach(item => merged.set(item.accountId, item))
+    composeAccounts.value = [...merged.values()]
+  } catch (e) {
+    // Keep the current account selectable if the account list is unavailable.
+  }
+}
+
+const contactBook = ref([])
+onMounted(() => {
+  contactList('', '').then(data => {
+    contactBook.value = data.list || []
+  }).catch(() => {})
+})
+
+// 联系人簿 + 最近收件人合并；同一邮箱只出现一次
+const contacts = computed(() => {
+  const seen = new Set()
+  const list = []
+  contactBook.value.forEach(item => {
+    if (!item.email || seen.has(item.email)) return
+    seen.add(item.email)
+    list.push({email: item.email, name: item.name, groupName: item.groupName, remark: item.remark})
+  })
+  writerStore.sendRecipientRecord.forEach(email => {
+    if (!email || seen.has(email)) return
+    seen.add(email)
+    list.push({email})
+  })
+  return list
+})
+
+function targetRecipients() {
+  if (contactTarget.value === 'cc') return form.cc
+  if (contactTarget.value === 'bcc') return form.bcc
+  return form.receiveEmail
+}
+
+function openContacts(target = 'to') {
+  contactTarget.value = target
   showContacts.value = true
+  contactList('', '').then(data => {
+    contactBook.value = data.list || []
+  }).catch(() => {})
   nextTick(() => {
-    form.receiveEmail.forEach(item => {
-      if (writerStore.sendRecipientRecord.includes(item)) {
-        contactsTabRef.value.toggleRowSelection({email: item});
+    targetRecipients().forEach(item => {
+      const row = contacts.value.find(contact => contact.email === item)
+      if (row) {
+        contactsTabRef.value.toggleRowSelection(row)
       }
     })
   })
@@ -181,25 +284,22 @@ function deleteContact() {
     cancelButtonText: t('cancel'),
     type: 'warning'
   }).then(() => {
-    const contactList = contactsTabRef.value.getSelectionRows().map(item => item.email);
-    form.receiveEmail = form.receiveEmail.filter(item => !contactList.includes(item));
-    writerStore.sendRecipientRecord = writerStore.sendRecipientRecord.filter(item => !contactList.includes(item));
+    const selected = contactsTabRef.value.getSelectionRows().map(item => item.email);
+    const target = targetRecipients()
+    const kept = target.filter(item => !selected.includes(item))
+    if (contactTarget.value === 'cc') form.cc = kept
+    else if (contactTarget.value === 'bcc') form.bcc = kept
+    else form.receiveEmail = kept
+    writerStore.sendRecipientRecord = writerStore.sendRecipientRecord.filter(item => !selected.includes(item));
   })
 }
 
 function chooseContact() {
-
-  const contactList = contactsTabRef.value.getSelectionRows().map(item => item.email);
-  contactList.forEach(item => {
-    if (!form.receiveEmail.includes(item)) {
-      form.receiveEmail.push(item);
-    }
+  const selected = contactsTabRef.value.getSelectionRows().map(item => item.email);
+  const target = targetRecipients()
+  selected.forEach(item => {
+    if (!target.includes(item)) target.push(item);
   })
-
-  form.receiveEmail = form.receiveEmail.filter(item => {
-    return contactList.includes(item) || !writerStore.sendRecipientRecord.includes(item);
-  });
-
   showContacts.value = false
 }
 
@@ -207,8 +307,19 @@ function clearSelectContact() {
   contactsTabRef.value.clearSelection();
 }
 
+function cellClick(row, column) {
+  if (column?.type === 'selection') return
+  contactsTabRef.value.toggleRowSelection(row)
+}
+
 function selectChange(value) {
-  form.receiveEmail.push(value)
+  if (!value) return
+  if (!form.receiveEmail.includes(value)) {
+    form.receiveEmail.push(value)
+  }
+  selectRecipientList.value = []
+  selectStatus = false
+  recipientInputKey.value++
 }
 
 function selectStatusChange(status) {
@@ -219,9 +330,19 @@ const openSelect = () => {
   mySelect.value.toggleMenu()
 }
 
+function contactLabel(email) {
+  const contact = contacts.value.find(item => item.email === email)
+  return contact?.name ? `${contact.name} <${email}>` : email
+}
+
 function inputChange(value) {
 
-  selectRecipientList.value = writerStore.sendRecipientRecord.filter(item => value && !form.receiveEmail.includes(item) && item.startsWith(value)).slice(0, 10);
+  const keyword = (value || '').toLowerCase()
+  const book = contacts.value.map(item => item.email)
+  const all = [...new Set([...writerStore.sendRecipientRecord, ...book])]
+  selectRecipientList.value = all
+      .filter(item => keyword && !form.receiveEmail.includes(item) && (item.toLowerCase().includes(keyword) || contactLabel(item).toLowerCase().includes(keyword)))
+      .slice(0, 10);
 
   if (!selectStatus && selectRecipientList.value.length > 0) {
     openSelect()
@@ -331,6 +452,15 @@ async function sendEmail() {
     return
   }
 
+  if ([...form.cc, ...form.bcc].some(item => !isEmail(item))) {
+    ElMessage({
+      message: t('notEmailMsg'),
+      type: 'error',
+      plain: true,
+    })
+    return
+  }
+
   if (sending) {
     ElMessage({
       message: t('sendingErrorMsg'),
@@ -411,6 +541,10 @@ function addRecipientRecord() {
 
 function resetForm() {
   form.receiveEmail = []
+  form.cc = []
+  form.bcc = []
+  showCc.value = false
+  showBcc.value = false
   form.subject = ''
   form.content = ''
   form.manyType = null
@@ -501,6 +635,22 @@ function openReply(email) {
 
 }
 
+// AI 回复：保留原邮件收件人/主题，正文用 AI 草稿替换（不覆盖引用）
+function openAiReply(email, text) {
+  resetForm()
+  if (!email) return
+  email.subject = email.subject || ''
+  form.receiveEmail.push(email.sendEmail)
+  form.subject = /^(Re:|Re：|回复：|回复:)/.test(email.subject) ? email.subject : 'Re: ' + email.subject
+  form.sendType = 'reply'
+  form.emailId = email.emailId
+  defValue.value = String(text || '')
+      .split('\n')
+      .map(line => `<div>${line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') || '<br>'}</div>`)
+      .join('')
+  open()
+}
+
 function formatImage(content) {
   content = content || '';
   const domain = settingStore.settings.r2Domain;
@@ -508,21 +658,20 @@ function formatImage(content) {
 }
 
 function open() {
-  if (!accountStore.currentAccount.email) {
-    form.sendEmail = userStore.user.email;
-    form.accountId = userStore.user.account.accountId;
-    form.name = userStore.user.name;
-  } else {
-    form.sendEmail = accountStore.currentAccount.email;
-    form.accountId = accountStore.currentAccount.accountId;
-    form.name = accountStore.currentAccount.name;
-  }
+  const sender = currentSender()
+  form.sendEmail = sender.email;
+  form.accountId = sender.accountId;
+  form.name = sender.name;
+  loadComposeAccounts()
   show.value = true;
   editor.value.focus()
 }
 
 function openDraft(draft) {
   Object.assign(form, {...draft})
+  loadComposeAccounts()
+  showCc.value = form.cc?.length > 0
+  showBcc.value = form.bcc?.length > 0
   defValue.value = ''
   setTimeout(() => defValue.value = form.content)
   show.value = true;
@@ -616,6 +765,37 @@ function close() {
 .write-select .el-select-dropdown {
   min-width: 0 !important;
 }
+
+.compose-account-popper.el-select__popper.el-popper {
+  border: 1px solid #e4e7eb;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(32, 33, 36, .12);
+}
+
+.compose-account :deep(.el-select__wrapper) {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px #e4e7eb inset;
+  padding: 2px 8px;
+}
+
+.compose-account-popper .el-select-dropdown__item {
+  margin: 2px 6px;
+  border-radius: 8px;
+  background: #fff !important;
+}
+
+.compose-account-popper .el-select-dropdown__item.is-selected,
+.compose-account-popper .el-select-dropdown__item.is-selected.is-hovering {
+  color: var(--label) !important;
+  background: #fff !important;
+  font-weight: 600;
+}
+
+.compose-account-popper .el-select-dropdown__item.is-hovering {
+  background: #f5f6f7 !important;
+}
 </style>
 <style scoped lang="scss">
 .send {
@@ -682,6 +862,31 @@ function close() {
         overflow: hidden;
       }
 
+      .compose-account {
+        width: 230px;
+        margin-left: 5px;
+      }
+
+      .compose-account :deep(.el-select__wrapper) {
+        width: 100%;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 0 0 1px #e4e7eb inset;
+        padding: 2px 8px;
+      }
+
+      .compose-account :deep(.el-select__selection) {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .compose-account :deep(.el-select__placeholder) {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
 
       div {
         display: flex;
@@ -691,9 +896,21 @@ function close() {
 
     .container {
       height: 100%;
-      display: grid;
-      grid-template-rows: auto auto 1fr auto;
+      /* flex, not a fixed row count: the cc/bcc rows are optional */
+      display: flex;
+      flex-direction: column;
       gap: 15px;
+
+      .cc-input {
+        flex: 0 0 auto;
+      }
+
+      /* editor takes the leftover height; scoped height:100% would overflow the flex parent */
+      :deep(.editor-box) {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
+      }
 
       .item-title {
       }

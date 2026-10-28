@@ -4,6 +4,43 @@ import domainUtils from '../utils/domain-uitls';
 
 const webhookService = {
 
+	// 后台“发送测试”：只发一次，返回可展示的状态与耗时，不参与重试
+	async test({ env }, { url, secret } = {}) {
+		url = domainUtils.toOssDomain(String(url || '').trim());
+		if (!url) {
+			return { ok: false, status: 0, latencyMs: 0, message: 'Webhook URL 为空' };
+		}
+		const headers = { 'Content-Type': 'application/json' };
+		if (secret) headers['Authorization'] = secret;
+		const started = Date.now();
+		try {
+			const res = await fetch(url, {
+				method: 'POST',
+				headers,
+				body: JSON.stringify({
+					test: true,
+					event: 'webhook.test',
+					title: 'otsmail webhook test',
+					text: '这是一条测试消息，收到即表示配置可用。',
+					createTime: new Date().toISOString()
+				})
+			});
+			return {
+				ok: res.ok,
+				status: res.status,
+				latencyMs: Date.now() - started,
+				message: res.ok ? '测试请求已送达' : `目标返回 ${res.status}`
+			};
+		} catch (e) {
+			return {
+				ok: false,
+				status: 0,
+				latencyMs: Date.now() - started,
+				message: e.message || String(e)
+			};
+		}
+	},
+
 	// 收信后调用：把邮件摘要 POST 到 webhookUrl
 	async sendEmail({ env }, email, webhookUrl, webhookRetry = 0, webhookSecret = '') {
 		webhookUrl = domainUtils.toOssDomain(webhookUrl);

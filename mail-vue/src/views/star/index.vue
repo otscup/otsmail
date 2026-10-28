@@ -2,8 +2,9 @@
   <emailScroll type="star" ref="scroll"
                :allow-star="false"
                :cancel-success="cancelStar"
-               :getEmailList="starList"
+               :getEmailList="getStarList"
                :emailDelete="emailDelete"
+               :email-unread="emailUnread"
                :star-add="starAdd"
                :star-cancel="starCancel"
                @jump="jumpContent"
@@ -14,7 +15,7 @@
 
 <script setup>
 import emailScroll from "@/components/email-scroll/index.vue"
-import {emailDelete} from "@/request/email.js";
+import {emailDelete, emailUnread} from "@/request/email.js";
 import {starAdd, starCancel, starList} from "@/request/star.js";
 import {useEmailStore} from "@/store/email.js";
 import {defineOptions, onMounted, ref} from "vue";
@@ -33,6 +34,10 @@ function jumpContent(email) {
   emailStore.contentData.showStar = true
   emailStore.contentData.showReply = true
   router.push('/mail')
+}
+
+function getStarList(emailId, size, category, page) {
+  return starList(emailId, size, page)
 }
 
 function cancelStar(email) {

@@ -1,16 +1,17 @@
-## otsmail 本地开发配置（wrangler dev）
+## otsmail 鏈湴寮€鍙戦厤缃紙wrangler dev锛?
 ##
-## 上游这个文件里带的是作者自己的 D1/KV ID 和一个写死的 jwt_secret，
-## 对我们无效也不安全，已清空成模板。填自己的资源 ID 后使用：
+## 涓婃父杩欎釜鏂囦欢閲屽甫鐨勬槸浣滆€呰嚜宸辩殑 D1/KV ID 鍜屼竴涓啓姝荤殑 jwt_secret锛?
+## 瀵规垜浠棤鏁堜篃涓嶅畨鍏紝宸叉竻绌烘垚妯℃澘銆傚～鑷繁鐨勮祫婧?ID 鍚庝娇鐢細
 ##   npx wrangler d1 create otsmail-dev
 ##   npx wrangler kv namespace create otsmail-dev-kv
 ##
-## 本地开发的 jwt_secret 可以直接写在这里（仅本机），但生产用
-## `wrangler secret put jwt_secret`，不要写进 wrangler.toml。
+## 鏈湴寮€鍙戠殑 jwt_secret 鍙互鐩存帴鍐欏湪杩欓噷锛堜粎鏈満锛夛紝浣嗙敓浜х敤
+## `wrangler secret put jwt_secret`锛屼笉瑕佸啓杩?wrangler.toml銆?
 
 name = "otsmail-dev"
 main = "src/index.js"
 compatibility_date = "2025-06-04"
+compatibility_flags = ["nodejs_compat"]
 keep_vars = true
 
 [observability]
@@ -22,11 +23,11 @@ ip = "0.0.0.0"
 [[d1_databases]]
 binding = "db"
 database_name = "otsmail-dev"
-database_id = ""
+database_id = "00000000-0000-0000-0000-000000000001"
 
 [[kv_namespaces]]
 binding = "kv"
-id = ""
+id = "00000000000000000000000000000001"
 
 #[[r2_buckets]]
 #binding = "r2"
@@ -52,3 +53,4 @@ orm_log = false
 domain = ["example.com"]
 admin = "admin@example.com"
 jwt_secret = "dev-only-change-me"
+

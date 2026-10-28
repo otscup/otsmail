@@ -12,6 +12,15 @@ export function oauthGoogleLogin(code, state) {
     return http.post('/oauth/google/login',{code, state})
 }
 
+// 企业 SSO（OIDC）：provider 为空时后端取第一个启用的服务商
+export function oidcConfig(providerId) {
+    return http.get('/oauth/oidc/config', {params: providerId ? {provider: providerId} : {}})
+}
+
+export function oauthOidcLogin(code, state, provider) {
+    return http.post('/oauth/oidc/login', {code, state, provider})
+}
+
 export function oauthBindUser(form) {
     return http.put('/oauth/bindUser', form)
 }

@@ -10,8 +10,9 @@ import emailUtils from '../utils/email-utils';
 import roleService from '../service/role-service';
 import userService from '../service/user-service';
 import telegramService from '../service/telegram-service';
-import aiService from '../service/ai-service';
+import aiService, { classifyByRules } from '../service/ai-service';
 import webhookService from '../service/webhook-service';
+import pushService from '../service/push-service';
 import emailRules from '../utils/emailRules';
 
 export async function email(message, env, ctx) {
@@ -36,7 +37,8 @@ export async function email(message, env, ctx) {
 			blackContent,
 			blackFrom,
 			aiCode,
-			aiCodeFilter
+			aiCodeFilter,
+			aiClassifyMode
 		} = await settingService.query({ env });
 
 		if (receive === settingConst.receive.CLOSE) {
@@ -56,12 +58,8 @@ export async function email(message, env, ctx) {
 		const email = await PostalMime.parse(content);
 
 
-		const blockFlag = checkBlock(blackSubject, blackContent, blackFrom, email);
-
-		if (blockFlag) {
-			message.setReject('Message rejected');
-			return;
-		}
+		// 黑名单 + 标准垃圾头/主题标记命中不再直接拒收：邮件照常入库并打垃圾标记，由用户在垃圾箱查看
+		const blockFlag = checkBlock(blackSubject, blackContent, blackFrom, email) || isSpamByHeaders(email);
 
 		const account = await accountService.selectByEmailIncludeDel({ env: env }, message.to);
 
@@ -99,6 +97,10 @@ export async function email(message, env, ctx) {
 
 		const toName = email.to.find(item => item.address === message.to)?.name || '';
 		const code = await aiService.extractCode({ env }, email, { aiCode, aiCodeFilter });
+		// 默认只跑本地规则；只有显式开启自动 AI 才在收信链路里调用模型
+		const category = blockFlag ? 'spam' : aiClassifyMode === 'auto'
+			? await aiService.classifyEmail({ env }, email)
+			: classifyByRules(email);
 
 		const params = {
 			toEmail: message.to,
@@ -118,6 +120,8 @@ export async function email(message, env, ctx) {
 			userId: account ? account.userId : 0,
 			accountId: account ? account.accountId : 0,
 			isDel: isDel.DELETE,
+			spam: blockFlag || category === 'spam' ? 1 : 0,
+			category,
 			status: emailConst.status.SAVING
 		};
 
@@ -151,6 +155,12 @@ export async function email(message, env, ctx) {
 		}
 
 		emailRow = await emailService.completeReceive({ env }, account ? emailConst.status.RECEIVE : emailConst.status.NOONE, emailRow.emailId);
+
+		ctx.waitUntil(pushService.send({ env }, emailRow.userId, {
+			title: params.subject || '新邮件',
+			body: `${params.name || ''}${params.name ? ' · ' : ''}${String(params.text || '').slice(0, 80)}`,
+			url: '/'
+		}).catch(e => console.error('Web Push 失败: ', e)));
 
 
 		if (ruleType === settingConst.ruleType.RULE) {
@@ -207,6 +217,32 @@ export async function email(message, env, ctx) {
 		console.error('邮件接收异常: ', e);
 		throw e
 	}
+}
+
+/**
+ * 垃圾邮件判定（纯函数，便于自测）：
+ * 1. 标准反垃圾头：X-Spam-Status: Yes / X-Spam-Flag: YES / X-Spam-Score >= 5 / X-Spam-Level 五星以上
+ * 2. 主题标记：[SPAM] / ***SPAM*** / [垃圾邮件]
+ * 管理后台的黑/白名单仍走 checkBlock()，两者取并集。
+ */
+export function isSpamByHeaders(email) {
+	const headers = Array.isArray(email?.headers) ? email.headers : [];
+	const get = key => {
+		const row = headers.find(h => String(h.key || '').toLowerCase() === key);
+		return String(row?.value || '').trim();
+	};
+
+	if (/^yes\b/i.test(get('x-spam-status'))) return true;
+	if (/^yes$/i.test(get('x-spam-flag'))) return true;
+
+	const score = Number.parseFloat(get('x-spam-score'));
+	if (Number.isFinite(score) && score >= 5) return true;
+
+	const stars = (get('x-spam-level').match(/\*/g) || []).length;
+	if (stars >= 5) return true;
+
+	const subject = String(email?.subject || '');
+	return /\[spam\]|\*\*\*spam\*\*\*|\[垃圾邮件\]/i.test(subject);
 }
 
 function checkBlock(blackSubjectStr, blackContentStr, blackFromStr, email) {

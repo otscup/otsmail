@@ -27,11 +27,12 @@ const emailService = {
 
 	async list(c, params, userId) {
 
-		let { emailId, type, accountId, size, timeSort, allReceive } = params;
+		let { emailId, type, accountId, size, timeSort, allReceive, text, searchType, startDate, endDate, mailbox, category, page } = params;
 
 		size = Number(size);
 		emailId = Number(emailId);
 		timeSort = Number(timeSort);
+		page = Number(page) || 0;
 		accountId = Number(accountId);
 		allReceive = Number(allReceive);
 
@@ -54,6 +55,42 @@ const emailService = {
 			allReceive = accountRow.allReceive;
 		}
 
+		// 分类：unread 未读 / deleted 已删除 / spam 垃圾箱；缺省 inbox 即收件箱（排除垃圾与已删除）
+		const mailboxCondition = category === 'spam' ? [eq(email.isDel, isDel.NORMAL), eq(email.spam, 1)] : ({
+			unread: [eq(email.isDel, isDel.NORMAL), eq(email.unread, emailConst.unread.UNREAD)],
+			deleted: [eq(email.isDel, isDel.DELETE)],
+			spam: [eq(email.isDel, isDel.NORMAL), eq(email.spam, 1)]
+		}[mailbox] || [eq(email.isDel, isDel.NORMAL), eq(email.spam, 0)]);
+		const categoryCondition = category && category !== 'spam' ? [eq(email.category, category)] : [];
+
+		// 回收站同时展示收到的和发出的邮件；其它分类沿用页面传入的 type
+		const typeCondition = mailbox === 'deleted' ? sql`1 = 1` : eq(email.type, type);
+		const pageCondition = page > 0 ? sql`1 = 1` : (timeSort ? gt(email.emailId, emailId) : lt(email.emailId, emailId));
+
+		// 搜索：text 非空时按 searchType 匹配单个字段，startDate/endDate 限定时间范围
+		const searchConditions = [];
+
+		if (text && String(text).trim()) {
+			const keyword = '%' + String(text).trim() + '%';
+			const fieldMap = {
+				subject: sql`${email.subject} COLLATE NOCASE LIKE ${keyword}`,
+				content: sql`${email.text} COLLATE NOCASE LIKE ${keyword}`,
+				sender: sql`${email.name} COLLATE NOCASE LIKE ${keyword}`,
+				senderAddress: sql`${email.sendEmail} COLLATE NOCASE LIKE ${keyword}`,
+				recipientAddress: sql`${email.recipient} COLLATE NOCASE LIKE ${keyword}`
+			};
+			const all = or(...Object.values(fieldMap));
+			searchConditions.push(searchType === 'all' ? all : (fieldMap[searchType] || fieldMap.subject));
+		}
+
+		if (startDate) {
+			searchConditions.push(gte(email.createTime, startDate));
+		}
+
+		if (endDate) {
+			searchConditions.push(lte(email.createTime, endDate));
+		}
+
 		const query = orm(c)
 			.select({
 				...email,
@@ -74,10 +111,12 @@ const emailService = {
 				and(
 					allReceive ? eq(1,1) : eq(email.accountId, accountId),
 					eq(email.userId, userId),
-					timeSort ? gt(email.emailId, emailId) : lt(email.emailId, emailId),
-					eq(email.type, type),
-					eq(email.isDel, isDel.NORMAL),
-					eq(account.isDel, isDel.NORMAL)
+					pageCondition,
+					typeCondition,
+					...mailboxCondition,
+					...categoryCondition,
+					eq(account.isDel, isDel.NORMAL),
+					...searchConditions
 				)
 			);
 
@@ -87,7 +126,7 @@ const emailService = {
 			query.orderBy(desc(email.emailId));
 		}
 
-		const listQuery = query.limit(size).all();
+		const listQuery = page > 0 ? query.limit(size).offset((page - 1) * size).all() : query.limit(size).all();
 
 		const totalQuery = orm(c).select({ total: count() }).from(email)
 			.leftJoin(
@@ -98,9 +137,11 @@ const emailService = {
 				and(
 					allReceive ? eq(1,1) : eq(email.accountId, accountId),
 					eq(email.userId, userId),
-					eq(email.type, type),
-					eq(email.isDel, isDel.NORMAL),
-					eq(account.isDel, isDel.NORMAL)
+					typeCondition,
+					...mailboxCondition,
+					...categoryCondition,
+					eq(account.isDel, isDel.NORMAL),
+					...searchConditions
 				)
 		).get();
 
@@ -109,7 +150,8 @@ const emailService = {
 				allReceive ? eq(1,1) : eq(email.accountId, accountId),
 				eq(email.userId, userId),
 				eq(email.type, type),
-				eq(email.isDel, isDel.NORMAL)
+				eq(email.isDel, isDel.NORMAL),
+				eq(email.spam, 0)
 			))
 			.orderBy(desc(email.emailId)).limit(1).get();
 
@@ -174,8 +216,15 @@ const emailService = {
 			text, //邮件纯文本
 			content, //邮件内容
 			subject, //邮件标题
-			attachments = [] //附件
+			attachments = [], //附件
+			cc = [], //抄送
+			bcc = [] //密送
 		} = params;
+
+		//抄送/密送去空、去重，且不与主收件人重复
+		cc = [...new Set(cc.filter(Boolean))].filter(item => !receiveEmail.includes(item));
+		bcc = [...new Set(bcc.filter(Boolean))].filter(item => !receiveEmail.includes(item) && !cc.includes(item));
+		const recipients = [...receiveEmail, ...cc, ...bcc];
 
 		const { resendTokens, r2Domain, send, domainList } = await settingService.query(c);
 
@@ -190,7 +239,7 @@ const emailService = {
 		const roleRow = await roleService.selectById(c, userRow.type);
 
 		//判断接收方是不是全部为站内邮箱
-		const allInternal = receiveEmail.every(email => {
+		const allInternal = recipients.every(email => {
 			const domain = '@' + emailUtils.getDomain(email);
 			return domainList.includes(domain);
 		});
@@ -217,7 +266,7 @@ const emailService = {
 				if (roleRow.sendType === 'count') throw new BizError(t('totalSendLimit'), 403);
 			}
 
-			if (userRow.sendCount + receiveEmail.length > roleRow.sendCount) {
+			if (userRow.sendCount + recipients.length > roleRow.sendCount) {
 				if (roleRow.sendType === 'day') throw new BizError(t('daySendLack'), 403);
 				if (roleRow.sendType === 'count') throw new BizError(t('totalSendLack'), 403);
 			}
@@ -281,6 +330,8 @@ const emailService = {
 					name,
 					accountEmail: accountRow.email,
 					receiveEmail,
+					cc,
+					bcc,
 					subject,
 					text,
 					html,
@@ -293,6 +344,8 @@ const emailService = {
 					name,
 					accountEmail: accountRow.email,
 					receiveEmail,
+					cc,
+					bcc,
 					subject,
 					text,
 					html,
@@ -336,6 +389,8 @@ const emailService = {
 		});
 
 		emailData.recipient = JSON.stringify(recipient);
+		emailData.cc = JSON.stringify(cc.map(address => ({ address, name: emailUtils.getName(address) })));
+		emailData.bcc = JSON.stringify(bcc.map(address => ({ address, name: emailUtils.getName(address) })));
 
 		if (sendType === 'reply') {
 			emailData.inReplyTo = emailRow.messageId;
@@ -344,7 +399,7 @@ const emailService = {
 
 		//如果权限有发送次数增加用户发送次数
 		if (roleRow.sendCount && roleRow.sendType !== 'internal') {
-			await userService.incrUserSendCount(c, receiveEmail.length, userId);
+			await userService.incrUserSendCount(c, recipients.length, userId);
 		}
 
 		//保存到数据库并返回结果
@@ -371,7 +426,7 @@ const emailService = {
 
 		//如果全是站内接收方，直接写入数据库
 		if (allInternal) {
-			await this.HandleOnSiteEmail(c, receiveEmail, emailResult, attList);
+			await this.HandleOnSiteEmail(c, recipients, emailResult, attList);
 		}
 
 		const dateStr = dayjs().format('YYYY-MM-DD');
@@ -379,9 +434,9 @@ const emailService = {
 
 		//记录每天发件次数统计
 		if (!daySendTotal) {
-			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(receiveEmail.length), { expirationTtl: 60 * 60 * 24 });
+			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(recipients.length), { expirationTtl: 60 * 60 * 24 });
 		} else  {
-			daySendTotal = Number(daySendTotal) + receiveEmail.length
+			daySendTotal = Number(daySendTotal) + recipients.length
 			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(daySendTotal), { expirationTtl: 60 * 60 * 24 });
 		}
 
@@ -401,6 +456,14 @@ const emailService = {
 
 		if (params.html) {
 			sendForm.html = params.html;
+		}
+
+		if (params.cc?.length) {
+			sendForm.cc = [...params.cc];
+		}
+
+		if (params.bcc?.length) {
+			sendForm.bcc = [...params.bcc];
 		}
 
 		const attachments = await this.toCloudflareAttachments(params.attachments);
@@ -435,6 +498,14 @@ const emailService = {
 			html: params.html,
 			attachments: await this.toResendAttachments(params.attachments)
 		};
+
+		if (params.cc?.length) {
+			sendForm.cc = [...params.cc];
+		}
+
+		if (params.bcc?.length) {
+			sendForm.bcc = [...params.bcc];
+		}
 
 		if (params.sendType === 'reply') {
 			sendForm.headers = {
@@ -575,6 +646,8 @@ const emailService = {
 			emailValues.status = emailConst.status.RECEIVE;
 			emailValues.type = emailConst.type.RECEIVE;
 			emailValues.toEmail = email;
+			//密送不随邮件下发，避免收件人看到彼此
+			emailValues.bcc = '[]';
 			emailValues.toName = emailUtils.getName(email);
 			emailValues.emailId = null;
 
@@ -732,6 +805,7 @@ const emailService = {
 					gt(email.emailId, emailId),
 					eq(email.userId, userId),
 					eq(email.isDel, isDel.NORMAL),
+					eq(email.spam, 0),
 					eq(account.isDel, isDel.NORMAL),
 					allReceive ? eq(1,1) : eq(email.accountId, accountId),
 					eq(email.type, emailConst.type.RECEIVE)
@@ -837,12 +911,13 @@ const emailService = {
 
 	async allList(c, params) {
 
-		let { emailId, size, name, subject, accountEmail, userEmail, type, timeSort } = params;
+		let { emailId, size, name, subject, accountEmail, userEmail, type, timeSort, keyword, page } = params;
 
 		size = Number(size);
 
 		emailId = Number(emailId);
 		timeSort = Number(timeSort);
+		page = Number(page) || 0;
 
 		if (size > 50) {
 			size = 50;
@@ -897,14 +972,27 @@ const emailService = {
 			conditions.push(sql`${email.subject} COLLATE NOCASE LIKE ${'%'+ subject + '%'}`);
 		}
 
+		if (keyword) {
+			const like = '%' + keyword + '%';
+			conditions.push(or(
+				sql`${email.name} COLLATE NOCASE LIKE ${like}`,
+				sql`${email.subject} COLLATE NOCASE LIKE ${like}`,
+				sql`${email.sendEmail} COLLATE NOCASE LIKE ${like}`,
+				sql`${email.toEmail} COLLATE NOCASE LIKE ${like}`,
+				sql`${email.text} COLLATE NOCASE LIKE ${like}`,
+			));
+		}
+
 		conditions.push(ne(email.status, emailConst.status.SAVING));
 
 		const countConditions = [...conditions];
 
-		if (timeSort) {
-			conditions.unshift(gt(email.emailId, emailId));
-		} else {
-			conditions.unshift(lt(email.emailId, emailId));
+		if (page <= 0) {
+			if (timeSort) {
+				conditions.unshift(gt(email.emailId, emailId));
+			} else {
+				conditions.unshift(lt(email.emailId, emailId));
+			}
 		}
 
 		const query = orm(c).select({ ...email, userEmail: user.email })
@@ -923,7 +1011,7 @@ const emailService = {
 			query.orderBy(desc(email.emailId));
 		}
 
-		const listQuery = query.limit(size).all();
+		const listQuery = page > 0 ? query.limit(size).offset((page - 1) * size).all() : query.limit(size).all();
 		const totalQuery = queryCount.get();
 		const latestEmailQuery = orm(c).select().from(email)
 			.where(and(
@@ -1052,6 +1140,71 @@ const emailService = {
 	async read(c, params, userId) {
 			const { emailIds } = params;
 			await orm(c).update(email).set({ unread: emailConst.unread.READ }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds))).run();
+		},
+
+	async unread(c, params, userId) {
+			const { emailIds } = params;
+			await orm(c).update(email).set({ unread: emailConst.unread.UNREAD }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds))).run();
+		},
+
+	async categoryCounts(c, userId) {
+		const base = [eq(email.userId, userId), eq(email.isDel, isDel.NORMAL), eq(email.type, emailConst.type.RECEIVE), eq(email.unread, emailConst.unread.UNREAD)];
+		const rows = await orm(c).select({ category: email.category, total: count() }).from(email)
+			.where(and(...base, eq(email.spam, 0))).groupBy(email.category).all();
+		const { total: spam } = await orm(c).select({ total: count() }).from(email)
+			.where(and(...base, eq(email.spam, 1))).get();
+		const result = { primary: 0, social: 0, promotion: 0, updates: 0, ads: 0, spam: Number(spam) || 0 };
+		rows.forEach(row => {
+			if (row.category in result) result[row.category] = Number(row.total) || 0;
+		});
+		return result;
+	},
+
+	async menuCounts(c, userId) {
+		const normal = [eq(email.userId, userId), eq(email.isDel, isDel.NORMAL), eq(email.spam, 0)];
+		const [inbox, sent, deleted, spam] = await Promise.all([
+			orm(c).select({ total: count() }).from(email)
+				.where(and(eq(email.userId, userId), eq(email.isDel, isDel.NORMAL),
+					eq(email.type, emailConst.type.RECEIVE), eq(email.unread, emailConst.unread.UNREAD))).get(),
+			orm(c).select({ total: count() }).from(email)
+				.where(and(...normal, eq(email.type, emailConst.type.SEND))).get(),
+			orm(c).select({ total: count() }).from(email)
+				.where(and(eq(email.userId, userId), eq(email.isDel, isDel.DELETE))).get(),
+			orm(c).select({ total: count() }).from(email)
+				.where(and(eq(email.userId, userId), eq(email.isDel, isDel.NORMAL), eq(email.type, emailConst.type.RECEIVE), eq(email.spam, 1), eq(email.unread, emailConst.unread.UNREAD))).get()
+		]);
+		return {
+			inbox: Number(inbox?.total) || 0,
+			sent: Number(sent?.total) || 0,
+			deleted: Number(deleted?.total) || 0,
+			spam: Number(spam?.total) || 0
+		};
+	},
+
+		async spam(c, params, userId) {
+			await this.updateOwn(c, params.emailId, userId, { spam: 1 });
+		},
+
+		async spamCancel(c, params, userId) {
+			await this.updateOwn(c, params.emailId, userId, { spam: 0 });
+		},
+
+		async restore(c, params, userId) {
+			await this.updateOwn(c, params.emailId, userId, { isDel: isDel.NORMAL });
+		},
+
+		// 回收站里彻底删除：只删自己的邮件（/email/delete 在 syncDelete 关闭时只是重复打删除标记）
+		async physicsDeleteOwn(c, params, userId) {
+			const row = await orm(c).select({ emailId: email.emailId }).from(email)
+				.where(and(eq(email.userId, userId), eq(email.emailId, Number(params.emailId)))).get();
+			if (row) {
+				await this.physicsDelete(c, { emailIds: String(row.emailId) });
+			}
+		},
+
+		// 只改当前用户自己的邮件，避免越权改他人分类
+		async updateOwn(c, emailId, userId, values) {
+			await orm(c).update(email).set(values).where(and(eq(email.userId, userId), eq(email.emailId, Number(emailId)))).run();
 		},
 
 		// v1.0: GET /email/detail?emailId= —— 单封详情，复用 emailAddAtt 组装 attList（T-02 根治）

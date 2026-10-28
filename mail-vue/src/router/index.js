@@ -52,6 +52,33 @@ const routes = [
                     menu: true
                 }
             },
+            {
+                path: '/unread',
+                name: 'unread',
+                component: () => import('@/views/mailbox/index.vue'),
+                props: {mailbox: 'unread'},
+                meta: {title: 'unreadList', name: 'unread', menu: true, mailbox: 'unread'}
+            },
+            {
+                path: '/deleted',
+                name: 'deleted',
+                component: () => import('@/views/mailbox/index.vue'),
+                props: {mailbox: 'deleted'},
+                meta: {title: 'deletedList', name: 'deleted', menu: true, mailbox: 'deleted'}
+            },
+            {
+                path: '/spam',
+                name: 'spam',
+                component: () => import('@/views/mailbox/index.vue'),
+                props: {mailbox: 'spam'},
+                meta: {title: 'spamList', name: 'spam', menu: true, mailbox: 'spam'}
+            },
+            {
+                path: '/contacts',
+                name: 'contacts',
+                component: () => import('@/views/contacts/index.vue'),
+                meta: {title: 'contacts', name: 'contacts', menu: true}
+            },
         ]
 
     },
@@ -99,6 +126,11 @@ router.beforeEach((to, from, next) => {
         }, 100)
     }
 
+    // OAuth/OIDC 回调即使落到站点根，也必须回到登录页处理 code，否则绑定会被当成普通首页访问
+    if (to.name !== 'login' && to.query.code) {
+        return next({name: 'login', query: to.query})
+    }
+
     const token = getToken()
 
     if (!token && to.name !== 'login') {
@@ -131,21 +163,26 @@ function loadBackground(next) {
 
         const src = cvtR2Url(settingStore.settings.background);
 
+        let done = false;
+        const proceed = () => {
+            if (done) return;
+            done = true;
+            next();
+        };
+
         const img = new Image();
         img.src = src;
 
-        img.onload = () => {
-            next()
-        };
+        img.onload = proceed;
 
         img.onerror = () => {
             console.warn("背景图片加载失败:", img.src);
-            next()
+            proceed();
         };
 
         setTimeout(() => {
             console.warn("背景加载超时，已放行");
-            next()
+            proceed();
         }, 3000)
 
     } else {

@@ -2,14 +2,19 @@
   <div class="header" :class="!hasPerm('email:send') ? 'not-send' : ''">
     <div class="header-btn">
       <hanburger @click="changeAside"></hanburger>
-      <span class="breadcrumb-item">{{ $t(route.meta.title) }}</span>
-    </div>
-    <div v-perm="'email:send'" class="writer-box" @click="openSend">
-      <div class="writer">
-        <Icon icon="material-symbols:edit-outline-sharp" width="22" height="22"/>
-      </div>
+      <EmailSearch v-if="showMailSearch"
+                   class="header-mail-search"
+                   :store="emailStore"
+                   :search-options="searchOptions"
+                   @search="refreshMailList"
+                   @reset="refreshMailList"/>
+      <span v-else class="breadcrumb-item">{{ $t(route.meta.title) }}</span>
     </div>
     <div class="toolbar">
+      <button v-perm="'email:send'" type="button" class="writer-box" @click="openSend">
+        <Icon icon="material-symbols:edit-outline-sharp" width="18" height="18"/>
+        <span class="writer-text">{{ $t('compose') }}</span>
+      </button>
       <div v-if="uiStore.dark" class="sun-icon icon-item" @click="openDark($event)">
         <Icon icon="mingcute:sun-fill"/>
       </div>
@@ -19,17 +24,22 @@
       <div class="notice icon-item" @click="openNotice">
         <Icon icon="streamline-plump:announcement-megaphone"/>
       </div>
+      <div v-perm="'ai:use'" class="header-ai">
+        <aiAssistant ref="aiAssistantRef" inline/>
+      </div>
       <el-dropdown ref="userinfoRef" @visible-change="e => userInfoShow = e" :teleported="false" popper-class="detail-dropdown">
         <div class="avatar" @click="userInfoHide" >
           <div class="avatar-text">
-            <div>{{ formatName(userStore.user.email) }}</div>
+            <img v-if="userStore.user.avatar" :src="userStore.user.avatar" alt=""/>
+            <div v-else>{{ formatName(userStore.user.email) }}</div>
           </div>
           <Icon class="setting-icon" icon="mingcute:down-small-fill" width="24" height="24"/>
         </div>
         <template #dropdown>
           <div class="user-details">
             <div class="details-avatar">
-              {{ formatName(userStore.user.email) }}
+              <img v-if="userStore.user.avatar" :src="userStore.user.avatar" alt=""/>
+              <template v-else>{{ formatName(userStore.user.email) }}</template>
             </div>
             <div class="user-name">
               {{ userStore.user.name }}
@@ -39,23 +49,6 @@
             </div>
             <div class="detail-user-type">
               <el-tag>{{ userStore.user.role.name }}</el-tag>
-            </div>
-
-            <div class="account-switcher" v-if="switchAccounts.length > 1">
-              <div class="switcher-title">{{ $t('switchAccount') }}</div>
-              <el-scrollbar max-height="180px">
-                <div
-                    v-for="acc in switchAccounts"
-                    :key="acc.accountId"
-                    class="switcher-item"
-                    :class="{ 'switcher-current': acc.accountId === accountStore.currentAccountId }"
-                    @click="switchTo(acc)">
-                  <div class="switcher-avatar">{{ formatName(acc.email) }}</div>
-                  <div class="switcher-email">{{ acc.email }}</div>
-                  <Icon v-if="acc.accountId === accountStore.currentAccountId"
-                        class="switcher-check" icon="mingcute:check-fill" width="16" height="16"/>
-                </div>
-              </el-scrollbar>
             </div>
 
             <div class="action-info">
@@ -81,6 +74,9 @@
               </div>
             </div>
             <div class="logout">
+              <el-button v-if="hasPerm('ai:use')" class="ai-menu-entry" @click="openAiFromMenu">
+                {{ $t('aiAssistant') }}
+              </el-button>
               <el-button type="primary" :loading="logoutLoading" @click="clickLogout">{{ $t('logOut') }}</el-button>
             </div>
           </div>
@@ -93,14 +89,16 @@
 <script setup>
 import router from "@/router";
 import hanburger from '@/components/hamburger/index.vue'
+import EmailSearch from '@/components/email-search/index.vue'
+import aiAssistant from '@/components/ai-assistant/index.vue'
+import {useEmailStore} from '@/store/email.js';
 import {logout} from "@/request/login.js";
 import {Icon} from "@iconify/vue";
 import {useUiStore} from "@/store/ui.js";
 import {useUserStore} from "@/store/user.js";
-import {useAccountStore} from "@/store/account.js";
-import {accountList} from "@/request/account.js";
 import {useRoute} from "vue-router";
-import {computed, ref, onMounted, watch} from "vue";
+import {computed, ref} from "vue";
+import {clearToken} from "@/utils/token-store.js";
 import {useSettingStore} from "@/store/setting.js";
 import {hasPerm} from "@/perm/perm.js"
 import {useI18n} from "vue-i18n";
@@ -110,45 +108,42 @@ const {t} = useI18n();
 const route = useRoute();
 const settingStore = useSettingStore();
 const userStore = useUserStore();
-const accountStore = useAccountStore();
 const uiStore = useUiStore();
+const emailStore = useEmailStore();
 const logoutLoading = ref(false)
 const userInfoShow = ref(false)
 const userinfoRef = ref({})
-
-// ---- 顶部多账号快速切换 --------------------------------------------------
-// 拉当前用户名下的邮箱列表（含主邮箱），下拉里点一下即切换。
-// 切换只改 accountStore.currentAccountId，收件箱/发件箱等页面已 watch 该值自动刷新。
-const switchAccounts = ref([])
-
-async function loadSwitchAccounts() {
-  try {
-    // size 给大一点，一次性拉全（个人自建邮箱账号数通常个位到几十）
-    const list = await accountList(0, 100, null)
-    switchAccounts.value = Array.isArray(list) ? list : (list?.list || [])
-  } catch (e) {
-    switchAccounts.value = []
-  }
+const aiAssistantRef = ref(null)
+function openAiFromMenu() {
+  userInfoShow.value = false
+  aiAssistantRef.value?.openPanel()
 }
+const showMailSearch = computed(() => ['email', 'star', 'unread', 'deleted', 'spam', 'all-email', 'send', 'draft', 'contacts', 'user'].includes(route.name))
+const searchOptions = computed(() => {
+  if (['contacts', 'user'].includes(route.name)) {
+    return [
+      {type: 'all', label: t('searchSummaryAll')},
+      {type: 'name', label: t('contactName')},
+      {type: 'email', label: t('contactEmail')},
+    ]
+  }
+  return [
+    {type: 'all', label: t('searchSummaryAll')},
+    {type: 'subject', label: t('searchSummarySubject')},
+    {type: 'content', label: t('searchSummaryContent')},
+    {type: 'sender', label: t('searchSummarySender')},
+    {type: 'senderAddress', label: t('searchSummarySenderAddress')},
+    {type: 'recipientAddress', label: t('searchSummaryRecipientAddress')},
+  ]
+})
 
-function switchTo(acc) {
-  if (acc.accountId === accountStore.currentAccountId) {
-    userInfoHide()
+function refreshMailList() {
+  if (['contacts', 'user', 'all-email'].includes(route.name)) {
+    window.dispatchEvent(new CustomEvent('otsmail:search', {detail: {...emailStore.searchParams}}))
     return
   }
-  accountStore.currentAccountId = acc.accountId
-  accountStore.currentAccount = acc
-  userInfoHide()
+  emailStore.emailScroll?.refreshList()
 }
-
-onMounted(() => {
-  loadSwitchAccounts()
-})
-
-// 新增邮箱后刷新列表
-watch(() => userStore.refreshList, () => {
-  loadSwitchAccounts()
-})
 
 const accountCount = computed(() => {
   return userStore.user.role.accountCount
@@ -281,6 +276,7 @@ function openDark(e) {
 
 function switchDark(nextIsDark, root) {
   root.setAttribute('class', nextIsDark ? 'dark' : '')
+  root.setAttribute('data-theme', nextIsDark ? 'dark' : 'light')
   const metaTag = document.getElementById('theme-color-meta');
   const isMobile =  !window.matchMedia("(pointer: fine) and (hover: hover)").matches;
   metaTag.setAttribute('content', nextIsDark ? (isMobile ? '#141414' : '#000000') : (isMobile ? '#FFFFFF' : '#F1F1F1'));
@@ -292,15 +288,21 @@ function openSend() {
 }
 
 function changeAside() {
-  uiStore.asideShow = !uiStore.asideShow
+  if (window.innerWidth > 1024) {
+    uiStore.asideCollapsed = !uiStore.asideCollapsed
+  } else {
+    uiStore.asideShow = !uiStore.asideShow
+  }
 }
 
 function clickLogout() {
+  if (logoutLoading.value) return
   logoutLoading.value = true
-  logout().then(() => {
-    localStorage.removeItem("token")
-    router.replace('/login')
-  }).finally(() => {
+  // 清掉内存里的 token 再跳转：只删 localStorage.token 的话守卫仍认为已登录，
+  // 会把 /login 弹回来，表现就是要连点好几次才退得出去。
+  logout().catch(() => {})
+  clearToken()
+  router.replace('/login').finally(() => {
     logoutLoading.value = false
   })
 }
@@ -342,67 +344,6 @@ function formatName(email) {
 
   .detail-user-type {
     margin-top: 10px;
-  }
-
-  .account-switcher {
-    width: 100%;
-    margin-top: 14px;
-    padding: 10px 12px 4px;
-    border-top: 1px solid var(--dark-border);
-
-    .switcher-title {
-      font-size: 12px;
-      color: var(--regular-text-color);
-      margin-bottom: 6px;
-      text-align: left;
-    }
-
-    .switcher-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 8px;
-      border-radius: 6px;
-      cursor: pointer;
-
-      &:hover {
-        background: var(--base-fill);
-      }
-
-      &.switcher-current {
-        background: var(--base-fill);
-      }
-
-      .switcher-avatar {
-        flex: 0 0 auto;
-        width: 24px;
-        height: 24px;
-        border-radius: 6px;
-        background: var(--el-bg-color);
-        color: var(--el-text-color-primary);
-        border: 1px solid var(--dark-border);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-      }
-
-      .switcher-email {
-        flex: 1;
-        min-width: 0;
-        font-size: 13px;
-        text-align: left;
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-        color: var(--el-text-color-primary);
-      }
-
-      .switcher-check {
-        flex: 0 0 auto;
-        color: var(--login-switch-color, #1890ff);
-      }
-    }
   }
 
   .action-info {
@@ -461,6 +402,15 @@ function formatName(email) {
     width: 40px;
     background: var(--el-bg-color);
     color: var(--el-text-color-primary);
+    overflow: hidden;
+    border-radius: 50%;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
     border: 1px solid var(--dark-border);
     font-size: 18px;
     display: flex;
@@ -472,49 +422,65 @@ function formatName(email) {
 
 
 .header {
-  text-align: right;
+  text-align: left;
   font-size: 12px;
-  display: grid;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   height: 100%;
-  gap: 10px;
-  grid-template-columns: auto auto 1fr;
-}
-
-.header.not-send {
-  grid-template-columns: auto 1fr;
+  gap: 12px;
 }
 
 .writer-box {
-  cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  margin-left: 5px;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  color: #ffffff;
+  background: var(--blue, #007aff);
+  box-shadow: 0 2px 8px rgba(0, 122, 255, .2);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform .16s var(--ease-ios, ease), box-shadow .16s var(--ease-ios, ease), background .16s ease;
+}
 
-  .writer {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    color: #ffffff;
-    background: linear-gradient(135deg, #1890ff, #3a80dd);
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.writer-box:hover {
+  background: var(--blue, #007aff);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, .28);
+  transform: translateY(-1px);
+}
 
-    .writer-text {
-      margin-left: 15px;
-      font-size: 14px;
-      font-weight: bold;;
-    }
-  }
+.writer-box:active {
+  transform: scale(.96);
+  box-shadow: none;
+}
+
+.writer-text {
+  white-space: nowrap;
 }
 
 .header-btn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  gap: 8px;
   height: 100%;
   min-width: 0;
+  flex: 1;
+}
+
+.header-mail-search {
+  flex: 1;
+  max-width: 720px;
+}
+
+.header-ai {
+  display: inline-flex;
+  align-items: center;
 }
 
 .breadcrumb-item {
@@ -528,38 +494,58 @@ function formatName(email) {
 
 .toolbar {
   display: flex;
-  justify-content: end;
-  gap: 15px;
-  @media (max-width: 767px) {
-    gap: 10px;
-  }
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
 
   .icon-item {
     align-self: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 4px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    color: var(--label-2);
+    transition: background .16s ease, color .16s ease;
   }
 
   .icon-item:hover {
-    background: var(--base-fill);
+    background: var(--fill-quaternary);
+    color: var(--label);
   }
 
   .notice {
-    font-size: 22px;
-    margin-right: 4px;
+    font-size: 21px;
+    margin-right: 2px;
   }
 
   .dark-icon {
-    font-size: 20px;
+    font-size: 19px;
   }
 
   .sun-icon {
-    font-size: 24px;
+    font-size: 22px;
+  }
+
+  @media (max-width: 767px) {
+    gap: 2px;
+
+    .writer-text {
+      display: none;
+    }
+
+    .writer-box {
+      width: 34px;
+      padding: 0;
+      justify-content: center;
+    }
+
+    .notice, .dark-icon, .sun-icon {
+      display: none;
+    }
   }
 
   .avatar {
@@ -572,6 +558,15 @@ function formatName(email) {
       color: var(--el-text-color-primary);
       height: 30px;
       width: 30px;
+      overflow: hidden;
+      border-radius: 50%;
+
+      img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
       display: flex;
       justify-content: center;
       align-items: center;

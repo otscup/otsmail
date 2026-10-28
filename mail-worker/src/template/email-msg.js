@@ -74,6 +74,11 @@ To：${escapeHtml(email.toEmail || '')}`
 ${buildSummary(emailUtils.formatText(email.text) || emailUtils.htmlToText(email.content))}`
 	}
 
+	// 引用回复时据此识别原邮件，用户不需要手动提供 ID
+	if (email.emailId) {
+		template += `\n\n#${email.emailId}`
+	}
+
 	return template;
 
 }

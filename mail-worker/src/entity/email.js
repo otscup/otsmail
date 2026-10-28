@@ -24,6 +24,10 @@ export const email = sqliteTable('email', {
 	message: text('message'),
 	unread: integer('unread').default(0).notNull(),
 	createTime: text('create_time').default(sql`CURRENT_TIMESTAMP`).notNull(),
-	isDel: integer('is_del').default(0).notNull()
+	isDel: integer('is_del').default(0).notNull(),
+	// 垃圾邮件：黑名单命中自动置 1，也可手动标记；与 isDel 互相独立
+	spam: integer('spam').default(0).notNull(),
+	// Gmail 式收件分类：primary/social/promotion/updates/ads/spam
+	category: text('category').default('primary').notNull()
 });
 export default email
