@@ -36,6 +36,7 @@ mail-worker/tmp
 .env
 .env.local
 .otsmail-deploy.env
+mail-worker/wrangler.oneclick.toml
 
 # 临时验证脚本 / 数据导出（迁移时产生的 D1 dump 可能含用户邮件内容）
 _*.mjs

@@ -48,6 +48,21 @@ otsmail 是一个运行在 Cloudflare 上的自建邮箱系统：收件走 Email
 
 需要 Node.js、pnpm 和 Cloudflare 账号。
 
+### 一键部署（Windows PowerShell，实验性）
+
+先在 `mail-worker` 下安装依赖，然后在仓库根目录执行：
+
+```powershell
+cd mail-worker; pnpm install; cd ..
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1
+```
+
+脚本会提示邮箱域名和管理员邮箱，自动创建独立的 D1 / KV / R2、构建前端、部署 Worker、上传静态资源并初始化数据库。它不会修改现有的 `mail-worker/wrangler.toml`，生成的 `mail-worker/wrangler.oneclick.toml` 已被 gitignore；如果同名资源已存在会直接停止，避免误绑到现有邮箱。
+
+> 运行 otsmail 必须有 D1。目标 Cloudflare 账号无法创建 D1 时，脚本会停在创建数据库这一步；这不会影响已经在运行的其他实例。当前脚本未在无 D1 环境做端到端验证。
+
+### 手动部署
+
 ```bash
 git clone https://github.com/otscup/otsmail.git
 cd otsmail/mail-worker
