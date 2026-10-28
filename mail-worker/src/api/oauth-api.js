@@ -37,3 +37,15 @@ app.put('/oauth/bindUser', async (c) => {
 	const loginInfo = await oauthService.bindUser(c, await c.req.json());
 	return c.json(result.ok(loginInfo))
 })
+
+app.get('/oauth/bindings', async (c) => {
+	return c.json(result.ok(await oauthService.listBindings(c)))
+})
+
+app.put('/oauth/bindings/active', async (c) => {
+	return c.json(result.ok(await oauthService.setBindingActive(c, await c.req.json())))
+})
+
+app.post('/oauth/unbind', async (c) => {
+	return c.json(result.ok(await oauthService.unbind(c, await c.req.json())))
+})

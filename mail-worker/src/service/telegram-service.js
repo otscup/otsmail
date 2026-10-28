@@ -57,6 +57,18 @@ const telegramService = {
 
 	},
 
+	async sendAlert(c, text) {
+		const { tgBotToken, tgChatId } = await settingService.query(c)
+		if (!tgBotToken || !tgChatId) return
+		for (const chatId of String(tgChatId).split(',').map(id => id.trim()).filter(Boolean)) {
+			await fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ chat_id: chatId, text })
+			}).catch(() => {})
+		}
+	},
+
 	// 通知和 AI 指令共用同一个 Bot：这里只把 webhook 指到本 Worker
 	async setWebhook(c, url) {
 		const { tgBotToken } = await settingService.query(c);
@@ -235,6 +247,20 @@ const telegramService = {
 			return;
 		}
 
+		// /bind <code>：网页授权页生成一次性 code，这里把当前 chat 写回设置
+		const bind = text.match(/^\/bind\s+([a-f0-9]{16,})$/i);
+		if (bind) {
+			const key = 'tg_bind_' + bind[1];
+			if (await c.env.kv.get(key)) {
+				await settingService.set(c, { tgChatId: chatId });
+				await c.env.kv.delete(key);
+				await this.sendBotText(tgBotToken, chatId, '绑定成功');
+			} else {
+				await this.sendBotText(tgBotToken, chatId, '绑定码无效或已过期');
+			}
+			return;
+		}
+
 		const tgChatIds = String(tgChatId || '').split(',').map(item => item.trim()).filter(Boolean);
 
 		if (!tgChatIds.includes(chatId)) {
@@ -255,6 +281,17 @@ const telegramService = {
 		const { default: aiService } = await import('./ai-service');
 
 		const input = text.replace(/^\/ai\s*/i, '').trim();
+		const historyKey = 'tg_ai_history:' + chatId;
+		const history = (await c.env.kv.get(historyKey, {type: 'json'})) || [];
+
+		// Telegram 没有网页的 busy 气泡；typing 5 秒过期，AI 慢时每 4 秒续一次
+		let typing = true;
+		const keepTyping = async () => {
+			if (!typing) return;
+			await this.sendChatAction(tgBotToken, chatId);
+			if (typing) setTimeout(keepTyping, 4000);
+		};
+		void keepTyping();
 
 		let answer;
 		try {
@@ -262,14 +299,22 @@ const telegramService = {
 				text: input || text,
 				userId: admin.userId,
 				replyEmailId: quotedEmailId,
-				quotedText
+				quotedText,
+				history
 			});
 		} catch (e) {
 			await this.sendBotText(tgBotToken, chatId, `AI error: ${e.message || e}`);
 			return;
+		} finally {
+			typing = false;
 		}
 
-		await this.sendBotText(tgBotToken, chatId, this.commandReplyText(answer));
+		const reply = this.commandReplyText(answer);
+		await this.sendBotText(tgBotToken, chatId, reply);
+
+		// 每个聊天保留最近 20 条，支持“转发刚才那封”这类追问
+		const nextHistory = [...history, {role: 'user', text: input || text}, {role: 'assistant', text: reply}].slice(-20);
+		await c.env.kv.put(historyKey, JSON.stringify(nextHistory), {expirationTtl: 7 * 24 * 60 * 60});
 	},
 
 	// 动作结果拼成可读文本：回复 + 成功数 + 失败原因
@@ -287,6 +332,18 @@ const telegramService = {
 		});
 
 		return lines.filter(Boolean).join('\n') || '-';
+	},
+
+	async sendChatAction(tgBotToken, chatId) {
+		try {
+			await fetch(`https://api.telegram.org/bot${tgBotToken}/sendChatAction`, {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({chat_id: chatId, action: 'typing'})
+			});
+		} catch (e) {
+			console.error('Telegram typing 状态失败:', e.message);
+		}
 	},
 
 	async sendBotText(tgBotToken, chatId, text) {

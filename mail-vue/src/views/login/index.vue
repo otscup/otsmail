@@ -58,7 +58,8 @@
           </el-button>
           <el-button class="btn" v-for="provider in oidcProviders" :key="provider.id" style="margin-top: 10px"
                      @click="oidcLogin(provider.id)">
-            <Icon icon="mingcute:shield-check-line" width="18" height="18" style="margin-right: 10px; color: var(--label)" />{{ provider.name || 'SSO' }}
+            <img v-if="isImageIcon(provider.icon)" :src="provider.icon" class="oidc-provider-icon" alt=""/>
+            <Icon v-else :icon="provider.icon || 'mingcute:shield-check-line'" width="18" height="18" style="margin-right: 10px; color: var(--label)" />{{ provider.name || 'SSO' }}
           </el-button>
         </div>
         <div v-show="show !== 'login'">
@@ -183,6 +184,7 @@ import {
   oidcConfig
 } from "@/request/ouath.js";
 import {setToken} from "@/utils/token-store.js";
+import {createPkce, takePkce} from "@/utils/pkce.js";
 
 const {t} = useI18n();
 const accountStore = useAccountStore();
@@ -202,6 +204,9 @@ const oidcProviders = computed(() => {
       ? [{id: '', name: settingStore.settings.oidcName || 'SSO'}]
       : []
 })
+function isImageIcon(icon) {
+  return /^(https?:\/\/|data:image\/)/i.test(icon || '')
+}
 const showBindForm = ref(false);
 const show = ref('login')
 
@@ -325,18 +330,25 @@ function googleLogin() {
       `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid%20email%20profile&state=google`
 }
 
-function oidcLogin(providerId) {
+async function oidcLogin(providerId) {
   // 授权端点由后端 discovery 取，后台改配置不用动前端
-  oidcConfig(providerId).then(config => {
+  try {
+    const config = await oidcConfig(providerId)
+    const state = providerId ? 'oidc:' + providerId : 'oidc'
+    const {challenge} = await createPkce(state)
     const params = new URLSearchParams({
       client_id: config.clientId,
       redirect_uri: config.callbackUrl,
       response_type: 'code',
       scope: config.scope || 'openid profile email',
-      state: providerId ? 'oidc:' + providerId : 'oidc'
+      state,
+      code_challenge: challenge,
+      code_challenge_method: 'S256'
     })
     window.location.href = config.authorizationEndpoint + '?' + params.toString()
-  }).catch(() => {})
+  } catch (e) {
+    ElMessage({message: e?.message || 'OIDC 配置读取失败', type: 'error', plain: true})
+  }
 }
 
 oauthGetUser();
@@ -346,8 +358,14 @@ async function oauthGetUser() {
   const params = new URLSearchParams(window.location.search)
   const code = params.get('code')
   const state = params.get('state')
+  const oauthError = params.get('error_description') || params.get('error')
+
+  if (!code && oauthError) {
+    ElMessage({message: oauthError, type: 'error', plain: true, duration: 6000})
+  }
 
   if (code) {
+    const codeVerifier = takePkce(state || '')
 
     const providerMap = { github: oauthGithubLogin, google: oauthGoogleLogin, linuxdo: oauthLinuxDoLogin, oidc: oauthOidcLogin }
     // state 形如 github / oidc:<id>（登录）或 bind-github / bind-oidc:<id>（个人设置里绑定）
@@ -361,7 +379,7 @@ async function oauthGetUser() {
 
     // v1.3 登录态绑定（大网站模式）：state=bind 时已登录用户把 OAuth 授权绑到当前账号
     if (isBindState) {
-      loginFn(code, state, providerId).then(data => {
+      loginFn(code, state, providerId, codeVerifier).then(data => {
         // 授权落库但未绑定 → 绑到当前登录账号；这里绝不能用返回的 token 换会话（那是别人的账号）
         oauthBind({ oauthUserId: data.userInfo.oauthUserId, provider: data.userInfo.provider }).then(() => {
           ElMessage({ message: '绑定成功', type: 'success', plain: true })
@@ -378,7 +396,7 @@ async function oauthGetUser() {
       return
     }
 
-    loginFn(code, state, providerId).then(data => {
+    loginFn(code, state, providerId, codeVerifier).then(data => {
 
       bindForm.oauthUserId = data.userInfo.oauthUserId;
       bindForm.provider = data.userInfo.provider;
@@ -752,6 +770,15 @@ function submitRegister() {
     height: 36px;
     width: 100%;
     border-radius: 6px;
+  }
+
+  .oidc-provider-icon {
+    width: 18px;
+    height: 18px;
+    margin-right: 10px;
+    object-fit: contain;
+    border-radius: 4px;
+    vertical-align: middle;
   }
 
   .form-desc {

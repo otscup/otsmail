@@ -808,6 +808,12 @@
               </div>
 
               <div class="oidc-field">
+                <span>图标</span>
+                <el-input v-model="provider.icon" placeholder="mdi:shield-key-outline 或 https://.../logo.png"/>
+                <div class="oidc-hint">可填 Iconify 图标名或图片 URL；留空使用默认盾牌图标</div>
+              </div>
+
+              <div class="oidc-field">
                 <span>Issuer 地址</span>
                 <el-input v-model="provider.issuer" placeholder="https://idp.example.com/realms/company"/>
                 <div class="oidc-hint">
@@ -1355,6 +1361,7 @@ function openOidc() {
   oidcProviders.value = list.map(item => ({
     id: item.id,
     name: item.name || 'SSO',
+    icon: item.icon || '',
     issuer: item.issuer || '',
     clientId: item.clientId || '',
     clientSecret: '',
@@ -1387,6 +1394,7 @@ function addOidc() {
   oidcProviders.value.push({
     id,
     name: 'SSO',
+    icon: '',
     issuer: '',
     clientId: '',
     clientSecret: '',
@@ -1413,6 +1421,7 @@ function saveOidc() {
     oidcProviders: list.map(item => ({
       id: item.id,
       name: item.name || 'SSO',
+      icon: (item.icon || '').trim(),
       issuer: item.issuer.trim().replace(/\/+$/, ''),
       clientId: item.clientId.trim(),
       clientSecret: item.clientSecret || '',
@@ -1654,9 +1663,12 @@ async function tgBotSave() {
 async function bindTelegram() {
   if (tgBindLoading.value) return
   tgBindLoading.value = true
+  const bindWindow = window.open('', '_blank')
   try {
     await tgBotSave()
+    if (bindWindow) bindWindow.location.href = '/telegram/bind'
   } catch (e) {
+    bindWindow?.close()
     ElMessage({message: e?.response?.data?.msg || e.message || 'Telegram 绑定失败', type: 'error', plain: true})
   } finally {
     tgBindLoading.value = false

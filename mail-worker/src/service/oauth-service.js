@@ -375,7 +375,7 @@ const oauthService = {
 	 */
 	async oidcLogin(c, params) {
 
-		const { code } = params;
+		const { code, codeVerifier } = params;
 		const state = String(params.state || '');
 		const setting = await settingService.query(c);
 		// 多服务商：state 形如 oidc:<id> / bind-oidc:<id>，显式 provider 参数优先
@@ -390,6 +390,7 @@ const oauthService = {
 		reqParams.append('redirect_uri', this.normalizeCallback(provider.callbackUrl || setting.oidcCallbackUrl))
 		reqParams.append('client_id', provider.clientId)
 		reqParams.append('client_secret', provider.clientSecret)
+		if (codeVerifier) reqParams.append('code_verifier', codeVerifier)
 
 		const tokenRes = await fetch(doc.token_endpoint, {
 			method: "POST",
@@ -435,6 +436,11 @@ const oauthService = {
 
 		if (sessionUserId) {
 			return { userInfo: oauthRow, token: null }
+		}
+
+		// 用户在个人设置里关闭了这种 OIDC 登录方式：仍允许手动重新绑定，但不允许直接登录
+		if (oauthRow.userId && oauthRow.active === 0) {
+			throw new BizError('该 OIDC 登录方式已在此账号关闭');
 		}
 
 		// 纯登录：仅 IdP 明确验证过的邮箱才自动关联已有账号
@@ -517,6 +523,45 @@ const oauthService = {
 		} else {
 			return await orm(c).update(oauth).set(userInfo).where(and(eq(oauth.oauthUserId, userInfo.oauthUserId), eq(oauth.provider, userInfo.provider))).returning().get();
 		}
+	},
+
+	async requireUserId(c) {
+		const userId = await this.getLoggedInUserId(c);
+		if (!userId) throw new BizError(t('authExpired'), 401);
+		return userId;
+	},
+
+	async listBindings(c) {
+		const userId = await this.requireUserId(c);
+		const rows = await orm(c).select().from(oauth).where(eq(oauth.userId, userId)).all();
+		return rows.map(row => ({
+			provider: row.provider,
+			username: row.username || '',
+			name: row.name || '',
+			avatar: row.avatar || '',
+			active: row.active === 0 ? 0 : 1
+		}));
+	},
+
+	async setBindingActive(c, params) {
+		const userId = await this.requireUserId(c);
+		const provider = String(params?.provider || '');
+		if (!provider) throw new BizError('provider required');
+		const row = await orm(c).select().from(oauth)
+			.where(and(eq(oauth.userId, userId), eq(oauth.provider, provider))).get();
+		if (!row) throw new BizError('未绑定该登录方式');
+		await orm(c).update(oauth).set({ active: params.active ? 1 : 0 })
+			.where(and(eq(oauth.userId, userId), eq(oauth.provider, provider))).run();
+		return { provider, active: params.active ? 1 : 0 };
+	},
+
+	async unbind(c, params) {
+		const userId = await this.requireUserId(c);
+		const provider = String(params?.provider || '');
+		if (!provider) throw new BizError('provider required');
+		await orm(c).delete(oauth)
+			.where(and(eq(oauth.userId, userId), eq(oauth.provider, provider))).run();
+		return true;
 	},
 
 	async getById(c, oauthUserId, provider) {

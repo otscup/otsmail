@@ -163,13 +163,14 @@ async function send() {
   const text = input.value.trim()
   if (!text || busy.value) return
 
-  const history = messages.value.slice(-8).map(m => ({role: m.role === 'ai' ? 'assistant' : 'user', text: m.text}))
+  const history = messages.value.slice(-20).map(m => ({role: m.role === 'ai' ? 'assistant' : 'user', text: m.text}))
   messages.value.push({role: 'user', text})
   input.value = ''
   busy.value = true
+  scrollToBottom()
 
   try {
-    const res = await aiCommand(text, useAccountStore().currentAccountId, history)
+    const res = await aiCommand(text, useAccountStore().currentAccountId, history, props.emailId)
     messages.value.push({role: 'ai', text: res?.reply || '', actions: res?.actions || []})
     // 删除/已读等动作已落库，刷新背后的邮件列表，避免界面和数据不一致
     if (res?.actions?.some(action => action.ok)) {

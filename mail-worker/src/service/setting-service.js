@@ -53,6 +53,7 @@ const settingService = {
 		return this.parseOidcProviders(row).map(item => ({
 			id: item.id,
 			name: item.name || 'SSO',
+			icon: item.icon || '',
 			issuer: item.issuer || '',
 			clientId: item.clientId || '',
 			scope: item.scope || 'openid profile email',
@@ -279,6 +280,7 @@ const settingService = {
 					return {
 						id,
 						name: String(item.name || 'SSO').slice(0, 60),
+						icon: String(item.icon || '').trim().slice(0, 300),
 						issuer: String(item.issuer || '').trim().replace(/\/+$/, ''),
 						clientId: String(item.clientId || '').trim(),
 						clientSecret: secret,
@@ -398,7 +400,7 @@ const settingService = {
 			oidcClientId: settingRow.oidcClientId,
 			oidcCallbackUrl: settingRow.oidcCallbackUrl,
 			oidcScope: settingRow.oidcScope,
-			oidcProviders: this.enabledOidcProviders(settingRow).map(item => ({ id: item.id, name: item.name })),
+			oidcProviders: this.enabledOidcProviders(settingRow).map(item => ({ id: item.id, name: item.name, icon: item.icon || '' })),
 			minEmailPrefix: settingRow.minEmailPrefix,
 			projectLink: settingRow.projectLink
 		};

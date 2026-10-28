@@ -94,7 +94,7 @@ export function playNotifySound() {
 }
 
 // 同一封邮件只提醒一次；localStorage 记最近一封，刷新页面不会重复弹
-export function notifyNewEmail(email) {
+export async function notifyNewEmail(email) {
 	if (!email || !email.emailId || !notifyEnabled() || !('Notification' in window)) {
 		return
 	}
@@ -104,17 +104,34 @@ export function notifyNewEmail(email) {
 	localStorage.setItem(LAST_KEY, String(email.emailId))
 	playNotifySound()
 	const body = [email.name, email.text].filter(Boolean).join(' · ')
-	const notification = new Notification(email.subject || body || 'otsmail', {
-		body: body.slice(0, 120),
-		tag: 'otsmail-' + email.emailId,
-		icon: '/mail-pwa.png'
-	})
-	notification.onclick = () => {
-		window.focus()
-		notification.close()
-		// 点通知即视为读过：先落库再刷新，侧栏未读数跟着重算
-		import('@/request/email.js').then(({emailRead}) => {
-			emailRead([email.emailId]).finally(() => window.location.assign('/'))
-		}).catch(() => window.location.assign('/'))
+	const title = email.subject || body || 'otsmail'
+	const icon = new URL('/mail-pwa.png', location.origin).href
+
+	try {
+		// 优先走 Service Worker：移动端 Chrome 不允许直接 new Notification，且图标/点击更稳定
+		const registration = await navigator.serviceWorker?.getRegistration()
+		if (registration?.showNotification) {
+			await registration.showNotification(title, {
+				body: body.slice(0, 120),
+				tag: 'otsmail-' + email.emailId,
+				icon,
+				badge: icon,
+				data: {url: '/?emailId=' + email.emailId}
+			})
+			return
+		}
+		const notification = new Notification(title, {
+			body: body.slice(0, 120),
+			tag: 'otsmail-' + email.emailId,
+			icon
+		})
+		notification.onclick = () => {
+			window.focus()
+			notification.close()
+			window.location.assign('/?emailId=' + email.emailId)
+		}
+	} catch (e) {
+		// 浏览器禁止通知/无 SW 时不要抛到页面变成红色错误提示
+		console.warn('系统通知失败:', e)
 	}
 }

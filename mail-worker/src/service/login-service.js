@@ -20,6 +20,7 @@ import { toUtc } from '../utils/date-uitil';
 import { t } from '../i18n/i18n.js';
 import verifyRecordService from './verify-record-service';
 import totpUtils from '../utils/totp-utils';
+import loginGuard from './login-guard';
 
 const loginService = {
 
@@ -208,6 +209,10 @@ const loginService = {
 			throw new BizError(t('emailAndPwdEmpty'));
 		}
 
+		if (!noVerifyPwd && await loginGuard.lockRemaining(c, email)) {
+			throw new BizError(t('loginLocked'), 429);
+		}
+
 		const userRow = await userService.selectByEmailIncludeDel(c, email);
 
 		if (!userRow) {
@@ -223,6 +228,9 @@ const loginService = {
 		}
 
 		if (!await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password) && !noVerifyPwd) {
+			if (await loginGuard.recordFailure(c, email)) {
+				throw new BizError(t('loginLocked'), 429);
+			}
 			throw new BizError(t('IncorrectPwd'));
 		}
 
@@ -247,6 +255,8 @@ const loginService = {
 				throw new BizError(t('twoFactorCodeInvalid'), 428);
 			}
 		}
+
+		if (!noVerifyPwd) await loginGuard.clear(c, email);
 
 		const uuid = uuidv4();
 		const jwt = await JwtUtils.generateToken(c,{ userId: userRow.userId, token: uuid });
