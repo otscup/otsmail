@@ -28,6 +28,16 @@ app.post('/my/uploadAvatar', async (c) => {
 	return c.json(result.ok(data));
 });
 
+app.post('/my/uploadImage', async (c) => {
+	const data = await userService.uploadImage(c, await c.req.json());
+	return c.json(result.ok(data));
+});
+
+app.put('/my/setting', async (c) => {
+	const data = await userService.updateMySetting(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok(data));
+});
+
 app.get('/my/2fa/status', async (c) => {
 	return c.json(result.ok(await userService.twoFactorStatus(c, userContext.getUserId(c))));
 });

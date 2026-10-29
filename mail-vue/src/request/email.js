@@ -23,12 +23,27 @@ export function emailUnread(emailIds) {
     return http.put('/email/unread', {emailIds})
 }
 
+export function emailMoveCategory(emailIds, category) {
+    return http.put('/email/category', {emailIds, category})
+}
+
 export function emailCategoryCounts() {
     return http.get('/email/category-counts')
 }
 
 export function emailMenuCounts() {
     return http.get('/email/menu-counts')
+}
+
+// 菜单 + 分类一次请求，短缓存合并侧边栏和列表的同时刷新
+let countsCache = null, countsAt = 0, countsTask = null;
+export function emailCounts(force = false) {
+    if (countsTask) return countsTask;
+    if (!force && countsCache && Date.now() - countsAt < 5000) return Promise.resolve(countsCache);
+    countsTask = http.get('/email/counts')
+        .then(data => { countsCache = data; countsAt = Date.now(); return data; })
+        .finally(() => { countsTask = null; });
+    return countsTask;
 }
 
 // v1.0: GET /email/detail?emailId= —— 单封详情（含 attList），T-02 刷新兜底重取

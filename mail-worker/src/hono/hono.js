@@ -23,10 +23,13 @@ app.use('*', (c, next) => {
 		.filter(Boolean);
 
 	const selfOrigin = new URL(c.req.url).origin;
-	const allowList = [selfOrigin, ...configured];
+	// 手机壳 WebView 的标准来源；原生 HTTP 请求没有 Origin，不受 CORS 影响
+	const mobileOrigins = ['capacitor://localhost', 'ionic://localhost', 'http://localhost', 'https://localhost'];
+	const allowAll = configured.includes('*');
+	const allowList = [selfOrigin, ...configured.filter(item => item !== '*'), ...mobileOrigins];
 
 	return cors({
-		origin: (origin) => (allowList.includes(origin) ? origin : null),
+		origin: (origin) => (allowAll || allowList.includes(origin) ? (origin || '*') : null),
 		allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 		allowHeaders: ['Content-Type', 'Authorization', 'accept-language'],
 		credentials: false,
@@ -34,7 +37,7 @@ app.use('*', (c, next) => {
 	})(c, next);
 });
 
-app.onError((err, c) => {
+app.onError(async (err, c) => {
 	if (err.name === 'BizError') {
 		console.log(err.message);
 	} else {
@@ -55,6 +58,19 @@ app.onError((err, c) => {
 
 	// 非业务异常不要把内部错误原文回给客户端（可能带表名 / 堆栈信息）。
 	if (err.name !== 'BizError') {
+		try {
+			const path = new URL(c.req.url).pathname;
+			// 动态导入，避免 hono → telegram-service → setting-service → i18n → hono 的循环初始化
+			const { default: telegramService } = await import('../service/telegram-service');
+			c.executionCtx.waitUntil(
+				telegramService.sendAlert(
+					{ env: c.env },
+					`⚠️ otsmail API 异常\n${c.req.method} ${path}\n${String(err.message || err).slice(0, 300)}`
+				).catch(() => {})
+			);
+		} catch (e) {
+			console.error('send alert failed', e);
+		}
 		return c.json(result.fail('Internal error', 500));
 	}
 

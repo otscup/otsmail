@@ -1,4 +1,5 @@
 <template>
+  <div class="mail-split" :class="{ 'split-open': selectedEmailId }">
   <emailScroll ref="scroll"
                :cancel-success="cancelStar"
                :star-success="addStar"
@@ -13,6 +14,7 @@
                :show-categories="true"
                actionLeft="4px"
                @jump="jumpContent"
+               @category-change="closeContent"
   >
     <template #first>
       <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-down-outline"
@@ -22,6 +24,15 @@
     </template>
 
   </emailScroll>
+  <MailContent v-if="selectedEmailId" :key="selectedEmailId" embedded class="split-content" @close="closeContent"/>
+  <div v-else class="split-empty">
+    <div class="empty-logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="4" stroke="currentColor" stroke-width="1.6"/><path d="M4.5 8l7.5 5.4L19.5 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <b>Select a message</b>
+    <span>选择一封邮件开始阅读</span>
+  </div>
+  </div>
 </template>
 
 <script setup>
@@ -36,6 +47,7 @@ import {sleep} from "@/utils/time-utils.js";
 import {notifyNewEmail} from "@/utils/notify.js";
 import router from "@/router/index.js";
 import {Icon} from "@iconify/vue";
+import MailContent from "@/views/content/index.vue";
 import { useRoute } from 'vue-router'
 
 defineOptions({
@@ -47,6 +59,7 @@ const emailStore = useEmailStore();
 const accountStore = useAccountStore();
 const settingStore = useSettingStore();
 const scroll = ref({})
+const selectedEmailId = ref(null)
 const params = reactive({
   timeSort: 0,
 })
@@ -58,6 +71,7 @@ onMounted(() => {
 
 
 watch(() => accountStore.currentAccountId, () => {
+  selectedEmailId.value = null
   scroll.value.refreshList();
 })
 
@@ -72,7 +86,15 @@ function jumpContent(email) {
   emailStore.contentData.showUnread = true
   emailStore.contentData.showStar = true
   emailStore.contentData.showReply = true
+  if (window.innerWidth > 1024) {
+    selectedEmailId.value = email.emailId
+    return
+  }
   router.push('/mail')
+}
+
+function closeContent() {
+  selectedEmailId.value = null
 }
 
 const existIds = new Set();
@@ -158,4 +180,10 @@ function getEmailList(emailId, size, category, page) {
 .icon {
   cursor: pointer;
 }
+.split-empty { flex:1 1 0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:var(--rd-muted,var(--label-3)); background:var(--rd-bg); }
+.split-empty .empty-logo { width:58px; height:58px; display:grid; place-items:center; border-radius:18px; color:#63e6ff; background:linear-gradient(145deg,rgba(99,230,255,.16),rgba(109,92,231,.16)); box-shadow:0 0 28px rgba(99,230,255,.14); margin-bottom:6px; }
+.split-empty .empty-logo svg { width:30px; height:30px; }
+.split-empty b { font-size:14px; color:var(--rd-text,var(--label)); font-weight:650; }
+.split-empty span { font-size:12px; }
+@media (max-width:1024px){ .split-empty{display:none} }
 </style>

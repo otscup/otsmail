@@ -43,6 +43,12 @@ const routes = [
                 }
             },
             {
+                path: '/sys-setting',
+                name: 'sysSetting',
+                component: () => import('@/views/sys-setting/index.vue'),
+                meta: {title: 'SystemSettings', name: 'sysSetting', menu: false}
+            },
+            {
                 path: '/starred',
                 name: 'star',
                 component: () => import('@/views/star/index.vue'),

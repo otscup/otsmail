@@ -45,6 +45,8 @@ const dbInit = {
 		await this.otsmail_14DB(c);
 		await this.otsmail_15DB(c);
 		await this.otsmail_16DB(c);
+		await this.otsmail_17DB(c);
+		await this.otsmail_18DB(c);
 		await this.otsmail_9DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
@@ -147,6 +149,30 @@ const dbInit = {
 		}
 		try {
 			await c.env.db.prepare(`ALTER TABLE user ADD COLUMN two_factor_required INTEGER NOT NULL DEFAULT 0;`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+	// otsmail 迁移：邮件过滤规则（发件人/主题/收件人 → 分类）
+	async otsmail_17DB(c) {
+		try {
+			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN email_filters TEXT NOT NULL DEFAULT '[]';`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+		try {
+			// 计数一次扫描该索引；否则每次 COUNT 都扫用户全部邮件
+			await c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_counts ON email(user_id, is_del, type, spam, unread, category);`).run();
+		} catch (e) {
+			console.warn(`跳过索引：${e.message}`);
+		}
+	},
+
+	// otsmail 迁移：写信/地址簿头像总开关（0 关闭，1 显示）
+	async otsmail_18DB(c) {
+		try {
+			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN show_avatar INTEGER NOT NULL DEFAULT 1;`).run();
 		} catch (e) {
 			console.warn(`跳过字段：${e.message}`);
 		}

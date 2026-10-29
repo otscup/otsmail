@@ -323,36 +323,38 @@ const emailService = {
 		let sendResult = {};
 
 		//存在站外邮箱时，如果配置了 Cloudflare Email Service 就优先使用，否则使用 Resend
+		const sendParams = {
+			name,
+			accountEmail: accountRow.email,
+			receiveEmail,
+			cc,
+			bcc,
+			subject,
+			text,
+			html,
+			attachments: [...imageDataList, ...attachments],
+			sendType,
+			messageId: emailRow.messageId
+		};
+
 		if (!allInternal) {
 
 			if (useCloudflareEmail) {
-				sendResult = await this.sendByCloudflareEmail(c, {
-					name,
-					accountEmail: accountRow.email,
-					receiveEmail,
-					cc,
-					bcc,
-					subject,
-					text,
-					html,
-					attachments: [...imageDataList, ...attachments],
-					sendType,
-					messageId: emailRow.messageId
-				});
+				try {
+					sendResult = await this.sendByCloudflareEmail(c, sendParams);
+					if (sendResult?.error) {
+						throw new Error(sendResult.error.message || 'Cloudflare Email failed');
+					}
+				} catch (e) {
+					// 站外邮件不能因为单一通道故障丢失，Cloudflare 失败时回退 Resend
+					if (!resendToken) {
+						throw e;
+					}
+					console.error('Cloudflare Email failed, falling back to Resend:', e);
+					sendResult = await this.sendByResend(resendToken, sendParams);
+				}
 			} else {
-				sendResult = await this.sendByResend(resendToken, {
-					name,
-					accountEmail: accountRow.email,
-					receiveEmail,
-					cc,
-					bcc,
-					subject,
-					text,
-					html,
-					attachments: [...imageDataList, ...attachments],
-					sendType,
-					messageId: emailRow.messageId
-				});
+				sendResult = await this.sendByResend(resendToken, sendParams);
 			}
 
 		}
@@ -377,7 +379,8 @@ const emailService = {
 		emailData.content = html;
 		emailData.text = text;
 		emailData.accountId = accountId;
-		emailData.status = useCloudflareEmail ? emailConst.status.DELIVERED : emailConst.status.SENT;
+		// shortcut: Cloudflare 只返回 queued 的 messageId，真实投递结果要靠事件订阅，先记 SENT
+		emailData.status = emailConst.status.SENT;
 		emailData.type = emailConst.type.SEND;
 		emailData.userId = userId;
 		emailData.resendEmailId = data?.id;
@@ -1139,46 +1142,56 @@ const emailService = {
 
 	async read(c, params, userId) {
 			const { emailIds } = params;
+			// 入参不是数组时 inArray 会拿到 undefined，D1 直接 500；空列表本来也没什么可标的
+			if (!Array.isArray(emailIds) || emailIds.length === 0) return;
 			await orm(c).update(email).set({ unread: emailConst.unread.READ }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds))).run();
 		},
 
 	async unread(c, params, userId) {
 			const { emailIds } = params;
+			if (!Array.isArray(emailIds) || emailIds.length === 0) return;
 			await orm(c).update(email).set({ unread: emailConst.unread.UNREAD }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds))).run();
 		},
 
+	async moveCategory(c, params, userId) {
+			const { emailIds, category } = params;
+			const allowed = ['primary', 'social', 'promotion', 'updates', 'ads', 'spam'];
+			if (!allowed.includes(category)) throw new BizError('无效的邮件分类');
+			if (!Array.isArray(emailIds) || emailIds.length === 0) return;
+			const ids = emailIds.map(Number).filter(Number.isInteger);
+			if (ids.length === 0) return;
+			await orm(c).update(email).set({ category, spam: category === 'spam' ? 1 : 0 })
+				.where(and(eq(email.userId, userId), inArray(email.emailId, ids))).run();
+		},
+
+	// 一次扫描同时算菜单/分类计数；原先 6 条 COUNT 各扫一遍用户全部邮件
+	async counts(c, userId) {
+		const row = await c.env.db.prepare(`
+			SELECT
+				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND unread = 0 THEN 1 ELSE 0 END), 0) AS inbox,
+				COALESCE(SUM(CASE WHEN is_del = 0 AND spam = 0 AND type = 1 THEN 1 ELSE 0 END), 0) AS sent,
+				COALESCE(SUM(CASE WHEN is_del = 1 THEN 1 ELSE 0 END), 0) AS deleted,
+				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 1 AND unread = 0 THEN 1 ELSE 0 END), 0) AS spam,
+				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'primary' THEN 1 ELSE 0 END), 0) AS primary_c,
+				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'social' THEN 1 ELSE 0 END), 0) AS social,
+				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'promotion' THEN 1 ELSE 0 END), 0) AS promotion,
+				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'updates' THEN 1 ELSE 0 END), 0) AS updates,
+				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'ads' THEN 1 ELSE 0 END), 0) AS ads
+			FROM email WHERE user_id = ?
+		`).bind(userId).first();
+		const n = key => Number(row?.[key]) || 0;
+		return {
+			menu: { inbox: n('inbox'), sent: n('sent'), deleted: n('deleted'), spam: n('spam') },
+			category: { primary: n('primary_c'), social: n('social'), promotion: n('promotion'), updates: n('updates'), ads: n('ads'), spam: n('spam') }
+		};
+	},
+
 	async categoryCounts(c, userId) {
-		const base = [eq(email.userId, userId), eq(email.isDel, isDel.NORMAL), eq(email.type, emailConst.type.RECEIVE), eq(email.unread, emailConst.unread.UNREAD)];
-		const rows = await orm(c).select({ category: email.category, total: count() }).from(email)
-			.where(and(...base, eq(email.spam, 0))).groupBy(email.category).all();
-		const { total: spam } = await orm(c).select({ total: count() }).from(email)
-			.where(and(...base, eq(email.spam, 1))).get();
-		const result = { primary: 0, social: 0, promotion: 0, updates: 0, ads: 0, spam: Number(spam) || 0 };
-		rows.forEach(row => {
-			if (row.category in result) result[row.category] = Number(row.total) || 0;
-		});
-		return result;
+		return (await this.counts(c, userId)).category;
 	},
 
 	async menuCounts(c, userId) {
-		const normal = [eq(email.userId, userId), eq(email.isDel, isDel.NORMAL), eq(email.spam, 0)];
-		const [inbox, sent, deleted, spam] = await Promise.all([
-			orm(c).select({ total: count() }).from(email)
-				.where(and(eq(email.userId, userId), eq(email.isDel, isDel.NORMAL),
-					eq(email.type, emailConst.type.RECEIVE), eq(email.unread, emailConst.unread.UNREAD))).get(),
-			orm(c).select({ total: count() }).from(email)
-				.where(and(...normal, eq(email.type, emailConst.type.SEND))).get(),
-			orm(c).select({ total: count() }).from(email)
-				.where(and(eq(email.userId, userId), eq(email.isDel, isDel.DELETE))).get(),
-			orm(c).select({ total: count() }).from(email)
-				.where(and(eq(email.userId, userId), eq(email.isDel, isDel.NORMAL), eq(email.type, emailConst.type.RECEIVE), eq(email.spam, 1), eq(email.unread, emailConst.unread.UNREAD))).get()
-		]);
-		return {
-			inbox: Number(inbox?.total) || 0,
-			sent: Number(sent?.total) || 0,
-			deleted: Number(deleted?.total) || 0,
-			spam: Number(spam?.total) || 0
-		};
+		return (await this.counts(c, userId)).menu;
 	},
 
 		async spam(c, params, userId) {

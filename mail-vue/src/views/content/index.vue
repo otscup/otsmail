@@ -1,5 +1,5 @@
 <template>
-  <div class="box mail-detail">
+  <div class="box mail-detail" v-if="email">
     <div class="header-actions">
       <Icon class="icon" icon="material-symbols-light:arrow-back-ios-new" width="20" height="20" @click="handleBack"/>
       <Icon v-perm="'email:delete'" class="icon" icon="uiw:delete" width="16" height="16" @click="handleDelete"/>
@@ -13,6 +13,26 @@
         <Icon class="icon" @click="toggleSpam"
               :icon="email.spam ? 'fluent:mail-read-20-regular' : 'mdi:email-remove'" width="20" height="20"/>
       </el-tooltip>
+      <el-dropdown trigger="click" @command="moveCurrentTo" :teleported="false">
+        <el-tooltip :content="$t('moveToCategory')" placement="top">
+          <Icon class="icon" icon="mdi:folder-move-outline" width="20" height="20"/>
+        </el-tooltip>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item v-for="item in categories" :key="item.key" :command="item.key"
+                              :disabled="email.category === item.key">
+              <div class="move-category-item">
+                <Icon :icon="item.icon" width="18" height="18"/>
+                <span>{{ $t(item.label) }}</span>
+              </div>
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+      <aiAssistant class="detail-ai" inline :email-id="email.emailId" :email-subject="email.subject"/>
+      <button type="button" class="reader-summary-btn" :class="{active: showSummary}" @click="toggleSummary">
+        <Icon icon="mdi:star-four-points" width="16" height="16"/><span>AI Brief</span>
+      </button>
       <Icon class="icon" v-if="emailStore.contentData.showReply" v-perm="'email:send'"  @click="openReply" icon="la:reply" width="21" height="21" />
       <Icon class="icon" v-if="emailStore.contentData.showReply" v-perm="'email:send'"  @click="openForward" icon="iconoir:arrow-up-right" width="20" height="20" />
       <el-tooltip
@@ -42,7 +62,8 @@
         </div>
         <div class="content">
           <div class="email-info">
-            <div>
+            <div class="reader-avatar"><span>{{ senderInitial(email.name) }}</span></div>
+            <div class="email-info-main">
               <div class="send"><span class="send-source">{{$t('from')}}</span>
                 <div class="send-name">
                   <span class="send-name-title">{{ email.name }}</span>
@@ -61,6 +82,19 @@
             <el-alert v-if="email.status === 3" :closable="false" :title="toMessage(email.message)" class="email-msg" type="error" show-icon />
             <el-alert v-if="email.status === 4" :closable="false" :title="$t('complained')" class="email-msg" type="warning" show-icon />
             <el-alert v-if="email.status === 5" :closable="false" :title="$t('delayed')" class="email-msg" type="warning" show-icon />
+          </div>
+          <div v-if="showSummary" class="ai-summary-card">
+            <div class="ai-summary-head">
+              <Icon icon="mdi:creation" width="18" height="18"/>
+              <b>AI Brief</b><span>AI 摘要</span>
+              <button type="button" class="summary-refresh" :disabled="summaryLoading" @click="loadSummary">
+                <Icon icon="ion:reload" width="14" height="14" :class="{spinning: summaryLoading}"/>
+              </button>
+              <button type="button" class="summary-close" @click="showSummary = false">×</button>
+            </div>
+            <div v-if="summaryLoading" class="ai-summary-loading">Summarizing this thread…</div>
+            <div v-else-if="summaryError" class="ai-summary-error">{{ summaryError }}</div>
+            <div v-else class="ai-summary-text">{{ summary }}</div>
           </div>
           <el-alert
               v-if="translationState === 'translated'"
@@ -123,8 +157,9 @@ import ShadowHtml from '@/components/shadow-html/index.vue'
 import {reactive, ref, watch, onMounted, onUnmounted} from "vue";
 import {useRouter} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
-import {emailDelete, emailRead, emailDetail, emailSpam, emailSpamCancel} from "@/request/email.js";
+import {emailDelete, emailRead, emailDetail, emailSpam, emailSpamCancel, emailMoveCategory} from "@/request/email.js";
 import {Icon} from "@iconify/vue";
+import aiAssistant from '@/components/ai-assistant/index.vue';
 import {useEmailStore} from "@/store/email.js";
 import {useAccountStore} from "@/store/account.js";
 import {formatDetailDate} from "@/utils/day.js";
@@ -138,6 +173,7 @@ import {useUiStore} from "@/store/ui.js";
 import {useI18n} from "vue-i18n";
 import {EmailUnreadEnum} from "@/enums/email-enum.js";
 import {translateEmail} from "@/request/translation.js";
+import {aiSummary} from "@/request/ai.js";
 import {contactAdd} from "@/request/contact.js";
 import {computed} from "vue";
 
@@ -145,10 +181,44 @@ const uiStore = useUiStore();
 const settingStore = useSettingStore();
 const accountStore = useAccountStore();
 const emailStore = useEmailStore();
+const props = defineProps({
+  embedded: { type: Boolean, default: false }
+})
+const emit = defineEmits(['close'])
 const router = useRouter()
 const email = emailStore.contentData.email
 const showPreview = ref(false)
+const showSummary = ref(false)
+const summary = ref('')
+const summaryLoading = ref(false)
+const summaryError = ref('')
 const srcList = reactive([])
+
+async function loadSummary() {
+  if (!email?.emailId) return
+  summaryLoading.value = true
+  summaryError.value = ''
+  try {
+    const data = await aiSummary(email.emailId)
+    summary.value = data?.text || ''
+    if (!summary.value) summaryError.value = 'No summary returned.'
+  } catch (e) {
+    summaryError.value = e?.message || 'AI summary unavailable.'
+  } finally {
+    summaryLoading.value = false
+  }
+}
+
+function toggleSummary() {
+  showSummary.value = !showSummary.value
+  if (showSummary.value && !summary.value && !summaryLoading.value) loadSummary()
+}
+
+function senderInitial(name) {
+  const v = String(name || email?.sendEmail || '?').trim()
+  if (/^[\u3400-\u9fff]/.test(v)) return v.slice(0, 1)
+  return v.split(/\s+/).map(x => x[0] || '').join('').slice(0, 2).toUpperCase() || '?'
+}
 
 async function addSenderContact() {
   if (!email?.sendEmail) return
@@ -162,6 +232,14 @@ async function addSenderContact() {
 }
 
 const { t, locale } = useI18n()
+const categories = [
+  {key: 'primary', label: 'categoryPrimary', icon: 'mdi:inbox-outline'},
+  {key: 'social', label: 'categorySocial', icon: 'mdi:account-group-outline'},
+  {key: 'promotion', label: 'categoryPromotion', icon: 'mdi:tag-outline'},
+  {key: 'updates', label: 'categoryUpdates', icon: 'mdi:bell-outline'},
+  {key: 'ads', label: 'categoryAds', icon: 'mdi:bullhorn-outline'},
+  {key: 'spam', label: 'categorySpam', icon: 'mdi:alert-octagon-outline'},
+]
 
 // ---- 一键翻译 ----------------------------------------------------------
 const targetLangs = [
@@ -222,7 +300,8 @@ async function doTranslate(lang) {
 }
 
 // 切换邮件时清空翻译态
-watch(() => email.emailId, () => {
+// 直接打开 /mail（刷新恢复失败）时 email 可能为 null，getter 里必须容忍
+watch(() => email?.emailId, () => {
   translationState.value = 'idle'
   translatedSubject.value = ''
   translatedContent.value = ''
@@ -237,7 +316,7 @@ watch(() => accountStore.currentAccountId, () => {
 onMounted(async () => {
   // T-02 edge: persisted contentData.email null -> no recoverable id, fall back to inbox list
   if (!email || !email.emailId) {
-    router.replace('/inbox')
+    if (!props.embedded) router.replace('/inbox')
     return
   }
   // T-02: 刷新后从 persist 恢复的 contentData.email 可能 content 缺失/过期 → 用 detail 兜底重取
@@ -342,7 +421,20 @@ function toggleSpam() {
   })
 }
 
+async function moveCurrentTo(category) {
+  await emailMoveCategory([email.emailId], category)
+  email.category = category
+  email.spam = category === 'spam' ? 1 : 0
+  const label = t(categories.find(item => item.key === category)?.label || 'categoryPrimary')
+  ElMessage({message: t('movedToCategory', {category: label}), type: 'success', plain: true})
+  emailStore.emailScroll?.refreshList()
+}
+
 const handleBack = () => {
+  if (props.embedded) {
+    emit('close')
+    return
+  }
   router.back()
 }
 
@@ -398,7 +490,18 @@ const handleDelete = () => {
   }
   .icon {
     cursor: pointer;
+    transition: transform 120ms cubic-bezier(.2,.8,.2,1), background 120ms ease;
+    &:active { transform: scale(.9); }
   }
+}
+
+.detail-ai { display: inline-flex; }
+
+.move-category-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 132px;
 }
 
 
@@ -599,4 +702,21 @@ const handleDelete = () => {
 }
 
 
+
+.email-info { display:flex !important; gap:13px; align-items:flex-start; flex-wrap:wrap; }
+.email-info-main { flex:1 1 280px; min-width:0; }
+.reader-avatar { flex:0 0 46px; width:46px; height:46px; padding:2px; border-radius:50%; background:conic-gradient(from 210deg,#6ee7ff,#7c7bff,#d56bff,#6ee7ff); box-shadow:0 0 0 1px var(--rd-panel),0 0 20px rgba(124,123,255,.24); }
+.reader-avatar > span { width:100%; height:100%; display:grid; place-items:center; border-radius:50%; background:linear-gradient(145deg,#7c7bff,#37c9ff); color:#fff; font-size:13px; font-weight:750; }
+.reader-summary-btn { height:30px; padding:0 11px; border:1px solid var(--rd-line); border-radius:9px; background:var(--rd-panel); color:var(--rd-text); display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:650; cursor:pointer; }
+.reader-summary-btn:hover,.reader-summary-btn.active { background:var(--rd-accent-weak); border-color:var(--rd-accent); color:var(--rd-accent); }
+.ai-summary-card { margin: 0 0 18px; padding: 14px 16px; border:1px solid color-mix(in srgb, var(--rd-accent) 28%, var(--rd-line)); border-radius:13px; background:linear-gradient(135deg, color-mix(in srgb, var(--rd-accent) 8%, var(--rd-panel)), var(--rd-panel)); }
+.ai-summary-head { display:flex; align-items:center; gap:7px; color:var(--rd-accent); }
+.ai-summary-head b { font-size:12px; color:var(--rd-text); }
+.ai-summary-head span { font-size:10px; color:var(--rd-muted); }
+.summary-refresh,.summary-close { margin-left:auto; border:0; background:transparent; color:var(--rd-muted); cursor:pointer; width:24px; height:24px; border-radius:7px; }
+.summary-close { margin-left:2px; font-size:18px; }
+.summary-refresh:hover,.summary-close:hover { background:var(--fill-quaternary); color:var(--rd-text); }
+.ai-summary-text,.ai-summary-loading,.ai-summary-error { margin-top:8px; font-size:12px; line-height:1.75; color:var(--rd-muted); white-space:pre-wrap; }
+.ai-summary-error { color:#d9534f; }
+.spinning { animation: spin 1s linear infinite; }
 </style>

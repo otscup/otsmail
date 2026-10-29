@@ -1,7 +1,7 @@
 <template>
   <div class="box">
     <div class="container">
-      <div class="title">{{$t('profile')}}</div>
+      <div class="title">{{$t('profile')}}<router-link v-if="isAdmin" to="/sys-setting" class="admin-link">系统设置</router-link></div>
       <div class="item wide">
         <div>{{$t('avatar')}}</div>
         <div class="row-flex">
@@ -94,7 +94,7 @@
       </div>
       <div class="item oauth-item" v-for="provider in enabledOidcProviders" :key="provider.id">
         <div class="provider-label">
-          <img v-if="isImageIcon(provider.icon)" :src="provider.icon" class="oidc-icon" alt=""/>
+          <img v-if="isImageIcon(provider.icon)" :src="normalizeIcon(provider.icon)" class="oidc-icon" alt=""/>
           <Icon v-else :icon="provider.icon || 'mingcute:shield-check-line'" width="18" height="18"/>
           <span>{{ provider.name || 'SSO' }}</span>
         </div>
@@ -216,6 +216,7 @@ const { t } = useI18n()
 const accountStore = useAccountStore()
 const settingStore = useSettingStore()
 const userStore = useUserStore();
+const isAdmin = computed(() => userStore.user?.role?.permKeys?.includes('*') || userStore.user?.role?.name === 'admin');
 const setPwdLoading = ref(false)
 const setNameShow = ref(false)
 const accountName = ref(null)
@@ -239,8 +240,11 @@ function bindingFor(provider) {
 function bindingLabel(binding) {
   return binding?.name || binding?.username || '已绑定账号'
 }
+function normalizeIcon(icon) {
+  return String(icon || '').replace(/\\\//g, '/').replace(/\\:/g, ':').trim()
+}
 function isImageIcon(icon) {
-  return /^(https?:\/\/|data:image\/)/i.test(icon || '')
+  return /^(https?:\/\/|data:image\/|\/\/|\/)/i.test(normalizeIcon(icon))
 }
 async function loadBindings() {
   try {
@@ -627,7 +631,8 @@ async function toggleNotify(value) {
     gap: 15px;
   }
 
-  .title {
+  .admin-link { margin-left:12px; font-size:12px; font-weight:500; color:var(--rd-accent); text-decoration:none; }
+.title {
     font-size: 18px;
     font-weight: bold;
   }

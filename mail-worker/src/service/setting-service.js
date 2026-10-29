@@ -9,6 +9,7 @@ import BizError from '../error/biz-error';
 import {t} from '../i18n/i18n'
 import verifyRecordService from './verify-record-service';
 import userContext from '../security/user-context';
+import {normalizeFilterRules} from '../utils/filter-rules';
 
 const settingService = {
 
@@ -48,12 +49,17 @@ const settingService = {
 		return list;
 	},
 
+	// 从聊天/文档复制 URL 时常带 `https\://` 转义，统一还原后再存/下发
+	normalizeIcon(icon) {
+		return String(icon || '').replace(/\\\//g, '/').replace(/\\:/g, ':').trim().slice(0, 300);
+	},
+
 	// 后台读：secret 不下发，只给 hasSecret；列表顺序即登录页按钮顺序
 	publicOidcProviders(row) {
 		return this.parseOidcProviders(row).map(item => ({
 			id: item.id,
 			name: item.name || 'SSO',
-			icon: item.icon || '',
+			icon: this.normalizeIcon(item.icon),
 			issuer: item.issuer || '',
 			clientId: item.clientId || '',
 			scope: item.scope || 'openid profile email',
@@ -243,9 +249,16 @@ const settingService = {
 		if (params.chatOpacity !== undefined) {
 			params.chatOpacity = Math.min(1, Math.max(0, Number(params.chatOpacity) || 0));
 		}
+		if (params.showAvatar !== undefined) {
+			params.showAvatar = Number(params.showAvatar) === 0 ? 0 : 1;
+		}
 
 		if (params.subtitle !== undefined) {
 			params.subtitle = String(params.subtitle || '').slice(0, 80);
+		}
+
+		if (params.emailFilters !== undefined) {
+			params.emailFilters = JSON.stringify(normalizeFilterRules(params.emailFilters));
 		}
 
 		if (params.aiClassifyMode !== undefined) {
@@ -280,7 +293,7 @@ const settingService = {
 					return {
 						id,
 						name: String(item.name || 'SSO').slice(0, 60),
-						icon: String(item.icon || '').trim().slice(0, 300),
+						icon: this.normalizeIcon(item.icon),
 						issuer: String(item.issuer || '').trim().replace(/\/+$/, ''),
 						clientId: String(item.clientId || '').trim(),
 						clientSecret: secret,
@@ -371,6 +384,7 @@ const settingService = {
 			background: settingRow.background,
 			chatBackground: settingRow.chatBackground || '',
 			chatOpacity: settingRow.chatOpacity,
+			showAvatar: settingRow.showAvatar !== 0,
 			loginOpacity: settingRow.loginOpacity,
 			domainList: settingRow.loginDomain === 1 && !token ? [] : settingRow.domainList,
 			regKey: settingRow.regKey,

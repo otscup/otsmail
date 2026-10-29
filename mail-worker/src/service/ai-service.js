@@ -28,6 +28,9 @@ export function classifyByRules({ name, sendEmail, subject, text }) {
 	const from = `${name || ''} ${sendEmail || ''}`.toLowerCase();
 	const content = `${subject || ''} ${text || ''}`.toLowerCase();
 	const all = `${from} ${content}`;
+	// Generic words like "account" or "登录" appear in most footers. Only the
+	// sender/subject may promote a mail to 动态, otherwise mail drowns there.
+	const head = `${from} ${subject || ''}`.toLowerCase();
 
 	if (/(facebook|twitter|x\.com|linkedin|instagram|tiktok|pinterest|reddit|weibo|zhihu|discord|slack|telegram)/.test(from)) {
 		return 'social';
@@ -42,7 +45,8 @@ export function classifyByRules({ name, sendEmail, subject, text }) {
 	if (/(sponsor|advertis|广告|推广|合作|赞助)/.test(all)) {
 		return 'ads';
 	}
-	if (/(verify|verification|security|receipt|invoice|order|shipping|password|account|验证码|账单|订单|发货|登录|安全)/.test(all)) {
+	if (/(verify|verification|security|receipt|invoice|shipping|password|验证码|账单|发货|安全)/.test(head)
+		|| /(^|[.@_-])(noreply|no-reply|notifications?|security|accounts?)([.@_-]|$)/.test(sendEmail || '')) {
 		return 'updates';
 	}
 	return 'primary';
@@ -215,7 +219,7 @@ const aiService = {
 
 		try {
 			const answer = await this.runAi(c, {
-				system: 'Classify this email into exactly one category: primary, social, promotion, updates, ads, spam. Return only the category word.',
+				system: 'Classify this email into exactly one category: primary, social, promotion, updates, ads, spam. Use updates only for automated account, security, receipt, order or shipping notices; personal mail belongs in primary. Return only the category word.',
 				user: `From: ${name || ''} <${sendEmail || ''}>\nSubject: ${subject || ''}\n\n${String(text || '').slice(0, 1500)}`,
 				maxTokens: 8,
 				temperature: 0
@@ -223,6 +227,9 @@ const aiService = {
 			const category = String(answer || '').trim().toLowerCase();
 
 			if (EMAIL_CATEGORIES.includes(category)) {
+				// The model tends to call any notification "updates"; only trust
+				// that when the sender/subject rules agree.
+				if (category === 'updates' && fallback !== 'updates') return fallback;
 				return category;
 			}
 		} catch (e) {
@@ -298,6 +305,33 @@ const aiService = {
 			subject: /^(re|回复)\s*[:：]/i.test(subject) ? subject : `Re: ${subject}`,
 			text
 		};
+	},
+
+	async summaryEmail(c, { emailId, userId }) {
+		const row = await orm(c).select().from(email).where(and(
+			eq(email.emailId, Number(emailId)),
+			eq(email.userId, userId),
+			eq(email.isDel, isDel.NORMAL)
+		)).get();
+
+		if (!row) {
+			throw new BizError(t('aiEmailNotExist'), 404);
+		}
+
+		const subject = row.subject || '';
+		const body = (emailUtils.htmlToText(row.html || '') || emailUtils.formatText(row.text || '')).slice(0, 6000);
+		if (!subject && !body) {
+			throw new BizError(t('aiEmptyText'), 400);
+		}
+
+		const text = await this.runAi(c, {
+			system: 'You summarize an email for a busy reader. Return 2-4 concise bullet points covering the ask, key facts, and any deadline. Use the same language as the email. Plain text only, no markdown fences.',
+			user: `From: ${row.name || ''} <${row.sendEmail || ''}>\nSubject: ${subject}\n\n${body}`,
+			maxTokens: 360,
+			temperature: 0.3
+		});
+
+		return { text };
 	},
 
 	/**

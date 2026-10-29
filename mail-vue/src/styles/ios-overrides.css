@@ -3156,4 +3156,55 @@ html.dark .email-container .email-row:hover {
   border-top: 1px solid var(--separator);
   z-index: 6;
 }
-.email-container .scroll { padding-bottom: 28px; }
+.email-container .scroll { padding-bottom: 0 !important; }
+
+/* press feedback: small, immediate, reversible */
+.icon-item:active, .header-actions .icon:active, .mail-category:active, .pager-btn:active { transform: scale(.92) !important; transition: transform .1s ease-out !important; }
+.el-dropdown-menu__item:active { background: var(--hover) !important; }
+.email-row:active { background: var(--hover) !important; }
+
+/* Apple-ish hover: small lift + spring pop, only on precise pointers */
+.scroll .virtual { overscroll-behavior: contain; scroll-behavior: auto; }
+.mail-category-tag { transition: transform .2s cubic-bezier(.34,1.56,.64,1), background-color .16s ease; }
+@media (hover: hover) and (pointer: fine) {
+  .email-container .email-row { transition: transform .2s cubic-bezier(.2,.8,.2,1), background-color .16s ease, box-shadow .2s ease; }
+  .email-container .email-row:hover { transform: translateY(-1px); box-shadow: 0 2px 10px rgba(15,23,42,.06); position: relative; z-index: 1; }
+  .email-container .email-row:hover .mail-category-tag { transform: translateY(-1px) scale(1.05); }
+  .email-container .email-row .email-action { transition: transform .16s cubic-bezier(.34,1.56,.64,1), background-color .16s ease; }
+  .email-container .email-row .email-action:hover { transform: translateY(-2px) scale(1.14); }
+  .mail-category:hover { transform: translateY(-1px); }
+  .header-actions .icon:hover, .icon-item:hover { transform: translateY(-1px) scale(1.08); }
+  .ai-fab:hover { transform: translateY(-3px) scale(1.06); box-shadow: 0 10px 24px rgba(37,99,235,.28); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .email-container .email-row, .email-container .email-row .email-action,
+  .mail-category-tag, .mail-category, .header-actions .icon, .icon-item, .ai-fab { transition: none !important; transform: none !important; }
+}
+
+
+/* Gmail-like title/toolbar on one line; the old two-row title is gone. */
+.email-container .header-actions {
+  min-height: 48px !important;
+  height: 48px !important;
+  gap: 10px !important;
+}
+.email-container .header-actions .mail-page-title {
+  flex: 0 0 auto;
+  padding: 0 8px 0 4px !important;
+  font-size: 18px !important;
+  line-height: 48px !important;
+  font-weight: 650 !important;
+  letter-spacing: -.02em;
+}
+.email-container .header-actions .header-left {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.email-container .header-actions .el-checkbox {
+  flex: 0 0 auto;
+}
+@media (max-width: 600px) {
+  .email-container .header-actions { gap: 4px !important; padding: 0 6px !important; }
+  .email-container .header-actions .mail-page-title { font-size: 16px !important; padding-right: 2px !important; }
+  .email-container .header-actions .header-left { column-gap: 8px !important; }
+}

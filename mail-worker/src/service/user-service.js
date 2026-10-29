@@ -53,6 +53,8 @@ const userService = {
 		user.avatar = userRow.avatar || '';
 		user.twoFactor = userRow.twoFactorSwitch === 1;
 		user.twoFactorRequired = userRow.twoFactorRequired === 1;
+		user.signature = userRow.signature || '';
+		user.sendOnEnter = ['enter', 'ctrl', 'off'][userRow.sendOnEnter || 0] || 'enter';
 
 		if (c.env.admin === userRow.email) {
 			user.role = constant.ADMIN_ROLE
@@ -441,6 +443,52 @@ const userService = {
 	},
 
 	// ---- 个人设置：两步验证（TOTP） ----
+
+	// 写信页插图：只写 R2 不落库；发送时 attService.toImageUrlHtml 会把站内图片换成 cid 附件
+	async uploadImage(c, params) {
+		const base64 = String(params.base64 || '');
+		const match = /^data:image\/(png|jpeg|jpg|webp|gif);base64,/i.exec(base64);
+		if (!match) {
+			throw new BizError(t('imageFormatInvalid'));
+		}
+		const buff = fileUtils.base64ToUint8Array(fileUtils.base64ToDataStr(base64));
+		if (buff.length > 5 * 1024 * 1024) {
+			throw new BizError(t('imageTooLarge'));
+		}
+		const ext = match[1].toLowerCase() === 'jpeg' ? 'jpg' : match[1].toLowerCase();
+		const key = constant.ATTACHMENT_PREFIX + await fileUtils.getBuffHash(buff) + '.' + ext;
+		await r2Service.putObj(c, key, buff, {
+			contentType: 'image/' + ext,
+			cacheControl: 'max-age=2592000',
+			contentDisposition: 'inline'
+		});
+		const { r2Domain } = await settingService.query(c);
+		const url = (domainUtils.toOssDomain(r2Domain) || new URL(c.req.url).origin) + '/' + key;
+		return { key, url };
+	},
+
+	// 手机端跨设备同步的两项偏好：邮件签名、回车发送方式
+	async updateMySetting(c, params, userId) {
+		const data = {};
+		if (params.signature !== undefined) {
+			data.signature = String(params.signature).slice(0, 2000);
+		}
+		if (params.sendOnEnter !== undefined) {
+			const mode = String(params.sendOnEnter);
+			if (['enter', 'ctrl', 'off'].indexOf(mode) === -1) {
+				throw new BizError(t('sendOnEnterInvalid'));
+			}
+			data.sendOnEnter = ['enter', 'ctrl', 'off'].indexOf(mode);
+		}
+		if (Object.keys(data).length > 0) {
+			await orm(c).update(user).set(data).where(eq(user.userId, userId)).run();
+		}
+		const userRow = await this.selectById(c, userId);
+		return {
+			signature: userRow?.signature || '',
+			sendOnEnter: ['enter', 'ctrl', 'off'][userRow?.sendOnEnter || 0] || 'enter'
+		};
+	},
 
 	async twoFactorStatus(c, userId) {
 		const userRow = await this.selectById(c, userId);

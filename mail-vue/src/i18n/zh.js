@@ -461,6 +461,10 @@ const zh = {
     mcpRevokeSuccess: "已吊销",
     mcpCreateSuccess: "创建成功",
     mcpClientNamePlaceholder: "例如 Cursor",
+    showSenderAvatar: "显示发件人头像",
+    aiSummary: "总结邮件",
+    aiMinimize: "最小化",
+    aiWorkingOn: "当前邮件",
     aiAssistant: "AI 助手",
     aiSubtitle: "回复、润色、整理邮件",
     aiReply: "AI 回复",
@@ -474,6 +478,9 @@ const zh = {
     aiNotConfigured: "AI 服务未配置，请联系管理员",
     aiFailed: "AI 调用失败，请稍后重试",
     markAsUnread: "标记为未读",
+    askAiAboutEmail: "询问 AI",
+    moveToCategory: "移动到分类",
+    movedToCategory: "已移动到「{category}」",
 }
 
 export default zh

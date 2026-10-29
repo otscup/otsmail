@@ -94,6 +94,9 @@
                     width="22" height="22"/>
             </div>
           </div>
+          <button type="button" class="ai-compose-btn" @click="openComposeAi">
+            <Icon icon="mdi:star-four-points" width="15" height="15"/> AI
+          </button>
           <div>
             <el-button type="primary" @click="sendEmail" v-if="form.sendType === 'reply'">{{ $t('reply') }}</el-button>
             <el-button type="primary" @click="sendEmail" v-else-if="form.sendType === 'forward'">{{ $t('forward') }}</el-button>
@@ -684,12 +687,34 @@ const handleKeyDown = (event) => {
   }
 };
 
+function plainEditorText() {
+  const html = editor.value?.getContent?.() || form.content || ''
+  return String(html).replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function openComposeAi() {
+  document.body.classList.add('compose-ai-open')
+  window.dispatchEvent(new CustomEvent('otsmail:ai-compose', {detail: {text: form.text || plainEditorText()}}))
+}
+
+function onAiFill(event) {
+  const text = String(event.detail?.text || '')
+  if (!text) return
+  const html = text.split('\n').map(line => `<p>${line.replace(/</g, '&lt;')}</p>`).join('')
+  editor.value?.setContent(html)
+  form.content = html
+  form.text = text
+  document.body.classList.remove('compose-ai-open')
+}
+
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('otsmail:ai-fill', onAiFill)
 });
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown);
+  window.removeEventListener('otsmail:ai-fill', onAiFill)
 });
 
 function close() {
@@ -917,7 +942,16 @@ function close() {
 
       .button-item {
         display: grid;
-        grid-template-columns: auto auto 1fr auto;
+        grid-template-columns: auto auto 1fr auto auto;
+        align-items: center;
+        gap: 8px;
+
+        .ai-compose-btn {
+          height: 30px; padding: 0 10px; border: 1px solid var(--rd-line, var(--el-border-color));
+          border-radius: 9px; background: var(--rd-panel-2, transparent); color: var(--rd-text, var(--el-text-color-primary));
+          display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 650; cursor: pointer;
+        }
+        .ai-compose-btn:active { transform: scale(.95); }
 
         .att-add {
           cursor: pointer;

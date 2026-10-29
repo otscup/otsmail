@@ -10,6 +10,13 @@ app.post('/ai/reply', async (c) => {
 	return c.json(result.ok(data));
 });
 
+app.post('/ai/summary', async (c) => {
+	const params = await c.req.json();
+	const userId = userContext.getUserId(c);
+	const data = await aiService.summaryEmail(c, { ...params, userId });
+	return c.json(result.ok(data));
+});
+
 app.post('/ai/polish', async (c) => {
 	const params = await c.req.json();
 	const userId = userContext.getUserId(c);

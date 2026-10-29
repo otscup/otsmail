@@ -14,6 +14,7 @@ import aiService, { classifyByRules } from '../service/ai-service';
 import webhookService from '../service/webhook-service';
 import pushService from '../service/push-service';
 import emailRules from '../utils/emailRules';
+import {matchFilterRules} from '../utils/filter-rules';
 
 export async function email(message, env, ctx) {
 
@@ -38,7 +39,8 @@ export async function email(message, env, ctx) {
 			blackFrom,
 			aiCode,
 			aiCodeFilter,
-			aiClassifyMode
+			aiClassifyMode,
+			emailFilters
 		} = await settingService.query({ env });
 
 		if (receive === settingConst.receive.CLOSE) {
@@ -98,9 +100,11 @@ export async function email(message, env, ctx) {
 		const toName = email.to.find(item => item.address === message.to)?.name || '';
 		const code = await aiService.extractCode({ env }, email, { aiCode, aiCodeFilter });
 		// 默认只跑本地规则；只有显式开启自动 AI 才在收信链路里调用模型
-		const category = blockFlag ? 'spam' : aiClassifyMode === 'auto'
+		// 用户过滤器优先于 AI/本地分类；垃圾标记仍最高优先
+		const filterCategory = matchFilterRules(email, emailFilters);
+		const category = blockFlag ? 'spam' : filterCategory || (aiClassifyMode === 'auto'
 			? await aiService.classifyEmail({ env }, email)
-			: classifyByRules(email);
+			: classifyByRules(email));
 
 		const params = {
 			toEmail: message.to,
@@ -168,6 +172,12 @@ export async function email(message, env, ctx) {
 			}
 		} catch (e) {
 			console.error(e);
+			ctx.waitUntil(
+				telegramService.sendAlert(
+					{ env },
+					`⚠️ otsmail 附件保存失败\nto=${String(message.to || '').slice(0, 80)}\n${String(e?.message || e).slice(0, 300)}`
+				).catch(() => {})
+			);
 		}
 
 		emailRow = await emailService.completeReceive({ env }, account ? emailConst.status.RECEIVE : emailConst.status.NOONE, emailRow.emailId);
@@ -231,6 +241,16 @@ export async function email(message, env, ctx) {
 
 	} catch (e) {
 		console.error('邮件接收异常: ', e);
+		try {
+			ctx.waitUntil(
+				telegramService.sendAlert(
+					{ env },
+					`⚠️ otsmail 收信失败\nto=${String(message.to || '').slice(0, 80)}\n${String(e?.message || e).slice(0, 300)}`
+				).catch(() => {})
+			);
+		} catch (alertError) {
+			console.error('send alert failed', alertError);
+		}
 		throw e
 	}
 }

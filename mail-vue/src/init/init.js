@@ -32,11 +32,8 @@ export async function init() {
             return null;
         });
 
-        const [s, user] = await Promise.all([websiteConfig(), userPromise]);
+        const [s, user] = await Promise.all([loadSetting(), userPromise]);
         setting = s;
-        settingStore.settings = setting;
-        settingStore.domainList = setting.domainList;
-        document.title = setting.title;
 
         if (user) {
             accountStore.currentAccountId = user.account.accountId;
@@ -50,9 +47,22 @@ export async function init() {
         }
 
     } else {
-        setting = await websiteConfig();
-        settingStore.settings = setting;
-        settingStore.domainList = setting.domainList;
-        document.title = setting.title;
+        setting = await loadSetting();
     }
+}
+
+// 站点配置拉不到时不能让它把 init 抛穿 —— 那样 main.js 的 await init() 失败，整页白屏（只剩零宽标题）
+function loadSetting() {
+    return websiteConfig().catch(e => {
+        console.error('站点配置加载失败', e);
+        return null;
+    }).then(setting => {
+        if (setting) {
+            const settingStore = useSettingStore();
+            settingStore.settings = setting;
+            settingStore.domainList = setting.domainList;
+            document.title = setting.title;
+        }
+        return setting;
+    });
 }

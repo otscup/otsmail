@@ -21,6 +21,9 @@ const user = sqliteTable('user', {
 	twoFactorSwitch: integer('two_factor_switch').default(0),
 	twoFactorSecret: text('two_factor_secret').default(''),
 	twoFactorRequired: integer('two_factor_required').default(0).notNull(),
+	// 手机端可跨设备同步的两项偏好（见 dev/migrate-mobile-settings.sql）
+	signature: text('signature').default(''),
+	sendOnEnter: integer('send_on_enter').default(0).notNull(),
 	isDel: integer('is_del').default(0).notNull()
 });
 export default user

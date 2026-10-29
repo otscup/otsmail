@@ -1,12 +1,17 @@
 <template>
   <div class="ai-assistant" :class="{ 'is-inline': inline }">
-    <button class="ai-fab" type="button" :aria-label="t('aiAssistant')" :title="t('aiAssistant')" @click="open = !open">
-      <Icon icon="solar:magic-stick-3-bold-duotone" width="24" height="24"/>
+    <button class="ai-fab" type="button" :aria-label="t('aiAssistant')" :title="t('aiAssistant')" @click="togglePanel">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M12 1.5l2.55 7.95L22.5 12l-7.95 2.55L12 22.5l-2.55-7.95L1.5 12l7.95-2.55z"/></svg>
     </button>
+    <Teleport to="body">
+      <button v-if="minimized && !open" class="ai-mini-bubble" type="button" :aria-label="t('aiAssistant')" @click="restorePanel">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 1.5l2.55 7.95L22.5 12l-7.95 2.55L12 22.5l-2.55-7.95L1.5 12l7.95-2.55z"/></svg>
+      </button>
+    </Teleport>
 
     <Teleport to="body">
-      <div v-if="open" class="ai-chat-backdrop" :style="chatBackdropStyle"></div>
-      <Transition name="ai-panel">
+      <div v-if="open" class="ai-chat-backdrop" :style="chatBackdropStyle" @click.self="closePanel"></div>
+      <Transition :css="false" @enter="enterPanel" @leave="leavePanel">
         <section v-if="open" class="ai-panel" :class="{ 'has-chat-bg': !!settingStore.settings.chatBackground }"
                  :style="chatPanelStyle" role="dialog" :aria-label="t('aiAssistant')">
           <img v-if="settingStore.settings.chatBackground" class="ai-chat-photo" :src="cvtR2Url(settingStore.settings.chatBackground)"
@@ -14,22 +19,32 @@
           <header class="ai-header">
             <div class="ai-brand">
               <span class="ai-mark">
-                <Icon icon="solar:magic-stick-3-bold-duotone" width="20" height="20"/>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 1.5l2.55 7.95L22.5 12l-7.95 2.55L12 22.5l-2.55-7.95L1.5 12l7.95-2.55z"/></svg>
               </span>
               <div class="ai-heading">
                 <span class="ai-title">{{ t('aiAssistant') }}</span>
                 <span class="ai-subtitle">{{ t('aiSubtitle') }}</span>
               </div>
             </div>
-            <button class="ai-close" type="button" :aria-label="t('aiClose')" @click="open = false">✕</button>
+            <div class="ai-header-actions">
+              <button class="ai-min" type="button" :aria-label="t('aiMinimize')" @click="minimizePanel">–</button>
+              <button class="ai-close" type="button" :aria-label="t('aiClose')" @click="closePanel">✕</button>
+            </div>
           </header>
 
       <div class="ai-body" ref="bodyRef">
-        <div class="ai-card" v-if="emailId || text">
-          <button v-if="emailId" class="ai-action" type="button" :disabled="busy" @click="doReply">
+        <div class="ai-context" v-if="activeEmailId">
+          <span>{{ t('aiWorkingOn') }}</span>
+          <strong>{{ activeEmailSubject || ('#' + activeEmailId) }}</strong>
+        </div>
+        <div class="ai-card" v-if="activeEmailId || panelText">
+          <button v-if="activeEmailId" class="ai-action" type="button" :disabled="busy" @click="summarizeActive">
+            {{ t('aiSummary') }}
+          </button>
+          <button v-if="activeEmailId" class="ai-action" type="button" :disabled="busy" @click="doReply">
             {{ t('aiReply') }}
           </button>
-          <button v-if="text" class="ai-action" type="button" :disabled="busy" @click="doPolish">
+          <button v-if="panelText" class="ai-action" type="button" :disabled="busy" @click="doPolish">
             {{ t('aiPolish') }}
           </button>
         </div>
@@ -81,7 +96,7 @@ import {computed, nextTick, onMounted, onUnmounted, ref, watch} from 'vue'
 import {useI18n} from 'vue-i18n'
 import {Icon} from '@iconify/vue'
 import {ElMessage} from 'element-plus'
-import {aiCommand, aiPolish, aiReply} from '@/request/ai.js'
+import {aiCommand, aiPolish, aiReply, aiSummary} from '@/request/ai.js'
 import {useEmailStore} from '@/store/email.js'
 import {useAccountStore} from '@/store/account.js'
 import {useSettingStore} from '@/store/setting.js'
@@ -90,6 +105,7 @@ import {cvtR2Url} from '@/utils/convert.js'
 const props = defineProps({
   // 邮件详情页传当前邮件 id；写信页可不传
   emailId: {type: [Number, String], default: 0},
+  emailSubject: {type: String, default: ''},
   // 待润色的正文（写信框内容 / 邮件纯文本）
   text: {type: String, default: ''},
   tone: {type: String, default: ''},
@@ -100,7 +116,79 @@ const emit = defineEmits(['fill'])
 
 const {t} = useI18n()
 const open = ref(false)
-function openPanel() { open.value = true }
+const minimized = ref(false)
+const activeEmailId = ref(props.emailId)
+const activeEmailSubject = ref(props.emailSubject)
+const panelText = ref(props.text)
+function openPanel(emailId = 0, subject = '', draftText = '') {
+  if (emailId) {
+    activeEmailId.value = emailId
+    activeEmailSubject.value = subject || ''
+  }
+  panelText.value = draftText || ''
+  minimized.value = false
+  open.value = true
+}
+function minimizePanel() {
+  open.value = false
+  minimized.value = true
+  document.body.classList.remove('compose-ai-open')
+}
+function closePanel() {
+  open.value = false
+  minimized.value = false
+  document.body.classList.remove('compose-ai-open')
+}
+function restorePanel() {
+  minimized.value = false
+  open.value = true
+}
+function togglePanel() {
+  if (!open.value) {
+    activeEmailId.value = props.emailId
+    activeEmailSubject.value = props.emailSubject
+    panelText.value = props.text
+    minimized.value = false
+  }
+  open.value = !open.value
+}
+watch(() => props.emailId, value => { activeEmailId.value = value })
+watch(() => props.emailSubject, value => { activeEmailSubject.value = value })
+let panelAnim = null
+const panelReduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+
+function enterPanel(el, done) {
+  if (panelReduceMotion.matches || !el.animate) return done()
+  if (panelAnim) panelAnim.cancel()
+  el.style.opacity = '0'
+  el.style.transform = 'translateY(18px) scale(.965)'
+  panelAnim = el.animate([
+    {opacity: 0, transform: 'translateY(18px) scale(.965)'},
+    {opacity: 1, transform: 'translateY(0) scale(1)'},
+  ], {duration: 340, easing: 'cubic-bezier(.22,1.18,.36,1)', fill: 'both'})
+  panelAnim.onfinish = () => {
+    el.style.opacity = ''
+    el.style.transform = ''
+    panelAnim = null
+    done()
+  }
+}
+
+function leavePanel(el, done) {
+  if (panelReduceMotion.matches || !el.animate) return done()
+  const current = getComputedStyle(el)
+  const from = {opacity: current.opacity, transform: current.transform}
+  if (panelAnim) panelAnim.cancel()
+  panelAnim = el.animate([
+    from,
+    {opacity: 0, transform: 'translateY(18px) scale(.965)'},
+  ], {duration: 220, easing: 'cubic-bezier(.4,0,1,1)', fill: 'both'})
+  panelAnim.onfinish = () => {
+    panelAnim = null
+    done()
+  }
+}
+
 defineExpose({ openPanel })
 const busy = ref(false)
 const draft = ref(null)
@@ -140,10 +228,24 @@ const chatBackdropStyle = computed(() => {
   }
 })
 
+async function summarizeActive() {
+  if (!activeEmailId.value) return
+  busy.value = true
+  try {
+    const res = await aiSummary(activeEmailId.value)
+    messages.value.push({role: 'ai', text: res?.summary || res?.text || t('aiFailed')})
+    scrollToBottom()
+  } catch (e) {
+    messages.value.push({role: 'ai', text: e?.message || t('aiFailed')})
+  } finally {
+    busy.value = false
+  }
+}
+
 async function doReply() {
   busy.value = true
   try {
-    draft.value = await aiReply(props.emailId, props.tone)
+    draft.value = await aiReply(activeEmailId.value, props.tone)
   } finally {
     busy.value = false
   }
@@ -152,7 +254,7 @@ async function doReply() {
 async function doPolish() {
   busy.value = true
   try {
-    const res = await aiPolish(props.text, '')
+    const res = await aiPolish(panelText.value, '')
     draft.value = {subject: '', text: res.text}
   } finally {
     busy.value = false
@@ -170,7 +272,7 @@ async function send() {
   scrollToBottom()
 
   try {
-    const res = await aiCommand(text, useAccountStore().currentAccountId, history, props.emailId)
+    const res = await aiCommand(text, useAccountStore().currentAccountId, history, activeEmailId.value)
     messages.value.push({role: 'ai', text: res?.reply || '', actions: res?.actions || []})
     // 删除/已读等动作已落库，刷新背后的邮件列表，避免界面和数据不一致
     if (res?.actions?.some(action => action.ok)) {
@@ -186,7 +288,9 @@ async function send() {
 }
 
 function fillDraft() {
-  emit('fill', {subject: draft.value?.subject || '', text: draft.value?.text || ''})
+  const text = draft.value?.text || ''
+  emit('fill', {subject: draft.value?.subject || '', text})
+  window.dispatchEvent(new CustomEvent('otsmail:ai-fill', {detail: {text, subject: draft.value?.subject || ''}}))
   ElMessage.success(t('aiFilled'))
   open.value = false
 }
@@ -207,6 +311,8 @@ function onKeydown(event) {
 watch(open, value => {
   if (value) {
     scrollToBottom()
+  } else {
+    document.body.classList.remove('compose-ai-open')
   }
 })
 
@@ -368,9 +474,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   width: 36px;
   height: 36px;
   flex: 0 0 auto;
-  border-radius: 12px;
+  border-radius: 50%;
   color: #fff;
-  background: linear-gradient(145deg, #0a84ff, #0066d6);
+  background: linear-gradient(135deg,#55d6ff,#7c7bff 58%,#d56bff);
   box-shadow: 0 4px 10px rgba(0, 122, 255, .22);
 }
 
@@ -628,5 +734,48 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     right: 16px;
     bottom: 16px;
   }
+}
+
+.ai-context { display:flex; align-items:center; gap:6px; margin:10px 14px 0; padding:7px 10px; border-radius:8px; background:color-mix(in srgb, var(--primary) 7%, transparent); color:var(--text-secondary); font-size:12px; }
+.ai-context strong { color:var(--text-primary); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+
+/* centered floating chat */
+.ai-panel {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  margin: auto;
+  width: min(560px, calc(100vw - 32px));
+  height: min(680px, calc(100vh - 48px));
+  max-height: calc(100vh - 48px);
+  transform-origin: center center;
+  border-radius: 26px;
+  box-shadow: 0 32px 80px rgba(0,0,0,.32), 0 2px 8px rgba(0,0,0,.08);
+}
+.ai-chat-backdrop {
+  pointer-events: auto;
+  background: rgba(7, 12, 24, .38) !important;
+  backdrop-filter: blur(5px);
+}
+.ai-header-actions { display:flex; align-items:center; gap:4px; }
+.ai-min {
+  width:30px; height:30px; border:0; border-radius:50%; cursor:pointer;
+  color:var(--label-2, rgba(60,60,67,.6)); background:var(--fill-quaternary, rgba(116,116,128,.08));
+  font-size:18px; line-height:1; display:grid; place-items:center;
+}
+.ai-min:hover { background:var(--fill-tertiary); }
+.ai-mini-bubble {
+  position: fixed; right: 20px; bottom: 20px; z-index: 4000;
+  width: 52px; height: 52px; border-radius: 50%; border: 0; cursor: pointer;
+  display: grid; place-items: center; color: #fff;
+  background: linear-gradient(135deg,#55d6ff,#7c7bff 58%,#d56bff);
+  box-shadow: 0 12px 30px rgba(124,123,255,.42);
+}
+.ai-mini-bubble:hover { transform: translateY(-2px) scale(1.04); }
+.ai-mini-bubble:active { transform: scale(.94); }
+@media (max-width: 600px) {
+  .ai-panel { top:0; right:0; bottom:0; left:0; width:calc(100vw - 12px); height:calc(100vh - 24px); max-height:calc(100vh - 24px); border-radius:20px; }
 }
 </style>

@@ -1,7 +1,7 @@
 <template>
   <div class="header" :class="!hasPerm('email:send') ? 'not-send' : ''">
     <div class="header-btn">
-      <hanburger @click="changeAside"></hanburger>
+      <hanburger class="header-menu" @click="changeAside"></hanburger>
       <EmailSearch v-if="showMailSearch"
                    class="header-mail-search"
                    :store="emailStore"
@@ -15,17 +15,15 @@
         <Icon icon="material-symbols:edit-outline-sharp" width="18" height="18"/>
         <span class="writer-text">{{ $t('compose') }}</span>
       </button>
-      <div v-if="uiStore.dark" class="sun-icon icon-item" @click="openDark($event)">
+      <div v-if="uiStore.dark" class="dark-icon icon-item" @click="openDark($event)" title="Light mode">
+        <Icon icon="mingcute:moon-fill"/>
+      </div>
+      <div v-else class="sun-icon icon-item" @click="openDark($event)" title="Dark mode">
         <Icon icon="mingcute:sun-fill"/>
       </div>
-      <div v-else class="dark-icon icon-item" @click="openDark($event)">
-        <Icon icon="solar:moon-linear"/>
-      </div>
-      <div class="notice icon-item" @click="openNotice">
-        <Icon icon="streamline-plump:announcement-megaphone"/>
-      </div>
+      <button type="button" class="lang-toggle" @click="toggleLang">{{ locale === 'en' ? 'EN' : '中' }}</button>
       <div v-perm="'ai:use'" class="header-ai">
-        <aiAssistant ref="aiAssistantRef" inline/>
+        <aiAssistant ref="aiAssistantRef" inline class="header-ai-window"/>
       </div>
       <el-dropdown ref="userinfoRef" @visible-change="e => userInfoShow = e" :teleported="false" popper-class="detail-dropdown">
         <div class="avatar" @click="userInfoHide" >
@@ -88,7 +86,6 @@
 
 <script setup>
 import router from "@/router";
-import hanburger from '@/components/hamburger/index.vue'
 import EmailSearch from '@/components/email-search/index.vue'
 import aiAssistant from '@/components/ai-assistant/index.vue'
 import {useEmailStore} from '@/store/email.js';
@@ -97,14 +94,15 @@ import {Icon} from "@iconify/vue";
 import {useUiStore} from "@/store/ui.js";
 import {useUserStore} from "@/store/user.js";
 import {useRoute} from "vue-router";
-import {computed, ref} from "vue";
+import {computed, onMounted, onUnmounted, ref} from "vue";
 import {clearToken} from "@/utils/token-store.js";
 import {useSettingStore} from "@/store/setting.js";
+import hanburger from '@/components/hamburger/index.vue'
 import {hasPerm} from "@/perm/perm.js"
 import {useI18n} from "vue-i18n";
 import {setExtend} from "@/utils/day.js"
 
-const {t} = useI18n();
+const {t, locale} = useI18n();
 const route = useRoute();
 const settingStore = useSettingStore();
 const userStore = useUserStore();
@@ -114,10 +112,31 @@ const logoutLoading = ref(false)
 const userInfoShow = ref(false)
 const userinfoRef = ref({})
 const aiAssistantRef = ref(null)
+function toggleLang() {
+  locale.value = locale.value === 'en' ? 'zh' : 'en'
+  settingStore.lang = locale.value
+  document.documentElement.lang = locale.value
+}
 function openAiFromMenu() {
   userInfoShow.value = false
-  aiAssistantRef.value?.openPanel()
+  const email = emailStore.contentData?.email
+  aiAssistantRef.value?.openPanel(Number(email?.emailId) || 0, String(email?.subject || ''))
 }
+function openAiForEmail(event) {
+  aiAssistantRef.value?.openPanel(Number(event.detail?.emailId) || 0, String(event.detail?.subject || ''))
+}
+function openAiForCompose(event) {
+  aiAssistantRef.value?.openPanel(0, '', String(event.detail?.text || ''))
+}
+onMounted(() => {
+  document.documentElement.lang = locale.value
+  window.addEventListener('otsmail:ai', openAiForEmail)
+  window.addEventListener('otsmail:ai-compose', openAiForCompose)
+})
+onUnmounted(() => {
+  window.removeEventListener('otsmail:ai', openAiForEmail)
+  window.removeEventListener('otsmail:ai-compose', openAiForCompose)
+})
 const showMailSearch = computed(() => ['email', 'star', 'unread', 'deleted', 'spam', 'all-email', 'send', 'draft', 'contacts', 'user'].includes(route.name))
 const searchOptions = computed(() => {
   if (['contacts', 'user'].includes(route.name)) {

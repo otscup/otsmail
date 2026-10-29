@@ -464,6 +464,10 @@ const en = {
     mcpRevokeSuccess: 'Revoked',
     mcpCreateSuccess: 'Created',
     mcpClientNamePlaceholder: 'e.g. Cursor',
+    showSenderAvatar: "Show sender avatars",
+    aiSummary: "Summarize",
+    aiMinimize: "Minimize",
+    aiWorkingOn: "Current email",
     aiAssistant: 'AI Assistant',
     aiSubtitle: 'Reply, polish, and organize mail',
     aiReply: 'AI Reply',
@@ -476,6 +480,9 @@ const en = {
     aiClose: 'Close',
     aiNotConfigured: 'AI is not configured, please contact the administrator',
     aiFailed: 'AI request failed, please try again later',
+    askAiAboutEmail: 'Ask AI',
+    moveToCategory: 'Move to category',
+    movedToCategory: 'Moved to "{category}"',
 }
 
 export default en

@@ -4,6 +4,7 @@ import router from './router';
 import './style.css';
 import './styles/ios-tokens.css';
 import './styles/ios-overrides.css';
+import './styles/redesign.css';
 import { init } from '@/init/init.js';
 import { createPinia } from 'pinia';
 import piniaPersistedState from 'pinia-plugin-persistedstate';

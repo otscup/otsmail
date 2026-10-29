@@ -82,20 +82,30 @@ const attService = {
 			}
 
 			//邮件正文站内图片转cid附件
-			if (src && (src.startsWith(domainUtils.toOssDomain(r2Domain)) || src.startsWith('attachments/'))) {
+			//r2Domain 留空时图片用 Worker 自身域名（/attachments/…），原来只比对 r2Domain 前缀，
+			//空前缀会匹配任何 URL 且 replace('/','') 把 key 弄坏 —— 统一按 /attachments/ 定位 key
+			const ossBase = domainUtils.toOssDomain(r2Domain);
+			let selfBase = '';
+			try {
+				selfBase = new URL(c.req.url).origin;
+			} catch (e) {
+				selfBase = '';
+			}
+			const attIdx = src ? src.indexOf('attachments/') : -1;
+			const isOssImage = attIdx > -1 && (
+				src.startsWith('attachments/') ||
+				(!!ossBase && src.startsWith(ossBase + '/')) ||
+				(!ossBase && !!selfBase && src.startsWith(selfBase + '/'))
+			);
+
+			if (src && isOssImage) {
 
 				const cid = uuidv4().replace(/-/g, '')
 				img.setAttribute('src', 'cid:' + cid);
 
 				const attData = {};
 
-				if (src.startsWith(domainUtils.toOssDomain(r2Domain))) {
-					attData.key = src.replace(domainUtils.toOssDomain(r2Domain) + '/','');
-				}
-
-				if (src.startsWith('attachments/')) {
-					attData.key = src;
-				}
+				attData.key = src.slice(attIdx);
 
 				attData.contentId = cid;
 				attData.type = attConst.type.EMBED;
@@ -124,21 +134,26 @@ const attService = {
 			}
 
 			const dbImage = dbImageList.find(dbImage => image.key === dbImage.key);
-			if (!dbImage) {
-				return;
+			if (dbImage) {
+				image.size = dbImage.size;
+				image.filename = dbImage.filename;
+				image.mimeType = dbImage.mimeType;
+				image.contentType = dbImage.mimeType;
 			}
 
-			image.size = dbImage.size;
-			image.filename = dbImage.filename;
-			image.mimeType = dbImage.mimeType;
-			image.contentType = dbImage.mimeType;
-
+			// 站内图片（/my/uploadImage 传进 R2 的那种）库里还没有附件行，但对象已经在了，
+			// 直接按 key 取字节；取不到才算这张图无效
 			const obj = await r2Service.getObj(c, image.key);
 			if (!obj) {
 				return;
 			}
 
 			image.content = obj instanceof ArrayBuffer ? obj : await obj.arrayBuffer();
+			// 没有附件行时也要补元数据，否则 cid 图片会变成 application/octet-stream
+			image.filename = image.filename || image.key.split('/').pop() || 'image';
+			image.mimeType = image.mimeType || obj.httpMetadata?.contentType || obj.headers?.get?.('content-type') || 'application/octet-stream';
+			image.contentType = image.mimeType;
+			image.size = image.size || obj.size || image.content.byteLength;
 		}))
 
 		imageDataList = imageDataList.filter(image => image.content);
@@ -153,11 +168,13 @@ const attService = {
 		for (let att of attList) {
 			att.buff = fileUtils.base64ToUint8Array(att.content);
 			att.key = constant.ATTACHMENT_PREFIX + await fileUtils.getBuffHash(att.buff) + fileUtils.getExtFileName(att.filename);
+			// 网页端传的字段名是 contentType，其它调用方传 type，两种都得认（否则 mimeType 落空、R2 也没有 Content-Type）
+			att.mime = att.type || att.contentType || 'application/octet-stream';
 			const attData = { userId, accountId, emailId };
 			attData.key = att.key;
 			attData.size = att.buff.length;
 			attData.filename = att.filename;
-			attData.mimeType = att.type;
+			attData.mimeType = att.mime;
 			attData.type = attConst.type.ATT;
 			attDataList.push(attData);
 		}
@@ -166,7 +183,7 @@ const attService = {
 
 		for (let att of attList) {
 			await r2Service.putObj(c, att.key, att.buff, {
-				contentType: att.type,
+				contentType: att.mime,
 				contentDisposition: `attachment;filename=${att.filename}`
 			});
 		}
@@ -180,15 +197,18 @@ const attService = {
 			attData.emailId = emailId;
 			attData.accountId = accountId;
 			attData.type = attConst.type.EMBED;
-			if (!attData.buff) {
+			// 站内图片（已经在 R2 里、只有 key 没有 buff）也要落一行附件，否则正文换成 cid: 后没有对应附件，图全挂
+			if (!attData.key) {
 				continue;
 			}
-			await r2Service.putObj(c, attData.key, attData.buff, {
-				contentType: attData.mimeType,
-				cacheControl: `max-age=259200`,
-				contentDisposition: `inline;filename=${attData.filename}`
-			});
-			delete attData.buff;
+			if (attData.buff) {
+				await r2Service.putObj(c, attData.key, attData.buff, {
+					contentType: attData.mimeType,
+					cacheControl: `max-age=259200`,
+					contentDisposition: `inline;filename=${attData.filename}`
+				});
+				delete attData.buff;
+			}
 		}
 
 		await orm(c).insert(att).values(attDataList).run();

@@ -78,7 +78,8 @@ const starService = {
 			});
 		} else {
 			list.forEach(emailRow => {
-				emailRow.listText = emailService.toListText(emailRow);
+				// 列表预览：原来调 emailService.toListText，这个方法从来不存在（/star/list 直接 500）
+				emailRow.listText = String(emailRow.text || '').replace(/\s+/g, ' ').trim().slice(0, 120);
 				delete emailRow.text;
 				delete emailRow.content;
 			});

@@ -39,6 +39,16 @@ app.put('/email/unread', async (c) => {
 	return c.json(result.ok());
 })
 
+app.put('/email/category', async (c) => {
+	await emailService.moveCategory(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok());
+})
+
+app.get('/email/counts', async (c) => {
+	const data = await emailService.counts(c, userContext.getUserId(c));
+	return c.json(result.ok(data));
+})
+
 app.get('/email/category-counts', async (c) => {
 	const data = await emailService.categoryCounts(c, userContext.getUserId(c));
 	return c.json(result.ok(data));

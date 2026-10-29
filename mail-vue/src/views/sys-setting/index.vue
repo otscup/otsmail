@@ -119,6 +119,12 @@
                                    :step="0.01" :max="1" :min="0"/>
                 </div>
               </div>
+              <div class="setting-item">
+                <div class="title-item"><span>{{ $t('showSenderAvatar') }}</span></div>
+                <div>
+                  <el-switch v-model="setting.showAvatar" :active-value="1" :inactive-value="0" @change="saveShowAvatar"/>
+                </div>
+              </div>
               <div class="setting-item personalized">
                 <div><span>{{ $t('loginBackground') }}</span></div>
                 <div>
@@ -249,6 +255,15 @@
                   <el-button class="opt-button" style="margin-top: 0" @click="openBlackListForm" size="small"
                              type="primary">
                     <Icon icon="fluent:settings-48-regular" width="16" height="16"/>
+                  </el-button>
+                </div>
+              </div>
+              <div class="setting-item">
+                <div><span>邮件过滤器</span></div>
+                <div>
+                  <el-button class="opt-button" style="margin-top: 0" @click="openFilterForm" size="small"
+                             type="primary">
+                    <Icon icon="mdi:filter-outline" width="16" height="16"/>
                   </el-button>
                 </div>
               </div>
@@ -1054,6 +1069,36 @@
         </el-form>
         <el-button type="primary" style="width: 100%;" :loading="settingLoading" @click="saveBlackList">{{ $t('save') }}</el-button>
       </el-dialog>
+      <el-dialog v-model="filterFormShow" title="邮件过滤器" width="640px" class="filter-dialog">
+        <div class="filter-tip">收信时从上到下匹配；命中后按分类归档，不再走 AI 分类。</div>
+        <div v-for="(rule, index) in filterRules" :key="index" class="filter-rule-row">
+          <el-select v-model="rule.field" style="width: 92px">
+            <el-option label="任意" value="any"/>
+            <el-option label="发件人" value="from"/>
+            <el-option label="主题" value="subject"/>
+            <el-option label="收件人" value="to"/>
+          </el-select>
+          <el-select v-model="rule.op" style="width: 88px">
+            <el-option label="包含" value="contains"/>
+            <el-option label="等于" value="equals"/>
+          </el-select>
+          <el-input v-model="rule.value" placeholder="关键词或地址" style="flex: 1"/>
+          <el-select v-model="rule.category" style="width: 100px">
+            <el-option label="主要" value="primary"/>
+            <el-option label="社交" value="social"/>
+            <el-option label="推广" value="promotion"/>
+            <el-option label="动态" value="updates"/>
+            <el-option label="广告" value="ads"/>
+            <el-option label="垃圾邮件" value="spam"/>
+          </el-select>
+          <el-button text type="danger" @click="filterRules.splice(index, 1)">删除</el-button>
+        </div>
+        <el-button style="width: 100%; margin-top: 10px" @click="addFilterRule">添加规则</el-button>
+        <template #footer>
+          <el-button @click="filterFormShow = false">{{ $t('cancel') }}</el-button>
+          <el-button type="primary" :loading="settingLoading" @click="saveFilters">{{ $t('save') }}</el-button>
+        </template>
+      </el-dialog>
       <el-dialog v-model="aiCodeFilterShow" class="forward-dialog" @closed="resetAiCodeFilter">
         <template #header>
           <div class="forward-head">
@@ -1106,6 +1151,8 @@ const userStore = useUserStore();
 const editTitleShow = ref(false)
 const resendTokenFormShow = ref(false)
 const blackFormShow = ref(false)
+const filterFormShow = ref(false)
+const filterRules = ref([])
 const aiCodeFilterShow = ref(false)
 const aiModelList = ref([])
 const aiModelsLoading = ref(false)
@@ -1243,6 +1290,7 @@ function getSettings() {
     setting.value.aiClassifyMode = setting.value.aiClassifyMode || 'off'
     aiModelList.value = setting.value.aiModel ? [setting.value.aiModel] : []
     settingStore.domainList = settingData.domainList;
+    settingStore.settings.showAvatar = settingData.showAvatar ?? 0;
     resendTokenForm.domain = setting.value.domainList[0]
     loginOpacity.value = setting.value.loginOpacity
     chatOpacity.value = setting.value.chatOpacity ?? 0.88
@@ -1421,7 +1469,7 @@ function saveOidc() {
     oidcProviders: list.map(item => ({
       id: item.id,
       name: item.name || 'SSO',
-      icon: (item.icon || '').trim(),
+      icon: (item.icon || '').replace(/\\\//g, '/').replace(/\\:/g, ':').trim(),
       issuer: item.issuer.trim().replace(/\/+$/, ''),
       clientId: item.clientId.trim(),
       clientSecret: item.clientSecret || '',
@@ -1787,6 +1835,11 @@ async function saveChatOpacity() {
   editSetting({chatOpacity: chatOpacity.value}, true)
 }
 
+async function saveShowAvatar(value) {
+  if (!settingReady.value) return
+  editSetting({showAvatar: value ? 1 : 0}, true)
+}
+
 function delBackground(target = 'background') {
   ElMessageBox.confirm(t('delBackgroundConfirm'), {
     confirmButtonText: t('confirm'),
@@ -1880,6 +1933,28 @@ function openResendForm() {
 
 function openBlackListForm() {
   blackFormShow.value = true
+}
+
+function openFilterForm() {
+  try {
+    filterRules.value = JSON.parse(setting.value.emailFilters || '[]')
+  } catch (e) {
+    filterRules.value = []
+  }
+  if (!Array.isArray(filterRules.value)) filterRules.value = []
+  filterFormShow.value = true
+}
+
+function addFilterRule() {
+  filterRules.value.push({field: 'from', op: 'contains', value: '', category: 'social'})
+}
+
+function saveFilters() {
+  const rules = filterRules.value
+    .filter(rule => String(rule.value || '').trim())
+    .map(rule => ({...rule, value: String(rule.value).trim()}))
+  editSetting({emailFilters: JSON.stringify(rules)}, true)
+  filterFormShow.value = false
 }
 
 function openAiCodeFilter() {
@@ -2673,6 +2748,29 @@ form .el-button {
 
 :deep(.el-select__wrapper) {
   min-height: 28px;
+}
+
+.filter-tip {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.filter-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 640px) {
+  .filter-rule-row {
+    flex-wrap: wrap;
+  }
+
+  .filter-rule-row :deep(.el-input) {
+    flex-basis: 100%;
+  }
 }
 
 </style>

@@ -58,7 +58,7 @@
           </el-button>
           <el-button class="btn" v-for="provider in oidcProviders" :key="provider.id" style="margin-top: 10px"
                      @click="oidcLogin(provider.id)">
-            <img v-if="isImageIcon(provider.icon)" :src="provider.icon" class="oidc-provider-icon" alt=""/>
+            <img v-if="isImageIcon(provider.icon)" :src="normalizeIcon(provider.icon)" class="oidc-provider-icon" alt=""/>
             <Icon v-else :icon="provider.icon || 'mingcute:shield-check-line'" width="18" height="18" style="margin-right: 10px; color: var(--label)" />{{ provider.name || 'SSO' }}
           </el-button>
         </div>
@@ -204,8 +204,11 @@ const oidcProviders = computed(() => {
       ? [{id: '', name: settingStore.settings.oidcName || 'SSO'}]
       : []
 })
+function normalizeIcon(icon) {
+  return String(icon || '').replace(/\\\//g, '/').replace(/\\:/g, ':').trim()
+}
 function isImageIcon(icon) {
-  return /^(https?:\/\/|data:image\/)/i.test(icon || '')
+  return /^(https?:\/\/|data:image\/|\/\/|\/)/i.test(normalizeIcon(icon))
 }
 const showBindForm = ref(false);
 const show = ref('login')
