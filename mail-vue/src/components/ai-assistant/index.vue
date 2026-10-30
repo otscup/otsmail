@@ -166,6 +166,7 @@ watch(() => emailStore.contentData?.email?.emailId, value => {
   }
 })
 function onComposeAi(event) {
+  if (!props.inline) return
   const detail = event.detail || {}
   const current = emailStore.contentData?.email
   activeEmailId.value = Number(detail.emailId) || current?.emailId || 0
