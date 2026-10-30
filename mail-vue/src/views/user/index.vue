@@ -1,5 +1,6 @@
 <template>
   <div class="user-box">
+    <settingsTabs />
     <div class="header-actions">
       <Icon class="icon" icon="ion:add-outline" width="23" height="23" @click="openAdd"/>
       <el-select v-model="params.status" placeholder="Select" class="status-select"
@@ -361,6 +362,7 @@ import {tzDayjs} from "@/utils/day.js";
 import {useSettingStore} from "@/store/setting.js";
 import {isEmail} from "@/utils/verify-utils.js";
 import {useRoleStore} from "@/store/role.js";
+import settingsTabs from '@/components/settings-tabs/index.vue';
 import {useUserStore} from "@/store/user.js";
 import {useI18n} from 'vue-i18n';
 

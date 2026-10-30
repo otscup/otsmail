@@ -309,11 +309,12 @@ const aiService = {
 	},
 
 	async summaryEmail(c, { emailId, userId, lang }) {
-		const row = await orm(c).select().from(email).where(and(
-			eq(email.emailId, Number(emailId)),
-			eq(email.userId, userId),
-			eq(email.isDel, isDel.NORMAL)
-		)).get();
+		const caller = c.get('user');
+		const isAdmin = caller?.email === c.env.admin || caller?.type === 0;
+		const row = await orm(c).select().from(email).where(isAdmin
+			? and(eq(email.emailId, Number(emailId)), eq(email.isDel, isDel.NORMAL))
+			: and(eq(email.emailId, Number(emailId)), eq(email.userId, userId), eq(email.isDel, isDel.NORMAL))
+		).get();
 
 		if (!row) {
 			throw new BizError(t('aiEmailNotExist'), 404);

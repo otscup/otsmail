@@ -20,7 +20,7 @@ const {t} = useI18n()
 const tabs = computed(() => {
   const list = [{path: '/settings', label: t('settings')}]
   if (userStore.user?.role?.permKeys?.includes('*')) list.push({path: '/sys-setting', label: t('systemSettings')})
-  list.push({path: '/reg-key', label: t('regKey')}, {path: '/analysis', label: t('analysis')})
+  list.push({path: '/user', label: t('accountPermissions')}, {path: '/reg-key', label: t('regKey')}, {path: '/analysis', label: t('analysis')})
   return list
 })
 </script>

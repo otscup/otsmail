@@ -3225,3 +3225,88 @@ html.dark .email-container .email-row:hover {
 .all-email-page .mailbox-reader-empty span { font-weight:600; color:var(--rd-text); }
 .all-email-page .mailbox-reader-empty small { font-size:12px; }
 @media (max-width:1366px) { .all-email-page { display:block; overflow:auto; } .all-email-page .mailbox-reader-empty { display:none; } }
+
+/* v14: settings as clean single-column rows */
+.settings-container .card-grid {
+  display: block !important;
+  column-count: 1 !important;
+  width: 100% !important;
+  max-width: 1040px !important;
+  margin: 0 auto !important;
+}
+.settings-container .settings-card,
+.settings-container .ai-settings-card {
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 0 12px !important;
+  break-inside: auto !important;
+}
+.settings-container .setting-item {
+  display: grid !important;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) !important;
+  align-items: center !important;
+  justify-content: initial !important;
+  gap: 16px !important;
+  padding: 12px 0 !important;
+}
+.settings-container .setting-item.personalized {
+  align-items: center !important;
+}
+.settings-container .setting-item > div:first-child {
+  white-space: normal !important;
+  line-height: 1.35 !important;
+  word-break: keep-all !important;
+}
+.settings-container .setting-item.personalized > div:first-child {
+  white-space: normal !important;
+}
+.settings-container .setting-item > div:last-child {
+  justify-self: end !important;
+  min-width: 0 !important;
+}
+.settings-container .setting-item > div:last-child .el-input,
+.settings-container .setting-item > div:last-child .el-select {
+  max-width: 320px;
+}
+
+/* v14: list header/pager/actions: no card shadow, calm hover */
+.layout-v2 .email-container .email-row,
+.layout-v2 .email-container .header-actions {
+  box-shadow: none !important;
+}
+.layout-v2 .email-container .email-row {
+  border-bottom: 1px solid var(--rd-line) !important;
+}
+.layout-v2 .email-container .email-row.all-email {
+  height: 96px !important;
+}
+.layout-v2 .email-container .header-actions {
+  border-bottom: 1px solid var(--rd-line) !important;
+}
+.layout-v2 .email-container .header-actions .reload {
+  width: 24px; height: 24px; border: 0; background: transparent !important;
+  color: var(--rd-muted); border-radius: 6px; box-shadow: none !important;
+  display: grid; place-items: center; cursor: pointer;
+}
+.layout-v2 .email-container .header-actions .reload:hover { background: var(--rd-panel-2) !important; color: var(--rd-text); }
+.layout-v2 .email-container .mail-pager .pager-btn {
+  width: 24px; height: 24px; border: 0; background: transparent !important;
+  color: var(--rd-muted); font-size: 18px; line-height: 1; border-radius: 6px; cursor: pointer;
+}
+.layout-v2 .email-container .mail-pager .pager-btn:hover:not(:disabled) { background: var(--rd-panel-2) !important; color: var(--rd-text); }
+.layout-v2 .email-container .pager-ellipsis { color: var(--rd-faint); font-size: 12px; margin: 0 1px; }
+.layout-v2 .email-container .email-actions {
+  background: var(--rd-panel) !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  right: 0 !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+}
+.layout-v2 .email-container .email-row:hover .email-time { opacity: .18; }
+.layout-v2 .email-container .email-actions .email-action {
+  box-shadow: none !important;
+}
+
+.user-box .settings-tabs { margin: 0 0 8px; border-radius: 0; }

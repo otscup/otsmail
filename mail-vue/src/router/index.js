@@ -68,6 +68,12 @@ const routes = [
                 }
             },
             {
+                path: '/user',
+                name: 'user',
+                component: () => import('@/views/user/index.vue'),
+                meta: {title: 'AccountPermissions', name: 'user', menu: false}
+            },
+            {
                 path: '/sys-setting',
                 name: 'sysSetting',
                 component: () => import('@/views/sys-setting/index.vue'),

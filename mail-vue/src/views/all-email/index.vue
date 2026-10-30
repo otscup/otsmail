@@ -4,6 +4,7 @@
     <emailScroll ref="sysEmailScroll"
                  :get-emailList="getEmailList"
                  :email-delete="allEmailDelete"
+                 :email-read="emailRead"
                  :email-unread="emailUnread"
                  :star-add="starAdd"
                  :star-cancel="starCancel"
@@ -80,7 +81,7 @@
 
 <script setup>
 import {starAdd, starCancel} from "@/request/star.js";
-import {emailUnread} from "@/request/email.js";
+import {emailRead, emailUnread} from "@/request/email.js";
 import emailScroll from "@/components/email-scroll/index.vue"
 import MailContent from "@/views/content/index.vue"
 import {computed, defineOptions, reactive, ref, watch, onMounted, onUnmounted} from "vue";

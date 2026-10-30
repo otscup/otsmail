@@ -3,17 +3,47 @@
     <div class="header-actions">
       <div class="mail-page-title"><b>{{ pageTitleEn }}</b><span>{{ pageTitle }}</span></div>
       <div class="header-left" :style="'padding-left:' + actionLeft">
-
+        <div v-if="checkedEmailCount" class="selection-bar">
+          <button type="button" class="selection-clear" :title="t('clearSelection')" @click="clearSelection">
+            <Icon icon="mdi:close" width="16" height="16"/>
+          </button>
+          <span class="selection-count">{{ $t('selectedCount', {count: checkedEmailCount}) }}</span>
+          <button v-if="props.emailRead && props.type !== 'draft'" type="button" class="selection-action" :title="t('markAsRead')" @click="handleRead">
+            <Icon icon="fluent:mail-read-20-regular" width="16" height="16"/>
+          </button>
+          <button v-if="props.emailUnread && props.type !== 'draft'" type="button" class="selection-action" :title="t('markAsUnread')" @click="handleUnread">
+            <Icon icon="fluent:mail-unread-20-regular" width="16" height="16"/>
+          </button>
+          <button v-if="props.type === 'email' || props.type === 'star'" type="button" class="selection-action" :title="t('markSpam')" @click="spamSelected">
+            <Icon icon="mdi:email-remove-outline" width="16" height="16"/>
+          </button>
+          <button type="button" class="selection-action danger" :title="t('delete')" @click="handleDelete">
+            <Icon icon="fluent:delete-20-regular" width="16" height="16"/>
+          </button>
+          <el-dropdown v-if="['email','star','all-email'].includes(props.type)" trigger="click" @command="moveSelectedTo">
+            <button type="button" class="selection-action" :title="t('moveToCategory')">
+              <Icon icon="mdi:folder-move-outline" width="16" height="16"/>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item v-for="item in moveCategories" :key="'bulk-move-'+item.key" :command="item.key">
+                  <div class="right-dropdown-item"><Icon :icon="item.icon" width="18" height="18"/><span>{{ t(item.label) }}</span></div>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </div>
 
       <div class="header-right">
-        <Icon class="icon reload" :class="{ spinning: loading }" icon="ion:reload" width="15" height="15" @click="refresh"/>
-        <span class="email-count" v-if="total">{{ $t('emailCount', {total: total}) }}</span>
+        <button type="button" class="icon reload" :class="{ spinning: loading }" :title="t('refresh')" @click="refresh"><Icon icon="ion:reload" width="15" height="15"/></button>
         <div class="mail-pager" v-if="total > pageSize">
-          <button type="button" class="pager-btn" :disabled="page <= 1" :title="t('prevPage')" @click="goPage(-1)"><span class="pager-ico left"></span></button>
+          <button type="button" class="pager-btn" :disabled="page <= 1" :title="t('prevPage')" @click="goPage(-1)">‹</button>
           <span class="pager-num">{{ page }} / {{ pageCount }}</span>
-          <button type="button" class="pager-btn" :disabled="page >= pageCount" :title="t('nextPage')" @click="goPage(1)"><span class="pager-ico right"></span></button>
+          <button type="button" class="pager-btn" :disabled="page >= pageCount" :title="t('nextPage')" @click="goPage(1)">›</button>
+          <span class="pager-ellipsis">…</span>
         </div>
+        <span class="email-count" v-if="total">{{ $t('emailCount', {total: total}) }}</span>
       </div>
     </div>
 
@@ -40,18 +70,13 @@
                         :key="keyCount"
         >
           <template #default="{ data: item, index }" >
-            <div :class="['email-row', props.type, { 'is-unread': item.unread === EmailUnreadEnum.UNREAD && showUnread, 'is-open': emailStore.contentData?.email?.emailId === item.emailId, 'ctx-open': dropdownShow && rightClickEmail.emailId === item.emailId }]"
+            <div :class="['email-row', props.type, { 'is-unread': item.unread === EmailUnreadEnum.UNREAD && showUnread, 'is-open': emailStore.contentData?.email?.emailId === item.emailId, 'is-checked': item.checked, 'ctx-open': dropdownShow && rightClickEmail.emailId === item.emailId }]"
                  :data-checked="item.checked"
                  @click="jumpDetails(item)"
                  v-if="!item.expand"
                  :key="item.emailId"
                  @contextmenu="handleContextmenu($event, item)"
-                 :style="item.rightChecked ? 'background: #FDF6EC' : ''"
             >
-              <el-checkbox :class=" props.type === 'all-email' ? 'all-email-checkbox' : 'checkbox'"
-                           v-model="item.checked"
-                           :disabled="!item.checked && isSelectMax"
-                           @click.stop></el-checkbox>
               <div @click.stop="starChange(item)" class="pc-star" v-if="showStar">
                 <Icon v-if="item.isStar" icon="fluent-color:star-16" width="20" height="20"/>
                 <Icon v-else icon="solar:star-line-duotone" width="18" height="18"/>
@@ -109,12 +134,6 @@
                     <span class="email-content" v-html="highlightText(item.formatText || '\u200B')"></span>
                   </div>
                   <div class="user-info" v-if="showUserInfo">
-                    <div class="user">
-                      <span>
-                        <Icon icon="mynaui:user" width="20" height="20"/>
-                      </span>
-                      <span>{{ item.userEmail }}</span>
-                    </div>
                     <div class="account">
                       <span>
                         <Icon icon="mdi-light:email" width="20" height="20"/>
@@ -172,6 +191,14 @@
     >
       <template #dropdown>
         <el-dropdown-menu>
+          <el-dropdown-item @click="startSelection(rightClickEmail)">
+            <template #default>
+              <div class="right-dropdown-item">
+                <Icon :icon="rightClickEmail.checked ? 'mdi:checkbox-multiple-blank-outline' : 'mdi:checkbox-multiple-marked-outline'" width="20" height="20" />
+                <span>{{ rightClickEmail.checked ? t('cancelSelect') : t('select') }}</span>
+              </div>
+            </template>
+          </el-dropdown-item>
           <el-dropdown-item v-if="rightClickEmail.code" @click="copyCode(rightClickEmail.code)" >
             <template #default>
               <div class="right-dropdown-item">
@@ -607,8 +634,8 @@ const list = computed(() => {
 })
 
 const itemHeight = computed(() => {
-    // card rows (72px) + vertical gutter (4px)
-    return 78
+    // all-email rows carry the account line, so they need one more line
+    return props.type === 'all-email' ? 96 : 78
 })
 
 watch(() => emailList.length, () => {
@@ -732,7 +759,6 @@ const handleContextmenu = (event, email) => {
 
   rightClickEmail.value = email;
   rightClickEmail.value.rightChecked = true
-  if (!email.checked) email.checked = true
 }
 
 function updateHasScrollbar() {
@@ -1065,6 +1091,12 @@ function updateCheckStatus() {
   isIndeterminate.value = checkedCount > 0 && !checkAll.value;
 }
 
+function startSelection(email) {
+  email.checked = !email.checked
+  updateCheckStatus()
+  dropdownRef.value?.handleClose()
+}
+
 function jumpDetails(email) {
 
   if (dropdownShow.value) {
@@ -1077,6 +1109,11 @@ function jumpDetails(email) {
     if (sel.toString().trim()) {
       return
     }
+  }
+  if (checkedEmailCount.value > 0) {
+    email.checked = !email.checked
+    updateCheckStatus()
+    return
   }
   clearSelection()
   emit('jump', email)
@@ -1931,6 +1968,12 @@ ul {
 :deep(.email-sender .email-actions) { display:none; align-items:center; gap:1px; position:absolute; right:54px; top:7px; z-index:2; background:var(--rd-panel,transparent); border-radius:5px; }
 :deep(.email-sender:hover .email-actions), :deep(.email-row:hover .email-actions) { display:flex; }
 :deep(.email-row.ctx-open .email-actions) { display:none !important; }
+:deep(.email-row.is-checked) { background: color-mix(in srgb, var(--rd-accent, #0a84ff) 7%, transparent) !important; }
+.selection-bar { display:flex; align-items:center; gap:6px; min-width:0; }
+.selection-clear, .selection-action { width:28px; height:28px; border:0; border-radius:8px; background:transparent; color:var(--rd-muted); display:grid; place-items:center; padding:0; cursor:pointer; }
+.selection-clear:hover, .selection-action:hover { background:var(--rd-panel-2); color:var(--rd-text); }
+.selection-action.danger:hover { background:rgba(239,68,68,.1); color:#dc2626; }
+.selection-count { font-size:12px; font-weight:650; color:var(--rd-text); white-space:nowrap; }
 :deep(.email-sender .email-action) { width:20px; height:20px; border:0; background:transparent; border-radius:5px; color:var(--rd-muted); display:grid; place-items:center; padding:0; }
 :deep(.email-sender .email-action:hover) { background:var(--rd-panel-2); color:var(--rd-text); }
 :deep(.email-sender .email-action.disabled) { opacity:.32; }

@@ -25,11 +25,20 @@ const translationService = {
 			throw new BizError('不支持的目标语言 Unsupported target language', 400);
 		}
 
+		const caller = c.get('user');
+		const isAdmin = caller?.email === c.env.admin || caller?.type === 0;
+		const e = await orm(c).select().from(email)
+			.where(isAdmin
+				? eq(email.emailId, emailId)
+				: and(eq(email.emailId, emailId), eq(email.userId, userId)))
+			.get();
+		if (!e) throw new BizError('Email not found', 404);
+
 		const cached = await orm(c).select().from(emailTranslation)
 			.where(and(
 				eq(emailTranslation.emailId, emailId),
 				eq(emailTranslation.targetLang, targetLang),
-				eq(emailTranslation.userId, userId),
+				eq(emailTranslation.userId, e.userId),
 			)).get();
 		if (cached) {
 			return {
@@ -39,11 +48,6 @@ const translationService = {
 				fromCache: true,
 			};
 		}
-
-		const e = await orm(c).select().from(email)
-			.where(and(eq(email.emailId, emailId), eq(email.userId, userId)))
-			.get();
-		if (!e) throw new BizError('邮件不存在 Email not found', 404);
 
 		const rawHtml = e.content || '';
 		const rawText = e.text || '';
@@ -78,7 +82,7 @@ const translationService = {
 		}
 
 		await orm(c).insert(emailTranslation).values({
-			emailId, targetLang, userId,
+			emailId, targetLang, userId: e.userId,
 			translatedSubject: result.subject,
 			translatedContent: result.content,
 			sourceLang: result.sourceLang || (detected !== 'und' ? detected : null),
