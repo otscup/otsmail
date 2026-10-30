@@ -199,9 +199,9 @@ const emailService = {
 			.run();
 	},
 
-	receive(c, params, cidAttList, r2domain) {
+	async receive(c, params, cidAttList, r2domain) {
 		params.content = this.imgReplace(params.content, cidAttList, r2domain)
-		return orm(c).insert(email).values({ ...params }).returning().get();
+		return await orm(c).insert(email).values({ ...params }).returning().get();
 	},
 
 	//邮件发送

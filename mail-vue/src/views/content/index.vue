@@ -68,7 +68,7 @@
           {{ displaySubject }}
         </div>
         <div class="content">
-          <div class="email-info">
+          <div class="email-info" :class="{ expanded: detailsOpen }" @click="detailsOpen = !detailsOpen">
             <div class="reader-avatar"><span>{{ senderInitial(email.name) }}</span></div>
             <div class="email-info-main">
               <div class="send"><span class="send-source">{{$t('from')}}</span>
@@ -81,10 +81,13 @@
                   </el-tooltip>
                 </div>
               </div>
-              <div class="receive"><span class="source">{{$t('recipient')}}</span><span class="receive-email">{{  formateReceive(email.recipient) }}</span></div>
-              <div class="date">
+              <div class="receive" v-if="detailsOpen"><span class="source">{{$t('recipient')}}</span><span class="receive-email">{{  formateReceive(email.recipient) }}</span></div>
+              <div class="date" v-if="detailsOpen">
                 <div>{{ formatDetailDate(email.createTime) }}</div>
               </div>
+              <button type="button" class="detail-toggle" :aria-expanded="detailsOpen" @click.stop="detailsOpen = !detailsOpen">
+                <Icon :icon="detailsOpen ? 'mdi:chevron-up' : 'mdi:chevron-down'" width="18" height="18"/>
+              </button>
             </div>
             <el-alert v-if="email.status === 3" :closable="false" :title="toMessage(email.message)" class="email-msg" type="error" show-icon />
             <el-alert v-if="email.status === 4" :closable="false" :title="$t('complained')" class="email-msg" type="warning" show-icon />
@@ -199,6 +202,7 @@ const router = useRouter()
 const email = emailStore.contentData.email
 const showPreview = ref(false)
 const showSummary = ref(false)
+const detailsOpen = ref(false)
 const summary = ref('')
 const summaryLoading = ref(false)
 const summaryError = ref('')

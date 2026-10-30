@@ -605,9 +605,9 @@ html[data-theme="dark"] .el-dropdown__popper {
 
 
 /* login */
-#login-box { background: var(--rd-bg) !important; align-items: center; justify-content: flex-end; padding-right: 9vw; position: relative; overflow: hidden; }
-#login-box::before { content: "OTSCUP\A Mail, reimagined."; white-space: pre; position: absolute; left: 8vw; top: 50%; transform: translateY(-50%); font-size: 52px; line-height: 1.05; font-weight: 780; letter-spacing: -.055em; color: var(--rd-text); }
-#login-box::after { content: ""; position: absolute; left: 8vw; top: calc(50% + 100px); width: 120px; height: 3px; border-radius: 3px; background: linear-gradient(90deg, var(--rd-accent), var(--rd-accent-2)); }
+#login-box { background: var(--rd-bg) !important; align-items: center; justify-content: center; padding: 20px; position: relative; overflow: hidden; }
+#login-box::before { content: none !important; white-space: pre; position: absolute; left: 8vw; top: 50%; transform: translateY(-50%); font-size: 52px; line-height: 1.05; font-weight: 780; letter-spacing: -.055em; color: var(--rd-text); }
+#login-box::after { content: none !important; position: absolute; left: 8vw; top: calc(50% + 100px); width: 120px; height: 3px; border-radius: 3px; background: linear-gradient(90deg, var(--rd-accent), var(--rd-accent-2)); }
 #login-box .form-wrapper { position: relative; z-index: 2; width: min(400px, 90vw); }
 #login-box .form-wrapper .container { width: 100%; background: color-mix(in srgb, var(--rd-panel) 88%, transparent); border: 1px solid var(--rd-line); border-radius: 24px; padding: 34px 32px 30px; box-shadow: var(--rd-shadow-lg); backdrop-filter: blur(22px); }
 #login-box .form-title { font-size: 27px; font-weight: 780; letter-spacing: -.04em; }
@@ -1018,3 +1018,47 @@ body.compose-ai-open .write-box { width: min(700px, calc(100vw - 420px)) !import
   .mail-detail .reader-summary-btn { width: 28px !important; min-width: 28px !important; height: 28px !important; padding: 0 !important; border-radius: 8px !important; }
   .mail-detail .reader-summary-btn span { display: none !important; }
 }
+
+/* v11: keep header chrome icon-only, no circles/boxes */
+.layout-v2 .header .icon-item,
+.layout-v2 .header .sun-icon,
+.layout-v2 .header .dark-icon,
+.layout-v2 .header .notice {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.layout-v2 .header .icon-item:hover,
+.layout-v2 .header .sun-icon:hover,
+.layout-v2 .header .dark-icon:hover,
+.layout-v2 .header .notice:hover {
+  background: var(--fill-quaternary) !important;
+}
+
+/* v11 reader: same column width for toolbar and body; compact sender */
+.layout-v2 .mail-detail .header-actions {
+  width: 100% !important;
+  max-width: none;
+  margin: 0 !important;
+  padding: 0 40px !important;
+  background: transparent !important;
+  border-bottom: 1px solid var(--rd-line) !important;
+}
+.layout-v2 .mail-detail .container { padding-left: 40px !important; padding-right: 40px !important; }
+.layout-v2 .mail-detail .email-info { cursor: pointer; position: relative; }
+.layout-v2 .mail-detail .detail-toggle { margin-left: auto; flex: 0 0 auto; border: 0; background: transparent; color: var(--rd-faint); cursor: pointer; padding: 4px; border-radius: 8px; }
+.layout-v2 .mail-detail .detail-toggle:hover { background: var(--fill-quaternary); color: var(--rd-text); }
+@media (max-width: 600px) {
+  .layout-v2 .mail-detail .header-actions { padding: 0 12px !important; }
+  .layout-v2 .mail-detail .container { padding-left: 18px !important; padding-right: 18px !important; }
+  .layout-v2 .mail-detail .detail-ai { display: none !important; }
+  .layout-v2 .ai-mini-bubble { display: none !important; }
+}
+
+.layout-v2 .mail-detail .email-info:not(.expanded) .send-name > span:last-child,
+.layout-v2 .mail-detail .email-info:not(.expanded) .add-contact-inline { display: none !important; }
+
+/* v11 login: truly centered, no side hero */
+#login-box { justify-content: center !important; padding: 20px !important; }
+#login-box .form-wrapper { position: relative !important; right: auto !important; left: auto !important; margin: 0 auto !important; }
+#login-box::before, #login-box::after { content: none !important; display: none !important; }

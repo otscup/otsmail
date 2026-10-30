@@ -217,8 +217,7 @@ function queueSearch() {
 }
 
 function clearSearch() {
-  searchText.value = ''
-  applySearch()
+  handleReset()
   focusInput()
 }
 

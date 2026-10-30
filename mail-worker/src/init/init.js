@@ -49,6 +49,7 @@ const dbInit = {
 		await this.otsmail_18DB(c);
 		await this.otsmail_19DB(c);
 		await this.otsmail_20DB(c);
+		await this.otsmail_21DB(c);
 		await this.otsmail_9DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
@@ -1005,6 +1006,19 @@ async otsmail_5DB(c) {
 			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN ai_summary_mode TEXT NOT NULL DEFAULT 'manual';`).run();
 		} catch (e) {
 			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+	async otsmail_21DB(c) {
+		try {
+			await Promise.all([
+				c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_dedupe ON email(message_id, to_email, type, status)`).run(),
+				c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_counts ON email(user_id, is_del, type, spam, unread, category)`).run(),
+				c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_box_page ON email(user_id, is_del, type, spam, category, email_id)`).run(),
+				c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_account_page ON email(user_id, account_id, is_del, type, spam, category, email_id)`).run()
+			]);
+		} catch (e) {
+			console.warn(`index: ${e.message}`);
 		}
 	},
 

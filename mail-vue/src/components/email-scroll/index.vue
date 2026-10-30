@@ -27,7 +27,7 @@
           <Icon class="icon delete" icon="mdi:folder-move-outline" width="20" height="20"/>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item v-for="item in categories" :key="'bulk-'+item.key"
+              <el-dropdown-item v-for="item in moveCategories" :key="'bulk-'+item.key"
                                 :command="item.key" :disabled="activeCategory === item.key">
                 <div class="right-dropdown-item">
                   <Icon :icon="item.icon" width="18" height="18"/>
@@ -108,7 +108,7 @@
                   <span class="name">
                     <span>
                       <div class="unread" v-if="isMobile && (item.unread === EmailUnreadEnum.UNREAD && showUnread) "/>
-                      <slot name="name" :email="item"> {{ item.name }}</slot>
+                      <slot name="name" :email="item"><span v-html="highlightText(item.name || '')"></span></slot>
                     </span>
                     <span>
                       <Icon v-if="item.isStar" icon="fluent-color:star-16" width="18" height="18"/>
@@ -265,7 +265,7 @@
             <el-dropdown-item disabled class="right-dropdown-label">
               <span>{{ t('moveToCategory') }}</span>
             </el-dropdown-item>
-            <el-dropdown-item v-for="item in categories" :key="'move-'+item.key"
+            <el-dropdown-item v-for="item in moveCategories" :key="'move-'+item.key"
                               :disabled="activeCategory === item.key"
                               @click="moveToCategory([rightClickEmail.emailId], item.key)">
               <template #default>
@@ -520,6 +520,7 @@ const categories = [
   {key: 'spam', label: 'categorySpam', icon: 'mdi:alert-octagon-outline'}
 ]
 const tabCategories = computed(() => categories.filter(item => !['ads', 'spam'].includes(item.key)))
+const moveCategories = computed(() => categories.filter(item => !['ads','spam'].includes(item.key)))
 
 function senderInitial(name) {
   const v = String(name || '?').trim()

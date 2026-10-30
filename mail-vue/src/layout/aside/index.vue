@@ -37,7 +37,7 @@
           <span class="menu-badge" v-if="counts.inbox">{{ counts.inbox }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'allMail'})" index="allMail">
-          <Icon icon="mdi:inbox-multiple-outline" width="20" height="20" />
+          <Icon icon="mdi:email-multiple-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 21px"><b>All Mail</b><small>所有邮件</small></span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'unread'})" index="unread"

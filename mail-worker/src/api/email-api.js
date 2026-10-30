@@ -4,6 +4,26 @@ import result from '../model/result';
 import userContext from '../security/user-context';
 import attService from '../service/att-service';
 
+const countKey = userId => `email:counts:${userId}`;
+
+async function getCounts(c, userId) {
+	const cached = await c.env.KV?.get(countKey(userId), 'json');
+	if (cached) return cached;
+	const data = await emailService.counts(c, userId);
+	await c.env.KV?.put(countKey(userId), JSON.stringify(data), { expirationTtl: 1800 });
+	return data;
+}
+
+// Any email mutation invalidates the cached counters. Inbound delivery invalidates separately.
+app.use('/email/*', async (c, next) => {
+	await next();
+	if (c.req.method !== 'GET') {
+		try {
+			const userId = userContext.getUserId(c);
+			if (userId) await c.env.KV?.delete(countKey(userId));
+		} catch (e) { /* auth failure already handled by the route */ }
+	}
+});
 app.get('/email/list', async (c) => {
 	const data = await emailService.list(c, c.req.query(), userContext.getUserId(c));
 	return c.json(result.ok(data));
@@ -45,17 +65,17 @@ app.put('/email/category', async (c) => {
 })
 
 app.get('/email/counts', async (c) => {
-	const data = await emailService.counts(c, userContext.getUserId(c));
+	const data = await getCounts(c, userContext.getUserId(c));
 	return c.json(result.ok(data));
 })
 
 app.get('/email/category-counts', async (c) => {
-	const data = await emailService.categoryCounts(c, userContext.getUserId(c));
+	const data = (await getCounts(c, userContext.getUserId(c))).category;
 	return c.json(result.ok(data));
 })
 
 app.get('/email/menu-counts', async (c) => {
-	const data = await emailService.menuCounts(c, userContext.getUserId(c));
+	const data = (await getCounts(c, userContext.getUserId(c))).menu;
 	return c.json(result.ok(data));
 })
 
