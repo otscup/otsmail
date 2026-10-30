@@ -107,6 +107,7 @@ const props = defineProps({
   text: {type: String, default: ''},
   tone: {type: String, default: ''},
   inline: {type: Boolean, default: false},
+  reader: {type: Boolean, default: false},
 })
 
 const emit = defineEmits(['fill'])
@@ -166,7 +167,7 @@ watch(() => emailStore.contentData?.email?.emailId, value => {
   }
 })
 function onComposeAi(event) {
-  if (!props.inline) return
+  if (!props.inline || props.reader) return
   const detail = event.detail || {}
   const current = emailStore.contentData?.email
   activeEmailId.value = Number(detail.emailId) || current?.emailId || 0

@@ -29,7 +29,7 @@
           </el-dropdown-menu>
         </template>
       </el-dropdown>
-      <aiAssistant class="detail-ai" inline :email-id="email.emailId" :email-subject="email.subject"/>
+      <aiAssistant class="detail-ai" inline reader :email-id="email.emailId" :email-subject="email.subject"/>
       <button type="button" class="reader-summary-btn" :class="{active: showSummary}" @click="toggleSummary">
         <Icon icon="mdi:star-four-points" width="16" height="16"/><span>AI Brief</span>
       </button>
