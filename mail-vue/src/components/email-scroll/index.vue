@@ -4,12 +4,20 @@
       <div class="mail-page-title"><b>{{ pageTitleEn }}</b><span>{{ pageTitle }}</span></div>
       <div class="header-left" :style="'padding-left:' + actionLeft">
 
+        <el-tooltip v-if="getSelectedMailsIds().length > 0" :content="t('cancel')" placement="top">
+          <button type="button" class="icon selection-clear" @click="clearSelection" aria-label="cancel selection">
+            <Icon icon="mingcute:close-line" width="16" height="16"/>
+          </button>
+        </el-tooltip>
         <Icon v-perm="'email:delete'" class="icon delete" icon="uiw:delete" width="16" height="16"
               v-if="getSelectedMailsIds().length > 0"
               @click="handleDelete"/>
         <Icon v-perm="'email:delete'" class="icon delete" icon="fluent:mail-read-20-regular" width="21" height="21"
               v-if="getSelectedMailsIds().length > 0 && showUnread"
               @click="handleRead"/>
+        <el-tooltip v-if="getSelectedMailsIds().length > 0 && showUnread" :content="t('markAsUnread')" placement="top">
+          <Icon class="icon delete" icon="fluent:mail-unread-20-regular" width="20" height="20" @click="handleUnread"/>
+        </el-tooltip>
         <el-tooltip v-if="getSelectedMailsIds().length > 0 && props.type === 'email'"
                     :content="t('markSpam')" placement="top">
           <Icon class="icon delete" icon="mdi:email-remove-outline" width="20" height="20" @click="handleSpam"/>
@@ -850,6 +858,23 @@ const handleRead = async () => {
   }
 }
 
+const handleUnread = async () => {
+  const emailIds = getSelectedMailsIds();
+  if (!emailIds.length || !props.emailUnread) return
+  try {
+    await props.emailUnread(emailIds);
+    emailList.forEach(item => { if (emailIds.includes(item.emailId)) item.unread = EmailUnreadEnum.UNREAD })
+    await loadCategoryCounts();
+  } catch (e) {
+    await loadCategoryCounts();
+  }
+}
+
+function clearSelection() {
+  emailList.forEach(item => { item.checked = false })
+  checkedEmailCount.value = 0
+}
+
 function emailRead(emailId) {
   props.emailRead([emailId])
   localRead([emailId]);
@@ -1084,6 +1109,7 @@ function jumpDetails(email) {
       return
     }
   }
+  clearSelection()
   emit('jump', email)
 }
 
@@ -1910,8 +1936,10 @@ ul {
 :deep(.email-row > .checkbox),
 :deep(.email-row > .pc-star) { display: none !important; }
 :deep(.email-row > div:empty) { display: none !important; }
+.selection-clear { display:inline-flex; align-items:center; justify-content:center; border:0; background:transparent; color:var(--label-2); cursor:pointer; padding:2px; border-radius:6px; }
+.selection-clear:hover { background:var(--rd-panel-2, rgba(0,0,0,.05)); }
 .mail-avatar {
-  flex: 0 0 36px; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+  flex: 0 0 36px; width: 36px; height: 36px; border-radius: 50%; display: grid !important; place-items: center;
   color: #fff; font-size: 12px; font-weight: 750; letter-spacing: .02em; margin-top: 2px;
 }
 :deep(.email-row .title) { display: block !important; flex: 1 1 auto; min-width: 0; width: auto !important; }

@@ -209,7 +209,7 @@ async function loadSummary() {
   summaryLoading.value = true
   summaryError.value = ''
   try {
-    const data = await aiSummary(email.emailId)
+    const data = await aiSummary(email.emailId, settingStore.lang === 'en' ? 'en' : 'zh')
     summary.value = data?.text || ''
     if (!summary.value) summaryError.value = 'No summary returned.'
   } catch (e) {

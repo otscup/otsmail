@@ -4,8 +4,8 @@ export function aiReply(emailId, tone) {
     return http.post('/ai/reply', {emailId, tone})
 }
 
-export function aiSummary(emailId) {
-    return http.post('/ai/summary', {emailId})
+export function aiSummary(emailId, lang) {
+    return http.post('/ai/summary', {emailId, lang})
 }
 
 export function aiPolish(text, lang) {

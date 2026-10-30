@@ -308,7 +308,7 @@ const aiService = {
 		};
 	},
 
-	async summaryEmail(c, { emailId, userId }) {
+	async summaryEmail(c, { emailId, userId, lang }) {
 		const row = await orm(c).select().from(email).where(and(
 			eq(email.emailId, Number(emailId)),
 			eq(email.userId, userId),
@@ -326,7 +326,7 @@ const aiService = {
 		}
 
 		const text = await this.runAi(c, {
-			system: 'You summarize an email for a busy reader. Return 2-4 concise bullet points covering the ask, key facts, and any deadline. Use the same language as the email. Plain text only, no markdown fences.',
+			system: `You summarize an email for a busy reader. Return 2-4 concise bullet points covering the ask, key facts, and any deadline. Write the summary in ${lang === 'en' ? 'English' : 'Chinese'}. Plain text only, no markdown fences.`,
 			user: `From: ${row.name || ''} <${row.sendEmail || ''}>\nSubject: ${subject}\n\n${body}`,
 			maxTokens: 360,
 			temperature: 0.3

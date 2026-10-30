@@ -1,5 +1,6 @@
 <template>
   <div class="settings-container">
+    <button class="settings-back" type="button" @click="router.push('/settings')">{{ locale?.startsWith('zh') ? '个人设置' : 'Personal settings' }}</button>
     <div class="loading" :class="firstLoading ? 'loading-show' : 'loading-hide'">
       <loading/>
     </div>
@@ -1103,12 +1104,14 @@ import loading from "@/components/loading/index.vue";
 import {getTextWidth} from "@/utils/text.js";
 import {fileToBase64} from "@/utils/file-utils.js"
 import {useI18n} from 'vue-i18n';
+import {useRouter} from 'vue-router';
 
 defineOptions({
   name: 'sys-setting'
 })
 
 const {t, locale} = useI18n();
+const router = useRouter();
 const ADMIN_EN = {
   '网站设置':'Website', '个性化设置':'Personalization', '邮件设置':'Mail settings', '对象存储':'Object storage',
   '邮件推送':'Mail delivery', 'Turnstile 人机验证':'Turnstile', '网站公告':'Announcement',
@@ -2792,6 +2795,8 @@ form .el-button {
   }
 }
 
+.settings-back { position:fixed; right:16px; top:72px; z-index:60; border:1px solid var(--rd-line, #e5e7eb); border-radius:999px; background:var(--rd-panel,#fff); color:var(--rd-text,#111827); padding:7px 14px; font-size:12px; font-weight:650; cursor:pointer; box-shadow:0 6px 18px rgba(15,23,42,.08); }
+.settings-back:hover { background:var(--rd-panel-2,#f7f9fd); }
 </style>
 
 <style>

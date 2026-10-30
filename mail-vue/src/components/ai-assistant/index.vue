@@ -256,7 +256,7 @@ async function summarizeActive() {
   if (!activeEmailId.value) return
   busy.value = true
   try {
-    const res = await aiSummary(activeEmailId.value)
+    const res = await aiSummary(activeEmailId.value, settingStore.lang === 'en' ? 'en' : 'zh')
     messages.value.push({role: 'ai', text: res?.summary || res?.text || t('aiFailed')})
     scrollToBottom()
   } catch (e) {

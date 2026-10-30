@@ -912,7 +912,8 @@ function submitRegister() {
   height: 100%;
   z-index: 0;
 }
-.login-bg, #background-wrap { display: none !important; }
+#background-wrap { display: none !important; }
+.login-bg { display: block !important; }
 
 @keyframes animateCloud {
   0% {
