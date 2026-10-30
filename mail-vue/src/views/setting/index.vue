@@ -1,7 +1,7 @@
 <template>
   <div class="box">
     <div class="container">
-      <div class="title">{{$t('profile')}}<router-link v-if="isAdmin" to="/sys-setting" class="admin-link">系统设置</router-link></div>
+      <div class="title">{{$t('profile')}}<router-link v-if="isAdmin" to="/sys-setting" class="admin-link">{{ $t('systemSettings') }}</router-link></div>
       <div class="item wide">
         <div>{{$t('avatar')}}</div>
         <div class="row-flex">
@@ -63,37 +63,36 @@
       </div>
     </div>
 
-    <!-- v1.3 第三方账号绑定（大网站模式）：个人设置入口，普通用户可见 -->
     <div class="container">
-      <div class="title">第三方账号绑定</div>
+      <div class="title">{{ $t('thirdPartyAccounts') }}</div>
       <div class="item oauth-item" v-if="settingStore.settings.githubSwitch">
         <div class="provider-label"><Icon icon="mingcute:github-line" width="18" height="18"/><span>GitHub</span></div>
         <div class="binding-actions">
           <template v-if="bindingFor('github')">
-            <span class="bound-account">已绑定 {{ bindingLabel(bindingFor('github')) }}</span>
-            <el-button link type="danger" @click="unbindProvider('github')">解绑</el-button>
+            <span class="bound-account">{{ $t('boundAs', {name: bindingLabel(bindingFor('github'))}) }}</span>
+            <el-button link type="danger" @click="unbindProvider('github')">{{ $t('unbind') }}</el-button>
           </template>
-          <el-button v-else type="primary" @click="bindGithub">绑定 GitHub</el-button>
+          <el-button v-else type="primary" @click="bindGithub">{{ $t('bindProvider', {name:'GitHub'}) }}</el-button>
         </div>
       </div>
       <div class="item oauth-item" v-if="settingStore.settings.googleSwitch">
         <div class="provider-label"><Icon icon="flat-color-icons:google" width="18" height="18"/><span>Google</span></div>
         <div class="binding-actions">
           <template v-if="bindingFor('google')">
-            <span class="bound-account">已绑定 {{ bindingLabel(bindingFor('google')) }}</span>
-            <el-button link type="danger" @click="unbindProvider('google')">解绑</el-button>
+            <span class="bound-account">{{ $t('boundAs', {name: bindingLabel(bindingFor('google'))}) }}</span>
+            <el-button link type="danger" @click="unbindProvider('google')">{{ $t('unbind') }}</el-button>
           </template>
-          <el-button v-else type="primary" @click="bindGoogle">绑定 Google</el-button>
+          <el-button v-else type="primary" @click="bindGoogle">{{ $t('bindProvider', {name:'Google'}) }}</el-button>
         </div>
       </div>
       <div class="item oauth-item" v-if="settingStore.settings.linuxdoSwitch">
         <div class="provider-label"><Icon icon="simple-icons:linux" width="18" height="18"/><span>LinuxDo</span></div>
         <div class="binding-actions">
           <template v-if="bindingFor('linuxdo')">
-            <span class="bound-account">已绑定 {{ bindingLabel(bindingFor('linuxdo')) }}</span>
-            <el-button link type="danger" @click="unbindProvider('linuxdo')">解绑</el-button>
+            <span class="bound-account">{{ $t('boundAs', {name: bindingLabel(bindingFor('linuxdo'))}) }}</span>
+            <el-button link type="danger" @click="unbindProvider('linuxdo')">{{ $t('unbind') }}</el-button>
           </template>
-          <el-button v-else type="primary" @click="bindLinuxDo">绑定 LinuxDo</el-button>
+          <el-button v-else type="primary" @click="bindLinuxDo">{{ $t('bindProvider', {name:'LinuxDo'}) }}</el-button>
         </div>
       </div>
       <div class="item oauth-item" v-for="provider in enabledOidcProviders" :key="provider.id">
@@ -104,16 +103,16 @@
         </div>
         <div class="binding-actions">
           <template v-if="bindingFor(oidcProviderKey(provider))">
-            <span class="bound-account">已绑定 {{ bindingLabel(bindingFor(oidcProviderKey(provider))) }}</span>
+            <span class="bound-account">{{ $t('boundAs', {name: bindingLabel(bindingFor(oidcProviderKey(provider)))}) }}</span>
             <el-switch :model-value="bindingFor(oidcProviderKey(provider)).active !== 0"
                        @change="val => toggleBinding(oidcProviderKey(provider), val)"/>
-            <el-button link type="danger" @click="unbindProvider(oidcProviderKey(provider))">解绑</el-button>
+            <el-button link type="danger" @click="unbindProvider(oidcProviderKey(provider))">{{ $t('unbind') }}</el-button>
           </template>
-          <el-button v-else type="primary" @click="bindOidc(provider.id)">绑定 {{ provider.name || 'SSO' }}</el-button>
+          <el-button v-else type="primary" @click="bindOidc(provider.id)">{{ $t('bindProvider', {name: provider.name || 'SSO'}) }}</el-button>
         </div>
       </div>
       <div class="item" v-if="!settingStore.settings.githubSwitch && !settingStore.settings.googleSwitch && !settingStore.settings.linuxdoSwitch && enabledOidcProviders.length === 0">
-        <div><span>暂无可用第三方登录提供商</span></div>
+        <div><span>{{ $t('noThirdParty') }}</span></div>
       </div>
     </div>
     <div class="language">
@@ -242,7 +241,7 @@ function bindingFor(provider) {
   return bindingMap.value[provider]
 }
 function bindingLabel(binding) {
-  return binding?.name || binding?.username || '已绑定账号'
+  return binding?.name || binding?.username || t('boundAccount')
 }
 function normalizeIcon(icon) {
   return String(icon || '').replace(/\\\//g, '/').replace(/\\:/g, ':').trim()
@@ -264,20 +263,20 @@ async function toggleBinding(provider, active) {
   current.active = active ? 1 : 0
   try {
     await oauthSetBindingActive(provider, !!active)
-    ElMessage({message: active ? '已开启该登录方式' : '已关闭该登录方式', type: 'success', plain: true})
+    ElMessage({message: active ? t('bindingEnabled') : t('bindingDisabled'), type: 'success', plain: true})
   } catch (e) {
     current.active = old
-    ElMessage({message: e?.message || '操作失败', type: 'error', plain: true})
+    ElMessage({message: e?.message || t('bindingFailed'), type: 'error', plain: true})
   }
 }
 async function unbindProvider(provider) {
   try {
-    await ElMessageBox.confirm('解绑后将不能再用这个第三方账号登录，确定解绑？', '解绑', {type: 'warning'})
+    await ElMessageBox.confirm(t('unbindConfirm'), t('unbindTitle'), {type: 'warning'})
     await oauthUnbind(provider)
     oauthBindingList.value = oauthBindingList.value.filter(item => item.provider !== provider)
-    ElMessage({message: '已解绑', type: 'success', plain: true})
+    ElMessage({message: t('unbound'), type: 'success', plain: true})
   } catch (e) {
-    if (e !== 'cancel') ElMessage({message: e?.message || '解绑失败', type: 'error', plain: true})
+    if (e !== 'cancel') ElMessage({message: e?.message || t('unbindFailed'), type: 'error', plain: true})
   }
 }
 onMounted(loadBindings)
@@ -310,7 +309,7 @@ function bindGithub() {
   const clientId = settingStore.settings.githubClientId
   const redirectUri = encodeURIComponent(settingStore.settings.githubCallbackUrl)
   if (!clientId) {
-    ElMessage({ message: 'GitHub 未配置客户端 ID，请管理员先配置', type: 'warning', plain: true })
+    ElMessage({ message: t('providerNotConfigured', {name:'GitHub'}), type: 'warning', plain: true })
     return
   }
   window.location.href =
@@ -321,7 +320,7 @@ function bindGoogle() {
   const clientId = settingStore.settings.googleClientId
   const redirectUri = encodeURIComponent(settingStore.settings.googleCallbackUrl)
   if (!clientId) {
-    ElMessage({ message: 'Google 未配置客户端 ID，请管理员先配置', type: 'warning', plain: true })
+    ElMessage({ message: t('providerNotConfigured', {name:'Google'}), type: 'warning', plain: true })
     return
   }
   window.location.href =
@@ -332,7 +331,7 @@ function bindLinuxDo() {
   const clientId = settingStore.settings.linuxdoClientId
   const redirectUri = encodeURIComponent(settingStore.settings.linuxdoCallbackUrl)
   if (!clientId) {
-    ElMessage({ message: 'LinuxDo 未配置客户端 ID，请管理员先配置', type: 'warning', plain: true })
+    ElMessage({ message: t('providerNotConfigured', {name:'LinuxDo'}), type: 'warning', plain: true })
     return
   }
   window.location.href =
@@ -356,7 +355,7 @@ async function bindOidc(providerId) {
     })
     window.location.href = config.authorizationEndpoint + '?' + params.toString()
   } catch (e) {
-    ElMessage({message: e?.message || 'OIDC 配置读取失败', type: 'error', plain: true})
+    ElMessage({message: e?.message || t('oidcConfigFailed'), type: 'error', plain: true})
   }
 }
 

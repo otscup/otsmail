@@ -91,21 +91,6 @@
             <div class="card-title">{{ $t('customization') }}</div>
             <div class="card-content">
               <div class="setting-item">
-                <div class="title-item"><span>{{ $t('websiteTitle') }}</span></div>
-                <div class="email-title">
-                  <span>{{ setting.title }}</span>
-                  <el-button class="opt-button" size="small" type="primary" @click="editTitleShow = true">
-                    <Icon icon="lsicon:edit-outline" width="16" height="16"/>
-                  </el-button>
-                </div>
-              </div>
-              <div class="setting-item" v-if="setting.subtitle">
-                <div class="title-item"><span>{{ $t('websiteSubtitle') }}</span></div>
-                <div class="email-title">
-                  <span>{{ setting.subtitle }}</span>
-                </div>
-              </div>
-              <div class="setting-item">
                 <div class="title-item"><span>{{ $t('loginBoxOpacity') }}</span></div>
                 <div>
                   <el-input-number size="small" v-model="loginOpacity" @change="opacityChange" :precision="2"
@@ -529,13 +514,6 @@
       </div>
 
       <!-- Dialogs remain the same -->
-      <el-dialog v-model="editTitleShow" :title="$t('changeTitle')" width="340" @open="editSubtitle = setting.subtitle" @closed="editTitle = setting.title">
-        <form @submit.prevent>
-          <el-input type="text" :placeholder="$t('websiteTitle')" v-model="editTitle" @keyup.enter="saveTitle"/>
-          <el-input type="text" style="margin-top: 12px" maxlength="80" :placeholder="$t('websiteSubtitle')" v-model="editSubtitle" @keyup.enter="saveTitle"/>
-          <el-button type="primary" :loading="settingLoading" @click="saveTitle">{{ $t('save') }}</el-button>
-        </form>
-      </el-dialog>
       <el-dialog v-model="resendTokenFormShow" :title="$t('resendToken')" width="340" @closed="cleanResendTokenForm">
         <form @submit.prevent>
           <el-select style="margin-bottom: 15px" v-model="resendTokenForm.domain" placeholder="Select">
@@ -1102,7 +1080,7 @@
 </template>
 
 <script setup>
-import {computed, defineOptions, nextTick, reactive, ref} from "vue";
+import {computed, defineOptions, nextTick, onMounted, onUnmounted, reactive, ref, watch} from "vue";
 import {aiModels, deleteBackground, setBackground, setBlackList, settingQuery, settingSet, tgWebhook, webhookTest} from "@/request/setting.js";
 import {aiClassify} from "@/request/ai.js";
 import {useSettingStore} from "@/store/setting.js";
@@ -1124,6 +1102,47 @@ defineOptions({
 })
 
 const {t, locale} = useI18n();
+const ADMIN_EN = {
+  '网站设置':'Website', '个性化设置':'Personalization', '邮件设置':'Mail settings', '对象存储':'Object storage',
+  '邮件推送':'Mail delivery', 'Turnstile 人机验证':'Turnstile', '网站公告':'Announcement',
+  '用户注册':'User sign-up', '隐藏登录域名':'Hide login domain', '注册码':'Registration code',
+  '添加邮箱':'Add mailbox', '多号模式':'Multi-account', '同步删除':'Sync delete', '邮箱前缀':'Mailbox prefix',
+  '登录透明':'Login opacity', '显示发件人头像':'Show sender avatars', '登录背景':'Login background',
+  '邮件接收':'Receive mail', '自动刷新':'Auto refresh', '邮件发送':'Send mail', '无人收件':'No-recipient mail',
+  'Resend Token':'Resend Token', '邮件黑名单':'Mail blacklist', '邮件过滤器':'Mail filters',
+  '访问域名':'Access domain', 'Telegram 机器人':'Telegram bot', '注册验证':'Registration verification',
+  '企业登录（OIDC）':'Enterprise sign-in (OIDC)', 'AI 接口（OpenAI 兼容）':'AI API (OpenAI compatible)',
+  'AI 收件分类':'AI inbox classification', 'AI 摘要':'AI summary', '翻译（DeepL）':'Translation (DeepL)',
+  'S3 配置':'S3 configuration', 'Webhook 通知':'Webhook notifications', '存储类型':'Storage type',
+  '第三方邮箱':'Third-party mailbox', '全部转发':'Forward all', '转发规则':'Forwarding rules',
+  '识别规则':'Detection rules', '识别验证码':'Detect verification codes', '添加验证':'Add verification',
+  '自动清理':'Auto cleanup', '关闭':'Off', '启用':'On', '已关闭':'Off', '已启用':'On',
+  '关闭（本地规则）':'Off (local rules)', '手动生成摘要':'Manual summary', '先拉取模型':'Fetch models',
+  '拉取模型':'Fetch models', '接口地址':'Endpoint', '模型':'Model', '弹出':'Popup', '登录弹窗':'Login dialog',
+  '保存后立即生效；已配置接口时优先走该接口，留空回退 Workers AI。':'Takes effect immediately; falls back to Workers AI when empty.',
+  '系统设置':'System settings', '写邮件':'Compose', '中':'中'
+}
+let adminObserver
+function translateAdminDom() {
+  if (locale.value !== 'en') return
+  const root = document.querySelector('.scroll-body')
+  if (!root) return
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let node
+  while ((node = walker.nextNode())) {
+    const text = node.textContent.trim()
+    if (ADMIN_EN[text]) node.textContent = node.textContent.replace(text, ADMIN_EN[text])
+  }
+}
+onMounted(() => {
+  nextTick(translateAdminDom)
+  setTimeout(translateAdminDom, 600)
+  adminObserver = new MutationObserver(() => translateAdminDom())
+  adminObserver.observe(document.body, {childList:true, subtree:true})
+})
+onUnmounted(() => adminObserver?.disconnect())
+watch(locale, () => nextTick(translateAdminDom))
+
 const firstLoading = ref(true)
 const settingReady = ref(false)
 const backgroundImage = ref('')

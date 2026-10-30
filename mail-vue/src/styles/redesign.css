@@ -905,3 +905,35 @@ body.compose-ai-open .ai-panel { top: 120px !important; right: 24px !important; 
 
 .send .write-box { width: min(700px, calc(100vw - 40px)) !important; height: min(660px, calc(100vh - 60px)) !important; }
 body.compose-ai-open .write-box { width: min(700px, calc(100vw - 420px)) !important; height: min(660px, calc(100vh - 60px)) !important; }
+
+
+/* v9: centered brand lockup and borderless avatars */
+.layout-v2 .aside .title {
+  height: auto !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 9px !important;
+  padding: 22px 16px 18px !important;
+  text-align: center !important;
+}
+.layout-v2 .aside .brand-logo { width: 44px !important; height: 44px !important; border-radius: 14px !important; }
+.layout-v2 .aside .brand-logo svg { width: 24px !important; height: 24px !important; }
+.layout-v2 .aside .title-text { flex: none !important; width: 100% !important; padding: 0 !important; text-align: center !important; }
+.layout-v2 .aside .title-main { font-size: 19px !important; letter-spacing: .14em !important; text-align: center !important; padding: 0 !important; }
+.layout-v2 .aside .title-sub { font-size: 9px !important; letter-spacing: .28em !important; text-align: center !important; margin-top: 2px !important; }
+.layout-v2 .email-container .mail-avatar {
+  background: transparent !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+.layout-v2 .email-container .mail-avatar > span { background: var(--rd-panel-2) !important; color: var(--rd-text) !important; }
+.layout-v2 .aside .side-avatar {
+  padding: 0 !important;
+  background: var(--rd-panel-2) !important;
+  box-shadow: none !important;
+  border: 0 !important;
+}
+.layout-v2 .aside .side-avatar img { border-radius: 50%; }
+.side-user-dd { width: 100%; }
+.side-user-menu .el-dropdown-menu__item.is-disabled { opacity: .65; font-size: 11px; }

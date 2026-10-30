@@ -25,61 +25,6 @@
       <div v-perm="'ai:use'" class="header-ai">
         <aiAssistant ref="aiAssistantRef" inline class="header-ai-window"/>
       </div>
-      <el-dropdown ref="userinfoRef" @visible-change="e => userInfoShow = e" :teleported="false" popper-class="detail-dropdown">
-        <div class="avatar" @click="userInfoHide" >
-          <div class="avatar-text">
-            <img v-if="userStore.user.avatar" :src="userStore.user.avatar" alt=""/>
-            <div v-else>{{ formatName(userStore.user.email) }}</div>
-          </div>
-          <Icon class="setting-icon" icon="mingcute:down-small-fill" width="24" height="24"/>
-        </div>
-        <template #dropdown>
-          <div class="user-details">
-            <div class="details-avatar">
-              <img v-if="userStore.user.avatar" :src="userStore.user.avatar" alt=""/>
-              <template v-else>{{ formatName(userStore.user.email) }}</template>
-            </div>
-            <div class="user-name">
-              {{ userStore.user.name }}
-            </div>
-            <div class="detail-email" @click="copyEmail(userStore.user.email)">
-              {{ userStore.user.email }}
-            </div>
-            <div class="detail-user-type">
-              <el-tag>{{ userStore.user.role.name }}</el-tag>
-            </div>
-
-            <div class="action-info">
-              <div>
-                <span style="margin-right: 10px">{{ $t('sendCount') }}</span>
-                <span style="margin-right: 10px">{{ $t('accountCount') }}</span>
-              </div>
-              <div>
-                <div>
-                  <span v-if="sendCount" style="margin-right: 5px">{{ sendCount }}</span>
-                  <el-tag v-if="!hasPerm('email:send')">{{ sendType }}</el-tag>
-                  <el-tag v-else>{{ sendType }}</el-tag>
-                </div>
-                <div>
-                  <el-tag v-if="settingStore.settings.manyEmail || settingStore.settings.addEmail">
-                    {{ $t('disabled') }}
-                  </el-tag>
-                  <span v-else-if="accountCount && hasPerm('account:add')"
-                        style="margin-right: 5px">{{ $t('totalUserAccount', {msg: accountCount}) }}</span>
-                  <el-tag v-else-if="!accountCount && hasPerm('account:add')">{{ $t('unlimited') }}</el-tag>
-                  <el-tag v-else-if="!hasPerm('account:add')">{{ $t('unauthorized') }}</el-tag>
-                </div>
-              </div>
-            </div>
-            <div class="logout">
-              <el-button v-if="hasPerm('ai:use')" class="ai-menu-entry" @click="openAiFromMenu">
-                {{ $t('aiAssistant') }}
-              </el-button>
-              <el-button type="primary" :loading="logoutLoading" @click="clickLogout">{{ $t('logOut') }}</el-button>
-            </div>
-          </div>
-        </template>
-      </el-dropdown>
     </div>
   </div>
 </template>

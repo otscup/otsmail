@@ -88,17 +88,26 @@
       <button type="button" class="side-foot-btn" @click="openHelp">
         <Icon icon="mingcute:question-line" width="18" height="18"/><span>Help <small>帮助</small></span>
       </button>
-      <button type="button" class="side-user" @click="router.push({name:'setting'})">
-        <span class="side-avatar">
-          <img v-if="userStore.user.avatar" :src="userStore.user.avatar" alt=""/>
-          <template v-else>{{ userInitial }}</template>
-        </span>
-        <span class="side-user-text">
-          <b>{{ userStore.user.name || 'OTSCUP' }}</b>
-          <small>{{ userStore.user.email }}</small>
-        </span>
-        <Icon icon="mingcute:right-line" width="15" height="15"/>
-      </button>
+      <el-dropdown class="side-user-dd" trigger="click" placement="top-start" @command="sideUserCommand">
+        <button type="button" class="side-user">
+          <span class="side-avatar">
+            <img v-if="userStore.user.avatar" :src="userStore.user.avatar" alt=""/>
+            <template v-else>{{ userInitial }}</template>
+          </span>
+          <span class="side-user-text">
+            <b>{{ userStore.user.name || 'OTSCUP' }}</b>
+            <small>{{ userStore.user.email }}</small>
+          </span>
+          <Icon icon="mingcute:more-2-fill" width="16" height="16"/>
+        </button>
+        <template #dropdown>
+          <el-dropdown-menu class="side-user-menu">
+            <el-dropdown-item disabled>{{ userStore.user.name || 'OTSCUP' }}</el-dropdown-item>
+            <el-dropdown-item disabled>{{ userStore.user.email }}</el-dropdown-item>
+            <el-dropdown-item divided command="logout">{{ $t('logOut') }}</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
   </el-scrollbar>
 </template>
@@ -115,11 +124,21 @@ import {ref, reactive, onMounted, onUnmounted, watch} from "vue";
 import Account from "@/layout/account/index.vue";
 import {emailCounts} from "@/request/email.js";
 import db from "@/db/db.js";
+import {logout} from "@/request/login.js";
+import {clearToken} from "@/utils/token-store.js";
 
 const settingStore = useSettingStore();
 const uiStore = useUiStore();
 const userStore = useUserStore();
 const userInitial = computed(() => String(userStore.user.name || userStore.user.email || 'O').trim().charAt(0).toUpperCase());
+const loggingOut = ref(false)
+async function sideUserCommand(command) {
+  if (command !== 'logout' || loggingOut.value) return
+  loggingOut.value = true
+  logout().catch(() => {})
+  clearToken()
+  router.replace('/login').finally(() => { loggingOut.value = false })
+}
 function openCompose(){ uiStore.writerRef?.open?.() }
 function openHelp(){ ElMessage({message:'帮助文档 / Help: github.com/otscup/otsmail', type:'info', plain:true}) }
 const route = useRoute();
