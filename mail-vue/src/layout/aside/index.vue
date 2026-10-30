@@ -140,7 +140,7 @@ async function sideUserCommand(command) {
   router.replace('/login').finally(() => { loggingOut.value = false })
 }
 function openCompose(){ uiStore.writerRef?.open?.() }
-function openHelp(){ ElMessage({message:'帮助文档 / Help: github.com/otscup/otsmail', type:'info', plain:true}) }
+function openHelp(){ window.open('https://github.com/otscup/otsmail','_blank','noopener,noreferrer') }
 const route = useRoute();
 const counts = reactive({inbox: 0, sent: 0, deleted: 0, spam: 0, drafts: 0});
 let countTimer = null;

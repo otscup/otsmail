@@ -80,6 +80,7 @@ function changeTimeSort() {
 }
 
 function jumpContent(email) {
+  if (email.unread === 0) { emailRead([email.emailId]); email.unread = 1 }
   emailStore.contentData.email = email
   emailStore.contentData.delType = 'logic'
   emailStore.contentData.showUnread = true

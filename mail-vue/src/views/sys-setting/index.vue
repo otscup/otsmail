@@ -1120,7 +1120,14 @@ const ADMIN_EN = {
   '关闭（本地规则）':'Off (local rules)', '手动生成摘要':'Manual summary', '先拉取模型':'Fetch models',
   '拉取模型':'Fetch models', '接口地址':'Endpoint', '模型':'Model', '弹出':'Popup', '登录弹窗':'Login dialog',
   '保存后立即生效；已配置接口时优先走该接口，留空回退 Workers AI。':'Takes effect immediately; falls back to Workers AI when empty.',
-  '系统设置':'System settings', '写邮件':'Compose', '中':'中'
+  '系统设置':'System settings', '写邮件':'Compose', '中':'中',
+  '个人信息':'Personal info', '头像':'Avatar', '修改头像':'Change avatar',
+  '用户名':'Username', '修改':'Edit', '邮箱':'Email', '密码':'Password', '修改密码':'Change password',
+  '两步验证':'Two-step verification', '启用':'Enable', '已关闭':'Off', '已绑定':'Bound', '未绑定':'Not bound',
+  '密码登录强制两步验证':'Require 2FA for password login',
+  '开启后，每次使用密码登录都必须输入验证码；第三方登录不受影响':'Require a code on every password login; third-party sign-in is unaffected.',
+  '浏览器通知':'Browser notifications', '新邮件到达时在系统通知里提醒':'Notify on new mail',
+  '第三方账号绑定':'Third-party accounts', '绑定':'Bind', '解绑':'Unbind', '当前账号':'Current account'
 }
 let adminObserver
 function translateAdminDom() {
@@ -1132,6 +1139,7 @@ function translateAdminDom() {
   while ((node = walker.nextNode())) {
     const text = node.textContent.trim()
     if (ADMIN_EN[text]) node.textContent = node.textContent.replace(text, ADMIN_EN[text])
+    else if (/^\d+\s*个服务商$/.test(text)) node.textContent = text.replace(/^(\d+)\s*个服务商$/, '$1 providers')
   }
 }
 onMounted(() => {

@@ -105,6 +105,7 @@ function getEmailList(emailId, size, category, page) {
 }
 
 function jumpContent(email) {
+  if (email.unread === 0) { emailRead([email.emailId]); email.unread = 1 }
   emailStore.contentData.email = email
   emailStore.contentData.delType = 'logic'
   if (innerWidth > 1366) { selectedEmailId.value = email.emailId; return }

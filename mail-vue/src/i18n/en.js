@@ -72,6 +72,7 @@ const en = {
     unbind: "Disconnect",
     noThirdParty: "No third-party sign-in providers available",
     systemSettings: "System settings",
+    settings: "Personal settings",
     bindingEnabled: "Sign-in enabled",
     bindingDisabled: "Sign-in disabled",
     bindingFailed: "Operation failed",
