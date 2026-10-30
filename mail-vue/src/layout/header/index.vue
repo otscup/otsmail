@@ -522,7 +522,7 @@ function formatName(email) {
       justify-content: center;
     }
 
-    .notice, .dark-icon, .sun-icon {
+    .dark-icon, .sun-icon {
       display: none;
     }
   }
