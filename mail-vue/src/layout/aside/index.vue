@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <el-scrollbar class="scroll">
     <div>
       <div class="title" >
@@ -20,12 +20,12 @@
       <div class="acct" v-perm="'account:query'">
         <button type="button" class="acct-toggle" @click="toggleAcct">
           <Icon icon="mdi:account-multiple-outline" width="18" height="18"/>
-          <span class="acct-label">Accounts <small>邮箱账户</small></span>
+          <span class="acct-label">Accounts <small>閭璐︽埛</small></span>
           <Icon class="acct-chevron" :class="{ open: acctOpen }" icon="mingcute:down-small-fill" width="18" height="18"/>
         </button>
         <el-collapse-transition>
           <div class="acct-panel" v-show="acctOpen">
-            <button type="button" class="all-accounts" @click="router.push('/all-email')"><Icon icon="mdi:email-multiple-outline" width="17" height="17"/><span>All accounts mail <small>所有账户邮件</small></span></button>
+            <button type="button" class="all-accounts" @click="router.push('/all-email')"><Icon icon="mdi:inbox-multiple-outline" width="17" height="17"/><span>All accounts mail <small>所有账户邮件</small></span></button>
             <Account/>
           </div>
         </el-collapse-transition>
@@ -33,13 +33,13 @@
       <el-menu :collapse="false" text-color="var(--label)" active-text-color="var(--blue)" style="margin-top: 10px">
         <el-menu-item @click="router.push({name: 'email'})" index="email"
                       :class="route.meta.name === 'email' ? 'choose-item' : ''">
-          <Icon icon="hugeicons:mailbox-01" width="20" height="20" />
+          <Icon icon="mdi:email-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 21px"><b>Inbox</b><small>{{$t('inbox')}}</small></span>
           <span class="menu-badge" v-if="counts.inbox">{{ counts.inbox }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'unread'})" index="unread"
                       :class="route.meta.name === 'unread' ? 'choose-item' : ''">
-          <Icon icon="mdi:email-multiple-outline" width="20" height="20" />
+          <Icon icon="mdi:email-open-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 21px"><b>Unread</b><small>{{$t('unreadList')}}</small></span>
           <span class="menu-badge" v-if="counts.inbox">{{ counts.inbox }}</span>
         </el-menu-item>
@@ -79,10 +79,10 @@
     </div>
     <div class="side-footer">
       <button type="button" class="side-foot-btn" @click="router.push({name:'setting'})">
-        <Icon icon="fluent:settings-48-regular" width="18" height="18"/><span>Settings <small>设置</small></span>
+        <Icon icon="fluent:settings-48-regular" width="18" height="18"/><span>Settings <small>璁剧疆</small></span>
       </button>
       <button type="button" class="side-foot-btn" @click="openHelp">
-        <Icon icon="mingcute:question-line" width="18" height="18"/><span>Help <small>帮助</small></span>
+        <Icon icon="mingcute:question-line" width="18" height="18"/><span>Help <small>甯姪</small></span>
       </button>
       <el-dropdown class="side-user-dd" trigger="click" placement="top-start" @command="sideUserCommand">
         <button type="button" class="side-user">
@@ -171,7 +171,7 @@ watch(countRefreshMs, value => {
   clearInterval(countTimer);
   countTimer = setInterval(loadCounts, value);
 });
-// 子邮箱默认收起，展开状态记在 localStorage（以前每次刷新都展开，很碍事）
+// 瀛愰偖绠遍粯璁ゆ敹璧凤紝灞曞紑鐘舵€佽鍦?localStorage锛堜互鍓嶆瘡娆″埛鏂伴兘灞曞紑锛屽緢纰嶄簨锛?
 const acctOpen = ref(localStorage.getItem('acctOpen') === '1');
 
 function toggleAcct() {
@@ -241,7 +241,7 @@ function toggleAcct() {
   box-shadow: none;
 }
 
-/* 账户多时在面板里滚动，不把菜单挤下去 */
+/* 璐︽埛澶氭椂鍦ㄩ潰鏉块噷婊氬姩锛屼笉鎶婅彍鍗曟尋涓嬪幓 */
 :deep(.account-box .scrollbar) {
   flex: 1 1 auto;
   min-height: 0;
@@ -495,3 +495,4 @@ function toggleAcct() {
 .all-accounts:hover { background:var(--rd-panel-2); color:var(--rd-text); }
 .all-accounts small { margin-left:auto; font-size:9px; opacity:.6; }
 </style>
+
