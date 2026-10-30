@@ -3324,3 +3324,26 @@ html.dark .email-container .email-row:hover {
 .settings-container .setting-item.personalized > div:last-child { justify-self:stretch !important; width:100% !important; }
 @media (max-width:1200px) { .settings-container .card-grid { column-count:2 !important; } }
 @media (max-width:700px) { .settings-container .card-grid { column-count:1 !important; } }
+
+
+/* 4-column settings masonry: override the earlier one-column flex fallback */
+.settings-container .card-grid {
+  display: block !important;
+  column-count: 4 !important;
+  column-gap: 16px !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+.settings-container .settings-card {
+  display: inline-block !important;
+  width: 100% !important;
+  margin: 0 0 16px !important;
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+}
+@media (max-width: 1200px) {
+  .settings-container .card-grid { column-count: 2 !important; }
+}
+@media (max-width: 700px) {
+  .settings-container .card-grid { column-count: 1 !important; }
+}

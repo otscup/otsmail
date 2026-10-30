@@ -5,7 +5,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onUpdated, watch } from 'vue'
 import DOMPurify from 'dompurify'
 
 const props = defineProps({
@@ -101,7 +101,8 @@ function updateContent() {
       }
 
       .shadow-content {
-        background: #FFFFFF;
+        background: #FFFFFF !important;
+        color: #13181D !important;
         width: fit-content;
         height: fit-content;
         min-width: 100%;
@@ -139,10 +140,24 @@ function autoScale() {
   hostElement.style.zoom = scale
 }
 
+function ensureShadow() {
+  if (!container.value) return
+  if (!container.value.shadowRoot) shadowRoot = container.value.attachShadow({ mode: 'open' })
+}
+
 onMounted(() => {
-  shadowRoot = container.value.attachShadow({ mode: 'open' })
+  ensureShadow()
   updateContent()
   autoScale()
+})
+
+onUpdated(() => {
+  // Vue may replace the host node; only rebuild if the shadow root was lost.
+  if (!container.value?.shadowRoot) {
+    ensureShadow()
+    updateContent()
+    autoScale()
+  }
 })
 
 watch(() => props.html, () => {

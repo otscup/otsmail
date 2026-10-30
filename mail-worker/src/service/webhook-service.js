@@ -2,6 +2,11 @@
 import { emailConst } from '../const/entity-const';
 import domainUtils from '../utils/domain-uitls';
 
+function isWxPush(url) { return /wxpush|wxsend/i.test(String(url || '')) }
+function testBody(secret) {
+	return new URLSearchParams({ token: secret || '', title: 'otsmail webhook test', content: 'otsmail webhook test message' })
+}
+
 const webhookService = {
 
 	// 后台“发送测试”：只发一次，返回可展示的状态与耗时，不参与重试
@@ -10,20 +15,23 @@ const webhookService = {
 		if (!url) {
 			return { ok: false, status: 0, latencyMs: 0, message: 'Webhook URL 为空' };
 		}
-		const headers = { 'Content-Type': 'application/json' };
-		if (secret) headers['Authorization'] = secret;
+		const wx = isWxPush(url);
+		const headers = { 'Content-Type': wx ? 'application/x-www-form-urlencoded' : 'application/json' };
+		if (secret && !wx) headers['Authorization'] = secret;
 		const started = Date.now();
 		try {
 			const res = await fetch(url, {
 				method: 'POST',
 				headers,
-				body: JSON.stringify({
-					test: true,
-					event: 'webhook.test',
-					title: 'otsmail webhook test',
-					text: '这是一条测试消息，收到即表示配置可用。',
-					createTime: new Date().toISOString()
-				})
+				body: wx
+					? testBody(secret).toString()
+					: JSON.stringify({
+						test: true,
+						event: 'webhook.test',
+						title: 'otsmail webhook test',
+						text: '这是一条测试消息，收到即表示配置可用。',
+						createTime: new Date().toISOString()
+					})
 			});
 			return {
 				ok: res.ok,
@@ -59,10 +67,9 @@ const webhookService = {
 			createTime: email.createTime
 		};
 
-		const headers = { 'Content-Type': 'application/json' };
-		if (webhookSecret) {
-			headers['Authorization'] = webhookSecret;
-		}
+		const wx = isWxPush(webhookUrl);
+		const headers = { 'Content-Type': wx ? 'application/x-www-form-urlencoded' : 'application/json' };
+		if (webhookSecret && !wx) headers['Authorization'] = webhookSecret;
 
 		let attempt = 0;
 		const maxAttempt = Number(webhookRetry) || 0;
@@ -71,7 +78,7 @@ const webhookService = {
 				const res = await fetch(webhookUrl, {
 					method: 'POST',
 					headers,
-					body: JSON.stringify(payload)
+					body: wx ? new URLSearchParams({ token: webhookSecret || '', title: email.subject || 'otsmail', content: email.text || email.subject || '' }).toString() : JSON.stringify(payload)
 				});
 				if (!res.ok) {
 					throw new Error(`webhook 返回 ${res.status}`);

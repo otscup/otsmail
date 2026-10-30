@@ -2,13 +2,19 @@
   <div class="header" :class="!hasPerm('email:send') ? 'not-send' : ''">
     <div class="header-btn">
       <hanburger class="header-menu" @click="changeAside"></hanburger>
-      <EmailSearch v-if="showMailSearch"
-                   class="header-mail-search"
-                   :store="emailStore"
-                   :search-options="searchOptions"
-                   @search="refreshMailList"
-                   @reset="refreshMailList"/>
+      <button v-if="showMailSearch" type="button" class="mobile-search-btn" :aria-label="$t('searchMail')" @click="openMobileSearch">
+        <Icon icon="mdi:magnify" width="19" height="19"/>
+      </button>
+      <div v-if="showMailSearch" class="header-search-wrap" :class="{ open: mobileSearchOpen }">
+        <EmailSearch
+                     class="header-mail-search"
+                     :store="emailStore"
+                     :search-options="searchOptions"
+                     @search="refreshMailList"
+                     @reset="refreshMailList"/>
+      </div>
       <span v-else class="breadcrumb-item">{{ $t(route.meta.title) }}</span>
+      <button v-if="mobileSearchOpen" type="button" class="mobile-search-close" @click="closeMobileSearch"><Icon icon="mdi:close" width="18" height="18"/></button>
     </div>
     <div class="toolbar">
       <button v-perm="'email:send'" type="button" class="writer-box" @click="openSend">
@@ -34,6 +40,10 @@
       <div v-perm="'ai:use'" class="header-ai">
         <aiAssistant ref="aiAssistantRef" inline class="header-ai-window"/>
       </div>
+      <button type="button" class="mobile-avatar" @click="changeAside" :aria-label="$t('settings')">
+        <img v-if="userStore.user.avatar" :src="userStore.user.avatar" alt=""/>
+        <span v-else>{{ (userStore.user.name || userStore.user.email || 'A').slice(0,1).toUpperCase() }}</span>
+      </button>
     </div>
   </div>
 </template>
@@ -55,6 +65,7 @@ import hanburger from '@/components/hamburger/index.vue'
 import {hasPerm} from "@/perm/perm.js"
 import {useI18n} from "vue-i18n";
 import {setExtend} from "@/utils/day.js"
+import {nextTick} from "vue";
 import {enableNotify, disableNotify, notifyEnabled} from "@/utils/notify.js"
 
 const {t, locale} = useI18n();
@@ -64,11 +75,19 @@ const userStore = useUserStore();
 const uiStore = useUiStore();
 const emailStore = useEmailStore();
 const notifyOn = ref(notifyEnabled());
-const notifyBlocked = ref('Notification' in window && Notification.permission === 'denied');
+const notifyBlocked = ref('Notification' in window && Notification.permission === 'denied')
+const mobileSearchOpen = ref(false);
 const logoutLoading = ref(false)
 const userInfoShow = ref(false)
 const userinfoRef = ref({})
 const aiAssistantRef = ref(null)
+function openMobileSearch() {
+  mobileSearchOpen.value = true
+  nextTick(() => document.querySelector('.header-search-wrap.open input')?.focus())
+}
+function closeMobileSearch() {
+  mobileSearchOpen.value = false
+}
 function toggleLang() {
   locale.value = locale.value === 'en' ? 'zh' : 'en'
   settingStore.lang = locale.value
