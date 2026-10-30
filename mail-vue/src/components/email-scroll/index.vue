@@ -43,9 +43,9 @@
         <Icon class="icon reload" :class="{ spinning: loading }" icon="ion:reload" width="15" height="15" @click="refresh"/>
         <span class="email-count" v-if="total">{{ $t('emailCount', {total: total}) }}</span>
         <div class="mail-pager" v-if="total > pageSize">
-          <button type="button" class="pager-btn" :disabled="page <= 1" :title="t('prevPage')" @click="goPage(-1)">‹</button>
+          <button type="button" class="pager-btn" :disabled="page <= 1" :title="t('prevPage')" @click="goPage(-1)"><span class="pager-ico left"></span></button>
           <span class="pager-num">{{ page }} / {{ pageCount }}</span>
-          <button type="button" class="pager-btn" :disabled="page >= pageCount" :title="t('nextPage')" @click="goPage(1)">›</button>
+          <button type="button" class="pager-btn" :disabled="page >= pageCount" :title="t('nextPage')" @click="goPage(1)"><span class="pager-ico right"></span></button>
         </div>
       </div>
     </div>
@@ -137,7 +137,7 @@
                           <span v-html="highlightText(item.subject || '\u200B')"></span>
                         </slot>
                       </span>
-                      <span v-if="categoryLabel(item.spam ? 'spam' : item.category)" class="mail-category-tag">{{ categoryLabel(item.spam ? 'spam' : item.category) }}</span>
+                      <span v-if="categoryLabel(item.spam ? 'spam' : item.category)" class="mail-category-tag" :class="'cat-' + (item.spam ? 'spam' : item.category)">{{ categoryLabel(item.spam ? 'spam' : item.category) }}</span>
                     </span>
                     <span class="email-content" v-html="highlightText(item.formatText || '\u200B')"></span>
                   </div>
@@ -500,18 +500,19 @@ const checkedEmailCount = ref(0);
 const isSelectMax = computed(() => checkedEmailCount.value >= MAX_SELECT_COUNT);
 const route = useRoute()
 const pageTitle = computed(() => {
-  if (activeCategory.value !== 'primary') return categoryLabel(activeCategory.value)
+  if (activeCategory.value && activeCategory.value !== 'all' && activeCategory.value !== 'primary') return categoryLabel(activeCategory.value)
   return t(route.meta?.title || 'inbox')
 })
 const titleEn = { email: 'Inbox', unread: 'Unread', spam: 'Spam', deleted: 'Trash', send: 'Sent', draft: 'Drafts', star: 'Starred', allMail: 'All mail', 'all-email': 'All mail' }
 const categoryEn = { social: 'Social', promotion: 'Promotions', updates: 'Updates', ads: 'Ads', spam: 'Spam' }
-const categoryTabEn = { primary: 'Primary', social: 'Social', promotion: 'Promotions', updates: 'Updates' }
-const pageTitleEn = computed(() => activeCategory.value !== 'primary'
+const categoryTabEn = { all: 'All', primary: 'Primary', social: 'Social', promotion: 'Promotions', updates: 'Updates' }
+const pageTitleEn = computed(() => activeCategory.value && !['all', 'primary'].includes(activeCategory.value)
   ? (categoryEn[activeCategory.value] || '')
   : (titleEn[route.name] || ''))
-const activeCategory = ref(props.showCategories ? 'primary' : '')
-const categoryCounts = reactive({primary: 0, social: 0, promotion: 0, updates: 0, ads: 0, spam: 0})
+const activeCategory = ref(props.showCategories ? 'all' : '')
+const categoryCounts = reactive({all: 0, primary: 0, social: 0, promotion: 0, updates: 0, ads: 0, spam: 0})
 const categories = [
+  {key: 'all', label: 'allMail', icon: 'mdi:email-multiple-outline'},
   {key: 'primary', label: 'categoryPrimary', icon: 'mdi:inbox-outline'},
   {key: 'social', label: 'categorySocial', icon: 'mdi:account-group-outline'},
   {key: 'promotion', label: 'categoryPromotion', icon: 'mdi:tag-outline'},
@@ -520,7 +521,7 @@ const categories = [
   {key: 'spam', label: 'categorySpam', icon: 'mdi:alert-octagon-outline'}
 ]
 const tabCategories = computed(() => categories.filter(item => !['ads', 'spam'].includes(item.key)))
-const moveCategories = computed(() => categories.filter(item => !['ads','spam'].includes(item.key)))
+const moveCategories = computed(() => categories.filter(item => !['all','ads','spam'].includes(item.key)))
 
 function senderInitial(name) {
   const v = String(name || '?').trim()
@@ -1124,7 +1125,7 @@ function getEmailList() {
   firstLoad.value = true
   scrollTop = 0
 
-  props.getEmailList(0, queryParam.size, activeCategory.value, page.value).then(async data => {
+  props.getEmailList(0, queryParam.size, activeCategory.value === 'all' ? undefined : activeCategory.value, page.value).then(async data => {
     firstLoad.value = false
     const list = (data.list || []).map(item => ({...item, checked: false}))
 
@@ -1967,6 +1968,17 @@ ul {
 :deep(.email-sender .email-action:hover) { background:var(--rd-panel-2); color:var(--rd-text); }
 :deep(.email-sender .email-action.disabled) { opacity:.32; }
 :deep(.mail-category-tag) { flex:0 0 auto; }
+/* v12 category colors */
+:deep(.mail-category-tag.cat-social){ color:#087f5b!important; background:rgba(16,185,129,.12)!important; }
+:deep(.mail-category-tag.cat-promotion){ color:#b45309!important; background:rgba(245,158,11,.14)!important; }
+:deep(.mail-category-tag.cat-updates){ color:#1d4ed8!important; background:rgba(59,130,246,.12)!important; }
+:deep(.mail-category-tag.cat-ads){ color:#b91c1c!important; background:rgba(239,68,68,.12)!important; }
+:deep(.mail-category-tag.cat-spam){ color:#9f1239!important; background:rgba(244,63,94,.12)!important; }
+
+.pager-ico{width:6px;height:6px;border-top:1.6px solid currentColor;border-right:1.6px solid currentColor;display:inline-block;}
+.pager-ico.left{transform:rotate(-135deg);margin-left:2px;}
+.pager-ico.right{transform:rotate(45deg);margin-right:2px;}
+
 </style>
 
 

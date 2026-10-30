@@ -1,6 +1,11 @@
 <template>
   <div class="settings-container">
     <button class="settings-back" type="button" @click="router.push('/settings')">{{ locale?.startsWith('zh') ? '个人设置' : 'Personal settings' }}</button>
+    <div class="settings-links">
+      <button type="button" @click="router.push('/analysis')"><Icon icon="fluent:data-pie-20-regular" width="17" height="17"/> {{ locale?.startsWith('zh') ? '数据分析' : 'Analytics' }}</button>
+      <button type="button" @click="router.push('/all-email')"><Icon icon="mdi:email-multiple-outline" width="17" height="17"/> {{ locale?.startsWith('zh') ? '所有账户邮件' : 'All accounts mail' }}</button>
+      <button type="button" @click="router.push('/reg-key')"><Icon icon="mdi:key-outline" width="17" height="17"/> {{ locale?.startsWith('zh') ? '注册码' : 'Registration codes' }}</button>
+    </div>
     <div class="loading" :class="firstLoading ? 'loading-show' : 'loading-hide'">
       <loading/>
     </div>
@@ -9,7 +14,7 @@
         <div class="card-grid">
           <!-- Website Settings Card -->
           <div class="settings-card">
-            <div class="card-title">{{ $t('websiteSetting') }}</div>
+            <div class="card-title" @click="toggleCard">{{ $t('websiteSetting') }}</div>
             <div class="card-content">
               <div class="setting-item">
                 <div><span>{{ $t('websiteReg') }}</span></div>
@@ -89,7 +94,7 @@
 
           <!-- Personalization Settings Card -->
           <div class="settings-card">
-            <div class="card-title">{{ $t('customization') }}</div>
+            <div class="card-title" @click="toggleCard">{{ $t('customization') }}</div>
             <div class="card-content">
               <div class="setting-item">
                 <div class="title-item"><span>{{ $t('loginBoxOpacity') }}</span></div>
@@ -135,7 +140,7 @@
 
           <!-- Email Sending Settings Card -->
           <div class="settings-card">
-            <div class="card-title">{{ $t('emailSetting') }}</div>
+            <div class="card-title" @click="toggleCard">{{ $t('emailSetting') }}</div>
             <div class="card-content">
               <div class="setting-item">
                 <div><span>{{ $t('receiveEmail') }}</span></div>
@@ -232,7 +237,7 @@
 
           <!-- Object Storage Card -->
           <div class="settings-card">
-            <div class="card-title">{{ $t('oss') }}</div>
+            <div class="card-title" @click="toggleCard">{{ $t('oss') }}</div>
             <div class="card-content">
               <div class="r2domain-item">
                 <div>
@@ -272,7 +277,7 @@
           </div>
 
           <div class="settings-card">
-            <div class="card-title">{{ $t('emailPush') }}</div>
+            <div class="card-title" @click="toggleCard">{{ $t('emailPush') }}</div>
             <div class="card-content">
               <div class="setting-item">
                 <div><span>{{ $t('tgBot') }}</span></div>
@@ -333,7 +338,7 @@
 
           <!-- Turnstile Verification Card -->
           <div class="settings-card">
-            <div class="card-title">{{ $t('turnstileSetting') }}</div>
+            <div class="card-title" @click="toggleCard">{{ $t('turnstileSetting') }}</div>
             <div class="card-content">
               <div class="setting-item">
                 <div><span>{{ $t('signUpVerification') }}</span></div>
@@ -395,7 +400,7 @@
           </div>
 
           <div class="settings-card">
-            <div class="card-title">{{ $t('noticeTitle') }}</div>
+            <div class="card-title" @click="toggleCard">{{ $t('noticeTitle') }}</div>
             <div class="card-content">
               <div class="setting-item">
                 <div><span>{{ $t('noticePopup') }}</span></div>
@@ -418,7 +423,7 @@
           </div>
 
           <div class="settings-card">
-            <div class="card-title">翻译（DeepL）</div>
+            <div class="card-title" @click="toggleCard">翻译（DeepL）</div>
             <div class="card-content">
               <div class="setting-item">
                 <div>
@@ -438,7 +443,7 @@
           </div>
 
           <div class="settings-card ai-settings-card">
-            <div class="card-title">AI 接口（OpenAI 兼容）</div>
+            <div class="card-title" @click="toggleCard">AI 接口（OpenAI 兼容）</div>
             <div class="card-content">
               <div class="setting-item">
                 <div>
@@ -1111,7 +1116,11 @@ defineOptions({
 })
 
 const {t, locale} = useI18n();
-const router = useRouter();
+const router = useRouter()
+
+function toggleCard(e) {
+  e.currentTarget.parentElement?.classList.toggle('collapsed')
+};
 const ADMIN_EN = {
   '网站设置':'Website', '个性化设置':'Personalization', '邮件设置':'Mail settings', '对象存储':'Object storage',
   '邮件推送':'Mail delivery', 'Turnstile 人机验证':'Turnstile', '网站公告':'Announcement',
@@ -2801,5 +2810,20 @@ form .el-button {
 
 <style>
 .el-popper.is-dark {
+}
+
+/* v12 settings: aligned label column, collapsible cards, one-column AI */
+.settings-links { display:flex; gap:8px; align-items:center; justify-content:flex-end; padding:10px 24px 0; flex-wrap:wrap; }
+.settings-links button { height:32px; display:inline-flex; align-items:center; gap:6px; padding:0 12px; border:1px solid var(--el-border-color); border-radius:8px; background:var(--el-bg-color); color:var(--el-text-color-primary); cursor:pointer; font-size:12px; }
+.settings-links button:hover { border-color:var(--el-color-primary); color:var(--el-color-primary); }
+.settings-card .card-title { cursor:pointer; display:flex; align-items:center; justify-content:space-between; }
+.settings-card .card-title::after { content:'\2304'; opacity:.55; transition:transform .2s; }
+.settings-card.collapsed .card-title::after { transform:rotate(-90deg); }
+.settings-card.collapsed .card-content { display:none; }
+.setting-item { grid-template-columns: 180px minmax(0,1fr) !important; }
+.ai-settings-card { grid-column: auto !important; width:100%; }
+@media (max-width: 640px) {
+  .setting-item { grid-template-columns: 1fr !important; }
+  .setting-item > div:last-child { justify-self:start; }
 }
 </style>

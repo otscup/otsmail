@@ -25,6 +25,7 @@
         </button>
         <el-collapse-transition>
           <div class="acct-panel" v-show="acctOpen">
+            <button type="button" class="all-accounts" @click="router.push('/all-email')"><Icon icon="mdi:email-multiple-outline" width="17" height="17"/><span>All accounts mail <small>所有账户邮件</small></span></button>
             <Account/>
           </div>
         </el-collapse-transition>
@@ -490,4 +491,8 @@ function toggleAcct() {
 .side-user-text { min-width:0; flex:1; display:flex; flex-direction:column; }
 .side-user-text b { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .side-user-text small { font-size:10px; color:var(--rd-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.all-accounts { width:100%; height:32px; display:flex; align-items:center; gap:8px; padding:0 8px; margin:2px 0 6px; border:0; border-radius:7px; background:transparent; color:var(--rd-muted); font-size:12px; cursor:pointer; text-align:left; }
+.all-accounts:hover { background:var(--rd-panel-2); color:var(--rd-text); }
+.all-accounts small { margin-left:auto; font-size:9px; opacity:.6; }
 </style>

@@ -10,7 +10,7 @@ async function getCounts(c, userId) {
 	const cached = await c.env.KV?.get(countKey(userId), 'json');
 	if (cached) return cached;
 	const data = await emailService.counts(c, userId);
-	await c.env.KV?.put(countKey(userId), JSON.stringify(data), { expirationTtl: 1800 });
+	await c.env.KV?.put(countKey(userId), JSON.stringify(data), { expirationTtl: 60 });
 	return data;
 }
 

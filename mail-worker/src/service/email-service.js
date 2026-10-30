@@ -61,7 +61,7 @@ const emailService = {
 			deleted: [eq(email.isDel, isDel.DELETE)],
 			spam: [eq(email.isDel, isDel.NORMAL), eq(email.spam, 1)]
 		}[mailbox] || [eq(email.isDel, isDel.NORMAL), eq(email.spam, 0)]);
-		const categoryCondition = category && category !== 'spam' ? [eq(email.category, category)] : [];
+		const categoryCondition = category && category !== 'spam' && category !== 'all' ? [eq(email.category, category)] : [];
 
 		// 回收站同时展示收到的和发出的邮件；其它分类沿用页面传入的 type
 		const typeCondition = (mailbox === 'deleted' || mailbox === 'all') ? sql`1 = 1` : eq(email.type, type);

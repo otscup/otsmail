@@ -3208,3 +3208,7 @@ html.dark .email-container .email-row:hover {
   .email-container .header-actions .mail-page-title { font-size: 16px !important; padding-right: 2px !important; }
   .email-container .header-actions .header-left { column-gap: 8px !important; }
 }
+
+/* v12: personal/system settings are one readable column, not a multi-card mosaic */
+.settings-container .card-grid { display: flex !important; flex-direction: column !important; align-items: stretch !important; width: 100% !important; max-width: 980px !important; margin: 0 auto !important; }
+.settings-container .settings-card, .settings-container .ai-settings-card { width: 100% !important; max-width: 980px !important; grid-column: auto !important; }

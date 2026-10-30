@@ -30,6 +30,24 @@ const routes = [
                 meta: { title: 'allMail', name: 'allMail', menu: true, mailbox: 'all' }
             },
             {
+                path: '/all-email',
+                name: 'allEmail',
+                component: () => import('@/views/all-email/index.vue'),
+                meta: {title: 'allMail', name: 'allEmail', menu: false}
+            },
+            {
+                path: '/analysis',
+                name: 'analysis',
+                component: () => import('@/views/analysis/index.vue'),
+                meta: {title: 'analysis', name: 'analysis', menu: false}
+            },
+            {
+                path: '/reg-key',
+                name: 'regKey',
+                component: () => import('@/views/reg-key/index.vue'),
+                meta: {title: 'regKey', name: 'regKey', menu: false}
+            },
+            {
                 path: '/mail',
                 name: 'content',
                 component: () => import('@/views/content/index.vue'),
