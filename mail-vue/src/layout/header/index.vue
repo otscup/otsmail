@@ -15,11 +15,12 @@
         <Icon icon="material-symbols:edit-outline-sharp" width="18" height="18"/>
         <span class="writer-text">{{ $t('compose') }}</span>
       </button>
-      <el-tooltip :content="notifyOn ? $t('notificationsOn') : $t('notificationsOff')" placement="bottom">
+      <el-tooltip :content="notifyBlocked ? $t('notificationsBlocked') : (notifyOn ? $t('notificationsOn') : $t('notificationsOff'))" placement="bottom">
         <div class="icon-item notice" @click="toggleNotify">
           <svg viewBox="0 0 24 24" width="20" height="20" :fill="notifyOn ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>
             <path d="M10 21h4"/>
+            <line v-if="notifyBlocked" x1="4" y1="4" x2="20" y2="20" stroke="currentColor" stroke-width="1.8"/>
           </svg>
         </div>
       </el-tooltip>
@@ -63,6 +64,7 @@ const userStore = useUserStore();
 const uiStore = useUiStore();
 const emailStore = useEmailStore();
 const notifyOn = ref(notifyEnabled());
+const notifyBlocked = ref('Notification' in window && Notification.permission === 'denied');
 const logoutLoading = ref(false)
 const userInfoShow = ref(false)
 const userinfoRef = ref({})
@@ -220,6 +222,7 @@ async function toggleNotify() {
   }
   const ok = await enableNotify()
   notifyOn.value = ok
+  notifyBlocked.value = !ok && 'Notification' in window && Notification.permission === 'denied'
   ElMessage({message: ok ? t('notificationsOn') : t('notificationsBlocked'), type: ok ? 'success' : 'warning', plain: true})
 }
 
