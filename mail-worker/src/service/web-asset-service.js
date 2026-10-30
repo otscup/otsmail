@@ -25,6 +25,9 @@ const webAssetService = {
 		const url = new URL(req.url);
 		let pathname = decodeURIComponent(url.pathname);
 
+		// Cache-busted asset namespace: lets a fresh build bypass stale edge-cached 404/SPA responses.
+		if (pathname.startsWith('/assets/v12/')) pathname = pathname.slice('/assets/v12'.length);
+
 		// 根路径返回 index.html (SPA)
 		if (pathname === '/' || pathname === '') {
 			pathname = '/index.html';

@@ -1,7 +1,9 @@
 <template>
   <div class="box mail-detail" v-if="email">
     <div class="header-actions">
-      <Icon class="icon" icon="material-symbols-light:arrow-back-ios-new" width="20" height="20" @click="handleBack"/>
+      <el-tooltip :content="$t('backToList')" placement="bottom">
+        <Icon class="icon" icon="material-symbols-light:arrow-back-ios-new" width="20" height="20" @click="handleBack"/>
+      </el-tooltip>
       <Icon v-perm="'email:delete'" class="icon" icon="uiw:delete" width="16" height="16" @click="handleDelete"/>
       <span class="star" v-if="emailStore.contentData.showStar">
         <Icon class="icon" @click="changeStar" v-if="email.isStar" icon="fluent-color:star-16" width="20" height="20"/>
@@ -14,9 +16,7 @@
               :icon="email.spam ? 'fluent:mail-read-20-regular' : 'mdi:email-remove'" width="20" height="20"/>
       </el-tooltip>
       <el-dropdown trigger="click" @command="moveCurrentTo" :teleported="false">
-        <el-tooltip :content="$t('moveToCategory')" placement="top">
-          <Icon class="icon" icon="mdi:folder-move-outline" width="20" height="20"/>
-        </el-tooltip>
+        <Icon class="icon" icon="mdi:folder-move-outline" width="20" height="20" :title="$t('moveToCategory')"/>
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item v-for="item in categories" :key="item.key" :command="item.key"
@@ -33,8 +33,15 @@
       <button type="button" class="reader-summary-btn" :class="{active: showSummary}" @click="toggleSummary">
         <Icon icon="mdi:star-four-points" width="16" height="16"/><span>AI Brief</span>
       </button>
-      <Icon class="icon" v-if="emailStore.contentData.showReply" v-perm="'email:send'"  @click="openReply" icon="la:reply" width="21" height="21" />
-      <Icon class="icon" v-if="emailStore.contentData.showReply" v-perm="'email:send'"  @click="openForward" icon="iconoir:arrow-up-right" width="20" height="20" />
+      <el-tooltip v-if="emailStore.contentData.showReply" :content="$t('reply')" placement="bottom">
+        <Icon class="icon" v-perm="'email:send'" @click="openReply" icon="la:reply" width="21" height="21" />
+      </el-tooltip>
+      <el-tooltip v-if="emailStore.contentData.showReply" :content="$t('replyAll')" placement="bottom">
+        <Icon class="icon" v-perm="'email:send'" @click="openReplyAll" icon="mdi:reply-all" width="21" height="21" />
+      </el-tooltip>
+      <el-tooltip v-if="emailStore.contentData.showReply" :content="$t('forward')" placement="bottom">
+        <Icon class="icon" v-perm="'email:send'" @click="openForward" icon="iconoir:arrow-up-right" width="20" height="20" />
+      </el-tooltip>
       <el-tooltip
           :content="translationState === 'translated' ? $t('showOriginal') : $t('translate')"
           placement="top">
@@ -112,6 +119,9 @@
           <div class="detail-actions" v-if="emailStore.contentData.showReply" v-perm="'email:send'">
             <el-button round @click="openReply">
               <Icon icon="la:reply" width="17" height="17"/>&nbsp;{{ $t('reply') }}
+            </el-button>
+            <el-button round @click="openReplyAll">
+              <Icon icon="mdi:reply-all" width="17" height="17"/>&nbsp;{{ $t('replyAll') }}
             </el-button>
             <el-button round @click="openForward">
               <Icon icon="iconoir:arrow-up-right" width="17" height="17"/>&nbsp;{{ $t('forward') }}
@@ -301,20 +311,20 @@ async function doTranslate(lang) {
 
 // 切换邮件时清空翻译态
 // 直接打开 /mail（刷新恢复失败）时 email 可能为 null，getter 里必须容忍
-watch(() => email?.emailId, (id) => {
+watch(() => [email?.emailId, settingStore.settings.aiSummaryMode], ([id, mode]) => {
   translationState.value = 'idle'
   translatedSubject.value = ''
   showSummary.value = false
   summary.value = ''
   summaryError.value = ''
-  if (id && settingStore.settings.aiSummaryMode === 'auto') {
+  if (id && mode === 'auto') {
     showSummary.value = true
     loadSummary()
   }
   translatedContent.value = ''
   sourceLang.value = ''
   lastLang.value = ''
-})
+}, { immediate: true })
 
 watch(() => accountStore.currentAccountId, () => {
   handleBack()
@@ -360,6 +370,10 @@ function handleKeyDown(event) {
 
 function openReply() {
   uiStore.writerRef.openReply(email)
+}
+
+function openReplyAll() {
+  uiStore.writerRef.openReplyAll(email)
 }
 
 function openForward() {
@@ -429,12 +443,17 @@ function toggleSpam() {
 }
 
 async function moveCurrentTo(category) {
-  await emailMoveCategory([email.emailId], category)
-  email.category = category
-  email.spam = category === 'spam' ? 1 : 0
-  const label = t(categories.find(item => item.key === category)?.label || 'categoryPrimary')
-  ElMessage({message: t('movedToCategory', {category: label}), type: 'success', plain: true})
-  emailStore.emailScroll?.refreshList()
+  try {
+    await emailMoveCategory([email.emailId], category)
+    email.category = category
+    email.spam = category === 'spam' ? 1 : 0
+    const label = t(categories.find(item => item.key === category)?.label || 'categoryPrimary')
+    ElMessage({message: t('movedToCategory', {category: label}), type: 'success', plain: true})
+    emailStore.emailScroll?.refreshList()
+    window.dispatchEvent(new CustomEvent('otsmail:counts'))
+  } catch (e) {
+    ElMessage({message: e?.message || t('operationFailed'), type: 'error', plain: true})
+  }
 }
 
 const handleBack = () => {
@@ -712,8 +731,8 @@ const handleDelete = () => {
 
 .email-info { display:flex !important; gap:13px; align-items:flex-start; flex-wrap:wrap; }
 .email-info-main { flex:1 1 280px; min-width:0; }
-.reader-avatar { flex:0 0 46px; width:46px; height:46px; padding:2px; border-radius:50%; background:conic-gradient(from 210deg,#6ee7ff,#7c7bff,#d56bff,#6ee7ff); box-shadow:0 0 0 1px var(--rd-panel),0 0 20px rgba(124,123,255,.24); }
-.reader-avatar > span { width:100%; height:100%; display:grid; place-items:center; border-radius:50%; background:linear-gradient(145deg,#7c7bff,#37c9ff); color:#fff; font-size:13px; font-weight:750; }
+.reader-avatar { flex:0 0 48px; width:48px; height:48px; padding:2px; border-radius:50%; background:conic-gradient(from 210deg,#6ee7ff,#7c7bff,#d56bff,#6ee7ff); box-shadow:0 0 0 1px var(--rd-panel),0 0 18px rgba(124,123,255,.20); }
+.reader-avatar > span { width:100%; height:100%; display:grid; place-items:center; border-radius:50%; background:var(--rd-panel); color:var(--rd-text); font-size:13px; font-weight:750; }
 .reader-summary-btn { height:30px; padding:0 11px; border:1px solid var(--rd-line); border-radius:9px; background:var(--rd-panel); color:var(--rd-text); display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:650; cursor:pointer; }
 .reader-summary-btn:hover,.reader-summary-btn.active { background:var(--rd-accent-weak); border-color:var(--rd-accent); color:var(--rd-accent); }
 .ai-summary-card { margin: 0 0 18px; padding: 14px 16px; border:1px solid color-mix(in srgb, var(--rd-accent) 28%, var(--rd-line)); border-radius:13px; background:linear-gradient(135deg, color-mix(in srgb, var(--rd-accent) 8%, var(--rd-panel)), var(--rd-panel)); }

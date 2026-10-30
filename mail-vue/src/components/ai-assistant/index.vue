@@ -114,10 +114,18 @@ const emit = defineEmits(['fill'])
 const {t} = useI18n()
 const open = ref(false)
 const minimized = ref(false)
+const emailStore = useEmailStore()
 const activeEmailId = ref(props.emailId)
 const activeEmailSubject = ref(props.emailSubject)
 const panelText = ref(props.text)
 function openPanel(emailId = 0, subject = '', draftText = '') {
+  if (!emailId) {
+    const current = emailStore.contentData?.email
+    if (current?.emailId) {
+      emailId = current.emailId
+      subject = subject || current.subject || ''
+    }
+  }
   if (emailId) {
     activeEmailId.value = emailId
     activeEmailSubject.value = subject || ''
@@ -142,14 +150,31 @@ function restorePanel() {
 }
 function togglePanel() {
   if (!open.value) {
-    activeEmailId.value = props.emailId
-    activeEmailSubject.value = props.emailSubject
+    const current = emailStore.contentData?.email
+    activeEmailId.value = props.emailId || current?.emailId || 0
+    activeEmailSubject.value = props.emailSubject || current?.subject || ''
     panelText.value = props.text
     minimized.value = false
   }
   open.value = !open.value
 }
-watch(() => props.emailId, value => { activeEmailId.value = value })
+watch(() => props.emailId, value => { if (value) activeEmailId.value = value })
+watch(() => emailStore.contentData?.email?.emailId, value => {
+  if (value) {
+    activeEmailId.value = value
+    activeEmailSubject.value = emailStore.contentData?.email?.subject || ''
+  }
+})
+function onComposeAi(event) {
+  const detail = event.detail || {}
+  const current = emailStore.contentData?.email
+  activeEmailId.value = Number(detail.emailId) || current?.emailId || 0
+  activeEmailSubject.value = detail.subject || current?.subject || ''
+  panelText.value = detail.text || ''
+  minimized.value = false
+  open.value = true
+  document.body.classList.add('compose-ai-open')
+}
 watch(() => props.emailSubject, value => { activeEmailSubject.value = value })
 let panelAnim = null
 const panelReduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -313,8 +338,14 @@ watch(open, value => {
   }
 })
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('otsmail:ai-compose', onComposeAi)
+})
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('otsmail:ai-compose', onComposeAi)
+})
 </script>
 
 <style scoped>

@@ -11,7 +11,7 @@
                :email-read="emailRead"
                :email-unread="emailUnread"
                :show-unread="true"
-               :show-categories="true"
+               :show-categories="!mailbox"
                actionLeft="4px"
                @jump="jumpContent"
                @category-change="closeContent"

@@ -48,6 +48,7 @@ const dbInit = {
 		await this.otsmail_17DB(c);
 		await this.otsmail_18DB(c);
 		await this.otsmail_19DB(c);
+		await this.otsmail_20DB(c);
 		await this.otsmail_9DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
@@ -1002,6 +1003,14 @@ async otsmail_5DB(c) {
 	async otsmail_19DB(c) {
 		try {
 			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN ai_summary_mode TEXT NOT NULL DEFAULT 'manual';`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+	async otsmail_20DB(c) {
+		try {
+			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN count_refresh_minutes INTEGER NOT NULL DEFAULT 2;`).run();
 		} catch (e) {
 			console.warn(`跳过字段：${e.message}`);
 		}

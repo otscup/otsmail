@@ -15,6 +15,11 @@
         <Icon icon="material-symbols:edit-outline-sharp" width="18" height="18"/>
         <span class="writer-text">{{ $t('compose') }}</span>
       </button>
+      <el-tooltip :content="notifyOn ? $t('notificationsOn') : $t('notificationsOff')" placement="bottom">
+        <div class="icon-item notice" @click="toggleNotify">
+          <Icon :icon="notifyOn ? 'mdi:bell' : 'mdi:bell-outline'"/>
+        </div>
+      </el-tooltip>
       <div v-if="uiStore.dark" class="dark-icon icon-item" @click="openDark($event)" title="Light mode">
         <Icon icon="mingcute:moon-fill"/>
       </div>
@@ -46,6 +51,7 @@ import hanburger from '@/components/hamburger/index.vue'
 import {hasPerm} from "@/perm/perm.js"
 import {useI18n} from "vue-i18n";
 import {setExtend} from "@/utils/day.js"
+import {enableNotify, disableNotify, notifyEnabled} from "@/utils/notify.js"
 
 const {t, locale} = useI18n();
 const route = useRoute();
@@ -53,6 +59,7 @@ const settingStore = useSettingStore();
 const userStore = useUserStore();
 const uiStore = useUiStore();
 const emailStore = useEmailStore();
+const notifyOn = ref(notifyEnabled());
 const logoutLoading = ref(false)
 const userInfoShow = ref(false)
 const userinfoRef = ref({})
@@ -201,8 +208,16 @@ function changeLang(lang) {
   settingStore.lang = lang
 }
 
-function openNotice() {
-  uiStore.showNotice()
+async function toggleNotify() {
+  if (notifyOn.value) {
+    disableNotify()
+    notifyOn.value = false
+    ElMessage({message: t('notificationsOff'), type: 'info', plain: true})
+    return
+  }
+  const ok = await enableNotify()
+  notifyOn.value = ok
+  ElMessage({message: ok ? t('notificationsOn') : t('notificationsBlocked'), type: ok ? 'success' : 'warning', plain: true})
 }
 
 function openDark(e) {

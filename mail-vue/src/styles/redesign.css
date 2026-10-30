@@ -937,3 +937,61 @@ body.compose-ai-open .write-box { width: min(700px, calc(100vw - 420px)) !import
 .layout-v2 .aside .side-avatar img { border-radius: 50%; }
 .side-user-dd { width: 100%; }
 .side-user-menu .el-dropdown-menu__item.is-disabled { opacity: .65; font-size: 11px; }
+
+
+/* v10 login layout: keep the hero at left, put the real form card on the right */
+#login-box .form-wrapper {
+  position: fixed !important;
+  left: auto !important;
+  right: 5% !important;
+  top: 0 !important;
+  width: 400px !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+}
+#login-box .form-wrapper .container {
+  width: min(420px, 100%) !important;
+  height: auto !important;
+  padding: 36px !important;
+  border: 0 !important;
+  border-radius: 24px !important;
+  background: rgba(255,255,255,.94) !important;
+  box-shadow: 0 24px 70px rgba(15,23,42,.14), 0 2px 8px rgba(15,23,42,.06) !important;
+}
+#login-box .form-title { font-size: 30px !important; letter-spacing: -.8px; }
+@media (max-width: 900px) {
+  #login-box .form-wrapper { right: 0 !important; width: 100% !important; }
+  #login-box .form-wrapper .container { width: min(420px, calc(100vw - 32px)) !important; padding: 28px 24px !important; }
+}
+
+@media (max-width: 900px) {
+  #login-box::before { display: none; }
+}
+
+
+/* v10 follow-up: logo left, title block centered vertically; keep horizontal lockup */
+.layout-v2 .aside .title {
+  flex-direction: row !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+  gap: 10px !important;
+  text-align: left !important;
+}
+.layout-v2 .aside .title-text { flex: 1 !important; width: auto !important; text-align: center !important; }
+.layout-v2 .aside .title-main,
+.layout-v2 .aside .title-sub { text-align: center !important; padding: 0 !important; }
+
+/* v10: generic mobile fit for secondary pages */
+@media (max-width: 768px) {
+  .el-main { padding: 0 !important; }
+  .main-box, .main-box-hide, .main-container, .container { max-width: 100% !important; }
+  .layout-v2 .main-box, .layout-v2 .main-box-hide { padding: 8px !important; }
+  .settings-page .box, .contacts-page, .analysis-page, .user-page, .mcp-page { width: 100% !important; max-width: 100% !important; margin: 0 !important; border-radius: 0 !important; }
+  .el-dialog { width: calc(100vw - 24px) !important; max-width: calc(100vw - 24px) !important; }
+  .el-table { font-size: 12px; }
+  .el-table__body-wrapper { overflow-x: auto; }
+  .el-table .cell { white-space: nowrap; }
+}

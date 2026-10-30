@@ -37,7 +37,7 @@
           <span class="menu-badge" v-if="counts.inbox">{{ counts.inbox }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'allMail'})" index="allMail">
-          <Icon icon="hugeicons:mailbox-01" width="20" height="20" />
+          <Icon icon="mdi:inbox-multiple-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 21px"><b>All Mail</b><small>所有邮件</small></span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'unread'})" index="unread"
@@ -62,7 +62,6 @@
                       :class="route.meta.name === 'send' ? 'choose-item' : ''">
           <Icon icon="cil:send" width="20" height="20" />
           <span class="menu-name" style="margin-left: 21px"><b>Sent</b><small>{{$t('sent')}}</small></span>
-          <span class="menu-badge" v-if="counts.sent">{{ counts.sent }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'draft'})" index="draft" v-perm="'email:send'"
                       :class="route.meta.name === 'draft' ? 'choose-item' : ''">
@@ -144,6 +143,7 @@ function openHelp(){ window.open('https://github.com/otscup/otsmail','_blank','n
 const route = useRoute();
 const counts = reactive({inbox: 0, sent: 0, deleted: 0, spam: 0, drafts: 0});
 let countTimer = null;
+const countRefreshMs = computed(() => Math.max(1, Number(settingStore.settings.countRefreshMinutes) || 2) * 60000);
 
 async function loadCounts() {
   try {
@@ -157,8 +157,7 @@ async function loadCounts() {
 
 onMounted(() => {
   loadCounts();
-  // 计数不是即时消息，120s 轮询足够；侧边栏也可以手动刷新
-  countTimer = setInterval(loadCounts, 120000);
+  countTimer = setInterval(loadCounts, countRefreshMs.value);
   window.addEventListener('otsmail:counts', loadCounts);
 });
 
@@ -168,6 +167,10 @@ onUnmounted(() => {
 });
 
 watch(() => route.name, loadCounts);
+watch(countRefreshMs, value => {
+  clearInterval(countTimer);
+  countTimer = setInterval(loadCounts, value);
+});
 // 子邮箱默认收起，展开状态记在 localStorage（以前每次刷新都展开，很碍事）
 const acctOpen = ref(localStorage.getItem('acctOpen') === '1');
 
@@ -460,8 +463,8 @@ function toggleAcct() {
 :deep(.el-scrollbar__view) { min-height:100%; display:flex; flex-direction:column; }
 .title { padding:18px 16px 12px !important; margin:0 !important; }
 .title-logo { width:34px; height:34px; border-radius:10px; }
-.title-main { font-size:15px; font-weight:760; letter-spacing:-.02em; text-align:left; }
-.title-sub { font-size:11px; color:var(--rd-muted, var(--label-3)); margin-top:2px; text-align:left; }
+.title-main { font-size:15px; font-weight:760; letter-spacing:-.02em; text-align:center; }
+.title-sub { font-size:11px; color:var(--rd-muted, var(--label-3)); margin-top:2px; text-align:center; }
 .compose-btn { margin:6px 10px 16px; height:48px; border-radius:14px; border:0; cursor:pointer;
   display:flex; align-items:center; justify-content:center; gap:8px; font-size:13px; font-weight:650; color:#fff;
   background:linear-gradient(135deg,#6ee9ff,#7c7bff); box-shadow:0 8px 22px rgba(99,124,255,.22); }

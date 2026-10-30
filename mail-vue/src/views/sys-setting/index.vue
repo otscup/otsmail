@@ -167,6 +167,13 @@
                 </div>
               </div>
               <div class="setting-item">
+                <div><span>{{ $t('countRefreshMinutes') }}</span></div>
+                <div>
+                  <el-input-number v-model="setting.countRefreshMinutes" :min="1" :max="60" size="small"
+                                   @change="changeField('countRefreshMinutes', $event)"/>
+                </div>
+              </div>
+              <div class="setting-item">
                 <div><span>{{ $t('sendEmail') }}</span></div>
                 <div>
                   <el-switch @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
@@ -1298,6 +1305,7 @@ function getSettings() {
     setting.value = settingData
     setting.value.aiClassifyMode = setting.value.aiClassifyMode || 'off'
     setting.value.aiSummaryMode = setting.value.aiSummaryMode || 'manual'
+    setting.value.countRefreshMinutes = setting.value.countRefreshMinutes || 2
     aiModelList.value = setting.value.aiModel ? [setting.value.aiModel] : []
     settingStore.domainList = settingData.domainList;
     settingStore.settings.showAvatar = settingData.showAvatar ?? 0;

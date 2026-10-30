@@ -65,7 +65,7 @@
                         :key="keyCount"
         >
           <template #default="{ data: item, index }" >
-            <div :class="['email-row', props.type, { 'is-unread': item.unread === EmailUnreadEnum.UNREAD && showUnread, 'is-open': emailStore.contentData?.email?.emailId === item.emailId }]"
+            <div :class="['email-row', props.type, { 'is-unread': item.unread === EmailUnreadEnum.UNREAD && showUnread, 'is-open': emailStore.contentData?.email?.emailId === item.emailId, 'ctx-open': dropdownShow && rightClickEmail.emailId === item.emailId }]"
                  :data-checked="item.checked"
                  @click="jumpDetails(item)"
                  v-if="!item.expand"
@@ -105,6 +105,17 @@
                     <span>
                       <Icon v-if="item.isStar" icon="fluent-color:star-16" width="18" height="18"/>
                     </span>
+                    <div v-if="!isMobile" class="email-actions">
+                      <button type="button" class="email-action" :title="t('delete')" @click.stop="rightDelete(item.emailId)">
+                        <Icon icon="fluent:delete-20-regular" width="14" height="14"/>
+                      </button>
+                      <button type="button" class="email-action" :class="{disabled: item.unread !== EmailUnreadEnum.UNREAD}" :title="t('markAsRead')" @click.stop="markRead(item)">
+                        <Icon icon="fluent:mail-read-20-regular" width="14" height="14"/>
+                      </button>
+                      <button type="button" class="email-action" :class="{disabled: item.unread === EmailUnreadEnum.UNREAD}" :title="t('markAsUnread')" @click.stop="markUnread(item)">
+                        <Icon icon="fluent:mail-unread-20-regular" width="14" height="14"/>
+                      </button>
+                    </div>
                   </span>
                   <span class="phone-time">{{ item.formatCreateTime }}</span>
                 </div>
@@ -139,17 +150,6 @@
                 </div>
               </div>
               <div class="email-right" :style="showUserInfo ? 'align-self: start;':''">
-                <div v-if="!isMobile" class="email-actions">
-                  <button type="button" class="email-action" :title="t('delete')" @click.stop="rightDelete(item.emailId)">
-                    <Icon icon="fluent:delete-20-regular" width="16" height="16"/>
-                  </button>
-                  <button type="button" class="email-action" :class="{disabled: item.unread !== EmailUnreadEnum.UNREAD}" :title="t('markAsRead')" @click.stop="markRead(item)">
-                    <Icon icon="fluent:mail-read-20-regular" width="16" height="16"/>
-                  </button>
-                  <button type="button" class="email-action" :class="{disabled: item.unread === EmailUnreadEnum.UNREAD}" :title="t('markAsUnread')" @click.stop="markUnread(item)">
-                    <Icon icon="fluent:mail-unread-20-regular" width="16" height="16"/>
-                  </button>
-                </div>
                 <span class="email-time" :style="(item.unread === EmailUnreadEnum.UNREAD && showUnread) ? 'font-weight: bold' : ''">{{ item.formatCreateTime }}</span>
               </div>
             </div>
@@ -501,7 +501,7 @@ const categoryTabEn = { primary: 'Primary', social: 'Social', promotion: 'Promot
 const pageTitleEn = computed(() => activeCategory.value !== 'primary'
   ? (categoryEn[activeCategory.value] || '')
   : (titleEn[route.name] || ''))
-const activeCategory = ref('primary')
+const activeCategory = ref(props.showCategories ? 'primary' : '')
 const categoryCounts = reactive({primary: 0, social: 0, promotion: 0, updates: 0, ads: 0, spam: 0})
 const categories = [
   {key: 'primary', label: 'categoryPrimary', icon: 'mdi:inbox-outline'},
@@ -1174,9 +1174,14 @@ function askAi(email) {
 async function moveToCategory(ids, category) {
   const list = (ids || []).map(Number).filter(Boolean)
   if (list.length === 0) return
-  await emailMoveCategory(list, category)
-  ElMessage({message: t('movedToCategory', {category: categoryLabel(category)}), type: 'success', plain: true})
-  refresh()
+  try {
+    await emailMoveCategory(list, category)
+    ElMessage({message: t('movedToCategory', {category: categoryLabel(category)}), type: 'success', plain: true})
+    refresh()
+    window.dispatchEvent(new CustomEvent('otsmail:counts'))
+  } catch (e) {
+    ElMessage({message: e?.message || t('operationFailed'), type: 'error', plain: true})
+  }
 }
 
 function moveSelectedTo(category) {
@@ -1925,6 +1930,14 @@ ul {
 .email-container .header-right { display:flex; align-items:center; gap:10px; }
 .email-container .header-right .reload { opacity:.65; }
 .email-container .header-right .reload:hover { opacity:1; }
+:deep(.email-sender) { position:relative; }
+:deep(.email-sender .email-actions) { display:none; align-items:center; gap:1px; position:absolute; right:54px; top:7px; z-index:2; background:var(--rd-panel,transparent); border-radius:5px; }
+:deep(.email-sender:hover .email-actions), :deep(.email-row:hover .email-actions) { display:flex; }
+:deep(.email-row.ctx-open .email-actions) { display:none !important; }
+:deep(.email-sender .email-action) { width:20px; height:20px; border:0; background:transparent; border-radius:5px; color:var(--rd-muted); display:grid; place-items:center; padding:0; }
+:deep(.email-sender .email-action:hover) { background:var(--rd-panel-2); color:var(--rd-text); }
+:deep(.email-sender .email-action.disabled) { opacity:.32; }
+:deep(.mail-category-tag) { flex:0 0 auto; }
 </style>
 
 

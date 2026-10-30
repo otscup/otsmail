@@ -1,5 +1,5 @@
 <template>
-  <div id="login-box" :style=" background ? 'background: var(--el-bg-color)' : ''" v-loading="oauthLoading" element-loading-text="登录中...">
+  <div id="login-box" data-build="v11" :style=" background ? 'background: var(--el-bg-color)' : ''" v-loading="oauthLoading" element-loading-text="登录中...">
     <div id="background-wrap" v-if="!settingStore.settings.background">
       <div class="x1 cloud"></div>
       <div class="x2 cloud"></div>
@@ -884,8 +884,15 @@ function submitRegister() {
 }
 
 
+.form-wrapper { right: 5%; width: 400px; }
+.form-wrapper .container { width: min(420px, 100%); height: auto; padding: 36px; border-radius: 24px; background: rgba(255,255,255,.94) !important; box-shadow: 0 24px 70px rgba(15,23,42,.14), 0 2px 8px rgba(15,23,42,.06); }
+.form-wrapper .form-title { font-size: 30px !important; letter-spacing: -.8px; }
+@media (max-width: 900px) {
+  .form-wrapper { right: 0; width: 100%; }
+  .form-wrapper .container { width: min(420px, calc(100vw - 32px)); padding: 28px 24px; }
+}
 #login-box {
-  background: linear-gradient(to bottom, #2980b9, #6dd5fa, #fff);
+  background: #f4f6fb;
   font: 100% Arial, sans-serif;
   height: 100%;
   margin: 0;
@@ -905,6 +912,7 @@ function submitRegister() {
   height: 100%;
   z-index: 0;
 }
+.login-bg, #background-wrap { display: none !important; }
 
 @keyframes animateCloud {
   0% {

@@ -159,7 +159,8 @@ defineExpose({
   openReply,
   openForward,
   openDraft,
-  openAiReply
+  openAiReply,
+  openReplyAll
 })
 
 const {t} = useI18n()
@@ -639,6 +640,26 @@ function openReply(email) {
 }
 
 // AI 回复：保留原邮件收件人/主题，正文用 AI 草稿替换（不覆盖引用）
+function openReplyAll(email) {
+  openReply(email)
+  const add = []
+  const push = value => {
+    const address = typeof value === 'string' ? value : value?.address
+    if (address && !add.includes(address)) add.push(address)
+  }
+  const parse = value => {
+    if (Array.isArray(value)) return value
+    try { return JSON.parse(value || '[]') } catch { return [] }
+  }
+  parse(email?.recipient).forEach(push)
+  parse(email?.cc).forEach(push)
+  const own = form.sendEmail || accountStore.currentAccount.email || userStore.user.email
+  add.forEach(address => {
+    if (address !== own && address !== email?.sendEmail && !form.receiveEmail.includes(address) && !form.cc.includes(address)) form.cc.push(address)
+  })
+  showCc.value = form.cc.length > 0
+}
+
 function openAiReply(email, text) {
   resetForm()
   if (!email) return
@@ -694,7 +715,7 @@ function plainEditorText() {
 
 function openComposeAi() {
   document.body.classList.add('compose-ai-open')
-  window.dispatchEvent(new CustomEvent('otsmail:ai-compose', {detail: {text: form.text || plainEditorText()}}))
+  window.dispatchEvent(new CustomEvent('otsmail:ai-compose', {detail: {text: form.text || plainEditorText(), emailId: form.emailId || 0, subject: form.subject || ''}}))
 }
 
 function onAiFill(event) {
