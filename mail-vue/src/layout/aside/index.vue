@@ -20,7 +20,7 @@
       <div class="acct" v-perm="'account:query'">
         <button type="button" class="acct-toggle" @click="toggleAcct">
           <Icon icon="mdi:account-multiple-outline" width="18" height="18"/>
-          <span class="acct-label">Accounts <small>閭璐︽埛</small></span>
+          <span class="acct-label">Accounts <small>邮箱账户</small></span>
           <Icon class="acct-chevron" :class="{ open: acctOpen }" icon="mingcute:down-small-fill" width="18" height="18"/>
         </button>
         <el-collapse-transition>
@@ -79,10 +79,10 @@
     </div>
     <div class="side-footer">
       <button type="button" class="side-foot-btn" @click="router.push({name:'setting'})">
-        <Icon icon="fluent:settings-48-regular" width="18" height="18"/><span>Settings <small>璁剧疆</small></span>
+        <Icon icon="fluent:settings-48-regular" width="18" height="18"/><span>Settings <small>设置</small></span>
       </button>
       <button type="button" class="side-foot-btn" @click="openHelp">
-        <Icon icon="mingcute:question-line" width="18" height="18"/><span>Help <small>甯姪</small></span>
+        <Icon icon="mingcute:question-line" width="18" height="18"/><span>Help <small>帮助</small></span>
       </button>
       <el-dropdown class="side-user-dd" trigger="click" placement="top-start" @command="sideUserCommand">
         <button type="button" class="side-user">
