@@ -24,6 +24,15 @@ app.put('/user/setType', async (c) => {
 	return c.json(result.ok());
 });
 
+app.get('/user/permList', async (c) => {
+	return c.json(result.ok(await userService.getPerms(c, Number(c.req.query('userId')))));
+});
+
+app.put('/user/permSet', async (c) => {
+	await userService.setPerms(c, await c.req.json());
+	return c.json(result.ok());
+});
+
 app.get('/user/list', async (c) => {
 	const data = await userService.list(c, c.req.query(), userContext.getUserId(c));
 	return c.json(result.ok(data));

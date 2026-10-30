@@ -19,8 +19,8 @@ const userStore = useUserStore()
 const {t} = useI18n()
 const tabs = computed(() => {
   const list = [{path: '/settings', label: t('settings')}]
-  if (userStore.user?.role?.permKeys?.includes('*')) list.push({path: '/sys-setting', label: t('systemSettings')})
-  list.push({path: '/user', label: t('accountPermissions')}, {path: '/reg-key', label: t('regKey')}, {path: '/analysis', label: t('analysis')})
+  if (userStore.user?.type === 0 || userStore.user?.role?.permKeys?.includes('*')) list.push({path: '/sys-setting', label: t('systemSettings')})
+  list.push({path: '/user', label: t('accountPermissions')}, {path: '/role', label: t('role')}, {path: '/reg-key', label: t('regKey')}, {path: '/analysis', label: t('analysis')})
   return list
 })
 </script>

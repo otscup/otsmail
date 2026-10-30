@@ -83,6 +83,7 @@
                   <el-dropdown-menu>
                     <el-dropdown-item @click="openSetPwd(props.row)" >{{ $t('chgPwd') }}</el-dropdown-item>
                     <el-dropdown-item @click="openSetType(props.row)" >{{ $t('perm') }}</el-dropdown-item>
+                    <el-dropdown-item @click="openSetPerm(props.row)">{{ $t('independentPerm') }}</el-dropdown-item>
                     <template v-if="props.row.type !== 0">
                       <el-dropdown-item v-if="props.row.isDel !== 1" @click="setStatus(props.row)">
                         {{ setStatusName(props.row) }}
@@ -145,6 +146,23 @@
         >{{ $t('save') }}
         </el-button>
       </div>
+    </el-dialog>
+    <el-dialog class="dialog perm-dialog" v-model="setPermShow" :title="$t('independentPerm')" width="560px">
+      <div class="perm-hint">{{ $t('role') }}: {{ permUser.roleName || permUser.type }}</div>
+      <el-scrollbar height="440px">
+        <div v-for="group in permTree" :key="group.permId" class="perm-group">
+          <div class="perm-group-title">{{ group.name }}</div>
+          <div v-for="p in group.children" :key="p.permId" class="perm-row">
+            <span>{{ p.name }}</span>
+            <el-radio-group v-model="permChoice[p.permId]" size="small">
+              <el-radio-button :value="0">{{ $t('inherit') }}</el-radio-button>
+              <el-radio-button :value="1">{{ $t('allow') }}</el-radio-button>
+              <el-radio-button :value="-1">{{ $t('deny') }}</el-radio-button>
+            </el-radio-group>
+          </div>
+        </div>
+      </el-scrollbar>
+      <el-button class="btn" type="primary" :loading="permSaving" @click="saveUserPerm">{{ $t('save') }}</el-button>
     </el-dialog>
     <el-dialog v-model="showAdd" class="user-add-dialog" :title="$t('addUser')" @closed="resetAddForm">
       <div class="container">
@@ -343,19 +361,8 @@
 
 <script setup>
 import {defineOptions, h, onMounted, onUnmounted, reactive, ref, watch} from 'vue'
-import {
-  userList,
-  userDelete,
-  userSetPwd,
-  userSetStatus,
-  userSetType,
-  userAdd,
-  userRestSendCount,
-  userRestore,
-  userDeleteAccount,
-  userAllAccount
-} from '@/request/user.js'
-import {roleSelectUse} from "@/request/role.js";
+import { userList, userDelete, userSetPwd, userSetStatus, userSetType, userAdd, userRestSendCount, userRestore, userDeleteAccount, userAllAccount, userPermList, userPermSet } from '@/request/user.js'
+import {roleSelectUse, rolePermTree} from "@/request/role.js";
 import {Icon} from "@iconify/vue";
 import loading from "@/components/loading/index.vue";
 import {tzDayjs} from "@/utils/day.js";
@@ -440,6 +447,11 @@ const accountShow = ref(false)
 const addLoading = ref(false);
 const setTypeShow = ref(false)
 const setPwdShow = ref(false)
+const setPermShow = ref(false)
+const permTree = reactive([])
+const permChoice = reactive({})
+const permUser = ref({})
+const permSaving = ref(false)
 const pagerCount = ref(10)
 const settingLoading = ref(false)
 const tableLoading = ref(true)
@@ -944,6 +956,31 @@ function openSetType(user) {
   setTypeShow.value = true
 }
 
+function openSetPerm(user) {
+  permUser.value = user
+  setPermShow.value = true
+  Object.keys(permChoice).forEach(key => delete permChoice[key])
+  rolePermTree().then(tree => {
+    permTree.length = 0
+    permTree.push(...tree)
+    tree.forEach(group => (group.children || []).forEach(p => { permChoice[p.permId] = 0 }))
+    return userPermList(user.userId)
+  }).then(list => {
+    ;(list || []).forEach(item => { permChoice[item.permId] = item.allow ? 1 : -1 })
+  })
+}
+
+function saveUserPerm() {
+  const overrides = Object.entries(permChoice)
+    .filter(([, value]) => Number(value) !== 0)
+    .map(([permId, value]) => ({permId: Number(permId), allow: Number(value) === 1 ? 1 : 0}))
+  permSaving.value = true
+  userPermSet(permUser.value.userId, overrides).then(() => {
+    setPermShow.value = false
+    ElMessage({message: t('saveSuccessMsg'), type: 'success', plain: true})
+  }).finally(() => { permSaving.value = false })
+}
+
 function openSetPwd(user) {
   userForm.userId = user.userId
   setPwdShow.value = true
@@ -1049,6 +1086,12 @@ function adjustWidth() {
 .el-table-filter__content {
   min-width: 0;
 }
+.perm-hint { font-size:12px; color:var(--rd-muted); margin-bottom:10px; }
+.perm-group { margin-bottom:12px; }
+.perm-group-title { font-size:13px; font-weight:700; margin:6px 0; color:var(--rd-text); }
+.perm-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:5px 0; border-bottom:1px solid var(--rd-line); font-size:12px; }
+.perm-row :deep(.el-radio-group) { flex:0 0 auto; }
+.perm-row :deep(.el-radio-button__inner) { padding:4px 8px; }
 </style>
 <style lang="scss" scoped>
 
@@ -1289,4 +1332,10 @@ function adjustWidth() {
 :deep(.el-message-box__container) {
   align-items: start;
 }
+.perm-hint { font-size:12px; color:var(--rd-muted); margin-bottom:10px; }
+.perm-group { margin-bottom:12px; }
+.perm-group-title { font-size:13px; font-weight:700; margin:6px 0; color:var(--rd-text); }
+.perm-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:5px 0; border-bottom:1px solid var(--rd-line); font-size:12px; }
+.perm-row :deep(.el-radio-group) { flex:0 0 auto; }
+.perm-row :deep(.el-radio-button__inner) { padding:4px 8px; }
 </style>

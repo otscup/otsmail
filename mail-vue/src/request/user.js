@@ -41,3 +41,12 @@ export function userAllAccount(userId, num, size) {
 export function userDeleteAccount(accountId) {
     return http.delete('/user/deleteAccount', {params:{accountId}})
 }
+
+
+export function userPermList(userId) {
+    return http.get('/user/permList', {params:{userId}})
+}
+
+export function userPermSet(userId, overrides) {
+    return http.put('/user/permSet', {userId, overrides})
+}

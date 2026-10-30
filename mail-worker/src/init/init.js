@@ -50,6 +50,7 @@ const dbInit = {
 		await this.otsmail_19DB(c);
 		await this.otsmail_20DB(c);
 		await this.otsmail_21DB(c);
+		await this.otsmail_22DB(c);
 		await this.otsmail_9DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
@@ -1019,6 +1020,20 @@ async otsmail_5DB(c) {
 			]);
 		} catch (e) {
 			console.warn(`index: ${e.message}`);
+		}
+	},
+
+	async otsmail_22DB(c) {
+		try {
+			await c.env.db.prepare(`CREATE TABLE IF NOT EXISTS user_perm (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				user_id INTEGER NOT NULL,
+				perm_id INTEGER NOT NULL,
+				allow INTEGER NOT NULL DEFAULT 1
+			);`).run();
+			await c.env.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_perm ON user_perm(user_id, perm_id);`).run();
+		} catch (e) {
+			console.warn(`user_perm: ${e.message}`);
 		}
 	},
 

@@ -2,6 +2,8 @@ import BizError from '../error/biz-error';
 import accountService from './account-service';
 import orm from '../entity/orm';
 import user from '../entity/user';
+import perm from '../entity/perm';
+import userPerm from '../entity/user-perm';
 import { and, asc, count, desc, eq, inArray, like, or, sql } from 'drizzle-orm';
 import { emailConst, isDel, roleConst, settingConst, userConst } from '../const/entity-const';
 import kvConst from '../const/kv-const';
@@ -321,6 +323,29 @@ const userService = {
 			.where(eq(user.userId, userId))
 			.run();
 
+	},
+
+	async getPerms(c, userId) {
+		const rows = await orm(c).select({ permId: userPerm.permId, allow: userPerm.allow }).from(userPerm)
+			.where(eq(userPerm.userId, userId)).all();
+		return rows;
+	},
+
+	async setPerms(c, params) {
+		const userId = Number(params.userId);
+		const target = await orm(c).select({ type: user.type }).from(user).where(eq(user.userId, userId)).get();
+		if (!target) throw new BizError(t('userNotExist'));
+		if (target.type === 0) throw new BizError(t('notAllowed'));
+		const incoming = Array.isArray(params.overrides) ? params.overrides : [];
+		const permIds = [...new Set(incoming.map(item => Number(item.permId)).filter(Boolean))];
+		const valid = permIds.length ? await orm(c).select({ permId: perm.permId }).from(perm)
+			.where(and(inArray(perm.permId, permIds), eq(perm.type, 2))).all() : [];
+		const validIds = new Set(valid.map(item => item.permId));
+		const rows = incoming.filter(item => validIds.has(Number(item.permId))).map(item => ({
+			userId, permId: Number(item.permId), allow: item.allow ? 1 : 0
+		}));
+		await orm(c).delete(userPerm).where(eq(userPerm.userId, userId)).run();
+		if (rows.length) await orm(c).insert(userPerm).values(rows).run();
 	},
 
 	async incrUserSendCount(c, quantity, userId) {

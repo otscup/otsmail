@@ -1,5 +1,6 @@
 <template>
   <div class="perm-box">
+    <settingsTabs/>
     <div class="header-actions">
       <Icon class="icon" icon="ion:add-outline" width="23" height="23" @click="openAddRole"/>
       <Icon class="icon" icon="ion:reload" width="18" height="18" @click="refresh"/>
