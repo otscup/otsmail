@@ -1062,3 +1062,14 @@ body.compose-ai-open .write-box { width: min(700px, calc(100vw - 420px)) !import
 #login-box { justify-content: center !important; padding: 20px !important; }
 #login-box .form-wrapper { position: relative !important; right: auto !important; left: auto !important; margin: 0 auto !important; }
 #login-box::before, #login-box::after { content: none !important; display: none !important; }
+
+
+/* Mobile contacts: stack the title and subtitle instead of clipping them. */
+@media (max-width: 767px) {
+  .contacts { padding: 22px 16px 88px !important; }
+  .contacts-head { display: block !important; }
+  .contacts-head h1 { font-size: 36px !important; line-height: 1.05; }
+  .contacts-head > span { display: block; margin-top: 6px; max-width: none !important; }
+  .contacts__card { margin-top: 8px; }
+  .contacts__bar { margin-top: 12px; }
+}
