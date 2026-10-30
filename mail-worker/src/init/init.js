@@ -47,6 +47,7 @@ const dbInit = {
 		await this.otsmail_16DB(c);
 		await this.otsmail_17DB(c);
 		await this.otsmail_18DB(c);
+		await this.otsmail_19DB(c);
 		await this.otsmail_9DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
@@ -996,6 +997,15 @@ async otsmail_5DB(c) {
 		})
 
 		await c.env.db.batch(queryList);
-	}
+		},
+	// otsmail 19: AI 摘要方式（manual / auto）
+	async otsmail_19DB(c) {
+		try {
+			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN ai_summary_mode TEXT NOT NULL DEFAULT 'manual';`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
 };
 export { dbInit };

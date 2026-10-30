@@ -9,7 +9,7 @@ const zh = {
     categoryShare: "邮件分类占比",
     receiveHeatmap: "收件热力图",
     allUsers: "用户列表",
-    allMail: "全部邮件",
+    allMail: "所有邮件",
     permissions: "权限控制",
     inviteCode: "注册密钥",
     SystemSettings: "系统设置",

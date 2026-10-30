@@ -1,4 +1,6 @@
 <template>
+  <div class="mail-list-split">
+  <div class="mail-list-left">
   <emailScroll ref="scroll"
                :allow-star="false"
                :getEmailList="getEmailList"
@@ -20,6 +22,9 @@
       {{ props.email.subject || '(' + $t('noSubject') + ')' }}
     </template>
   </emailScroll>
+  </div>
+  <div class="mail-list-empty"><span>Select a draft</span><small>选择一封草稿继续编辑</small></div>
+  </div>
 </template>
 
 <script setup>

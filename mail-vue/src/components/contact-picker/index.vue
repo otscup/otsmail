@@ -1,5 +1,5 @@
 <template>
-  <el-popover v-model:visible="visible" placement="bottom-start" :width="320" trigger="click">
+  <el-popover v-model:visible="visible" placement="bottom-start" :width="280" trigger="click">
     <template #reference>
       <slot>
         <button type="button" class="cp-btn">

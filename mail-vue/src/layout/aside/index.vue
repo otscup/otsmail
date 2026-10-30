@@ -36,6 +36,10 @@
           <span class="menu-name" style="margin-left: 21px"><b>Inbox</b><small>{{$t('inbox')}}</small></span>
           <span class="menu-badge" v-if="counts.inbox">{{ counts.inbox }}</span>
         </el-menu-item>
+        <el-menu-item @click="router.push({name: 'allMail'})" index="allMail">
+          <Icon icon="hugeicons:mailbox-01" width="20" height="20" />
+          <span class="menu-name" style="margin-left: 21px"><b>All Mail</b><small>所有邮件</small></span>
+        </el-menu-item>
         <el-menu-item @click="router.push({name: 'unread'})" index="unread"
                       :class="route.meta.name === 'unread' ? 'choose-item' : ''">
           <Icon icon="mdi:email-multiple-outline" width="20" height="20" />
@@ -65,6 +69,10 @@
           <Icon icon="ep:document" width="19" height="19" />
           <span class="menu-name" style="margin-left: 22px"><b>Drafts</b><small>{{$t('drafts')}}</small></span>
           <span class="menu-badge" v-if="counts.drafts">{{ counts.drafts }}</span>
+        </el-menu-item>
+        <el-menu-item @click="router.push({name: 'contacts'})" index="contacts">
+          <Icon icon="hugeicons:contact-01" width="20" height="20" />
+          <span class="menu-name" style="margin-left: 21px"><b>Contacts</b><small>联系人</small></span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'star'})" index="star"
                       :class="route.meta.name === 'star' ? 'choose-item' : ''">
@@ -433,9 +441,9 @@ function toggleAcct() {
 :deep(.el-scrollbar__view) { min-height:100%; display:flex; flex-direction:column; }
 .title { padding:18px 16px 12px !important; margin:0 !important; }
 .title-logo { width:34px; height:34px; border-radius:10px; }
-.title-main { font-size:15px; font-weight:760; letter-spacing:-.02em; }
-.title-sub { font-size:11px; color:var(--rd-muted, var(--label-3)); margin-top:2px; }
-.compose-btn { margin:6px 14px 16px; height:48px; border-radius:14px; border:0; cursor:pointer;
+.title-main { font-size:15px; font-weight:760; letter-spacing:-.02em; text-align:left; }
+.title-sub { font-size:11px; color:var(--rd-muted, var(--label-3)); margin-top:2px; text-align:left; }
+.compose-btn { margin:6px 10px 16px; height:48px; border-radius:14px; border:0; cursor:pointer;
   display:flex; align-items:center; justify-content:center; gap:8px; font-size:13px; font-weight:650; color:#fff;
   background:linear-gradient(135deg,#6ee9ff,#7c7bff); box-shadow:0 8px 22px rgba(99,124,255,.22); }
 .compose-btn small { font-weight:500; opacity:.72; }

@@ -50,9 +50,8 @@ import {Icon} from "@iconify/vue";
 import MailContent from "@/views/content/index.vue";
 import { useRoute } from 'vue-router'
 
-defineOptions({
-  name: 'email'
-})
+defineOptions({ name: 'email' })
+const props = defineProps({ mailbox: { type: String, default: '' } })
 
 const route = useRoute();
 const emailStore = useEmailStore();
@@ -168,7 +167,7 @@ function cancelStar(email) {
 function getEmailList(emailId, size, category, page) {
   const accountId =  accountStore.currentAccountId;
   const allReceive = accountStore.currentAccount.allReceive;
-  return emailList(accountId, allReceive, emailId, params.timeSort, size, 0, emailStore.searchParams, undefined, category, page).then(data => {
+  return emailList(accountId, allReceive, emailId, params.timeSort, size, 0, emailStore.searchParams, props.mailbox || undefined, category, page).then(data => {
     data.latestEmail.reqAccountId = accountId;
     data.latestEmail.allReceive = allReceive;
     return data;

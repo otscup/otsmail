@@ -1,5 +1,6 @@
 <template>
   <div class="contacts">
+    <div class="contacts-head"><h1>Contacts <small>联系人</small></h1><span>Keep the people you mail most.</span></div>
     <div class="contacts__bar">
       <el-button type="primary" class="contacts__new" @click="openAdd">
         <Icon icon="ion:add-outline" width="18" height="18"/>
@@ -191,10 +192,16 @@ function remove(item) {
 .contacts {
   height: 100%;
   overflow-y: auto;
-  padding: var(--space-4);
+  padding: 24px;
+  max-width: 760px !important;
+  margin: 0 auto !important;
   background: var(--bg-grouped);
   box-sizing: border-box;
 }
+.contacts-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin:2px 0 20px; }
+.contacts-head h1 { margin:0; font-size:30px; letter-spacing:-.02em; color:var(--rd-text,#111827); }
+.contacts-head h1 small { font-size:12px; letter-spacing:.08em; color:var(--rd-muted,#6b7280); font-weight:600; }
+.contacts-head span { font-size:12px; color:var(--rd-muted,#6b7280); }
 
 .contacts__bar {
   display: flex;

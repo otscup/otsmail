@@ -56,7 +56,7 @@ const emailService = {
 		}
 
 		// 分类：unread 未读 / deleted 已删除 / spam 垃圾箱；缺省 inbox 即收件箱（排除垃圾与已删除）
-		const mailboxCondition = category === 'spam' ? [eq(email.isDel, isDel.NORMAL), eq(email.spam, 1)] : ({
+		const mailboxCondition = category === 'spam' ? [eq(email.isDel, isDel.NORMAL), eq(email.spam, 1)] : mailbox === 'all' ? [eq(email.isDel, isDel.NORMAL)] : ({
 			unread: [eq(email.isDel, isDel.NORMAL), eq(email.unread, emailConst.unread.UNREAD)],
 			deleted: [eq(email.isDel, isDel.DELETE)],
 			spam: [eq(email.isDel, isDel.NORMAL), eq(email.spam, 1)]
@@ -64,7 +64,7 @@ const emailService = {
 		const categoryCondition = category && category !== 'spam' ? [eq(email.category, category)] : [];
 
 		// 回收站同时展示收到的和发出的邮件；其它分类沿用页面传入的 type
-		const typeCondition = mailbox === 'deleted' ? sql`1 = 1` : eq(email.type, type);
+		const typeCondition = (mailbox === 'deleted' || mailbox === 'all') ? sql`1 = 1` : eq(email.type, type);
 		const pageCondition = page > 0 ? sql`1 = 1` : (timeSort ? gt(email.emailId, emailId) : lt(email.emailId, emailId));
 
 		// 搜索：text 非空时按 searchType 匹配单个字段，startDate/endDate 限定时间范围

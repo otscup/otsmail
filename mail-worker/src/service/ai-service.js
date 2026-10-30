@@ -28,9 +28,9 @@ export function classifyByRules({ name, sendEmail, subject, text }) {
 	const from = `${name || ''} ${sendEmail || ''}`.toLowerCase();
 	const content = `${subject || ''} ${text || ''}`.toLowerCase();
 	const all = `${from} ${content}`;
-	// Generic words like "account" or "登录" appear in most footers. Only the
-	// sender/subject may promote a mail to 动态, otherwise mail drowns there.
-	const head = `${from} ${subject || ''}`.toLowerCase();
+	// Generic words like "account" or "登录" appear in most footers. Only a
+	// strong subject match or an automated sender may promote mail to 动态.
+	const subjectText = String(subject || '').toLowerCase();
 
 	if (/(facebook|twitter|x\.com|linkedin|instagram|tiktok|pinterest|reddit|weibo|zhihu|discord|slack|telegram)/.test(from)) {
 		return 'social';
@@ -45,8 +45,9 @@ export function classifyByRules({ name, sendEmail, subject, text }) {
 	if (/(sponsor|advertis|广告|推广|合作|赞助)/.test(all)) {
 		return 'ads';
 	}
-	if (/(verify|verification|security|receipt|invoice|shipping|password|验证码|账单|发货|安全)/.test(head)
-		|| /(^|[.@_-])(noreply|no-reply|notifications?|security|accounts?)([.@_-]|$)/.test(sendEmail || '')) {
+	const updatesSubject = /(verify|verification code|security code|receipt|invoice|order|shipping|delivery|password reset|验证码|账单|发货|订单|密码重置|安全验证)/.test(subjectText);
+	const automatedSender = /(^|[.@_-])(noreply|no-reply|notifications?|security|accounts?|billing)([.@_-]|$)/.test(String(sendEmail || '').toLowerCase());
+	if (updatesSubject || automatedSender) {
 		return 'updates';
 	}
 	return 'primary';

@@ -301,9 +301,16 @@ async function doTranslate(lang) {
 
 // 切换邮件时清空翻译态
 // 直接打开 /mail（刷新恢复失败）时 email 可能为 null，getter 里必须容忍
-watch(() => email?.emailId, () => {
+watch(() => email?.emailId, (id) => {
   translationState.value = 'idle'
   translatedSubject.value = ''
+  showSummary.value = false
+  summary.value = ''
+  summaryError.value = ''
+  if (id && settingStore.settings.aiSummaryMode === 'auto') {
+    showSummary.value = true
+    loadSummary()
+  }
   translatedContent.value = ''
   sourceLang.value = ''
   lastLang.value = ''

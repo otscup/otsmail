@@ -2,17 +2,8 @@
   <div class="email-container">
     <div class="header-actions">
       <div class="mail-page-title"><b>{{ pageTitleEn }}</b><span>{{ pageTitle }}</span></div>
-      <el-checkbox
-          v-model="checkAll"
-          :indeterminate="isIndeterminate"
-          :disabled="!emailList.length || loading"
-          @change="handleCheckAllChange"
-      >
-      </el-checkbox>
       <div class="header-left" :style="'padding-left:' + actionLeft">
 
-        <slot name="first"></slot>
-        <Icon class="icon reload" :class="{ spinning: loading }" icon="ion:reload" width="18" height="18" @click="refresh"/>
         <Icon v-perm="'email:delete'" class="icon delete" icon="uiw:delete" width="16" height="16"
               v-if="getSelectedMailsIds().length > 0"
               @click="handleDelete"/>
@@ -41,6 +32,7 @@
       </div>
 
       <div class="header-right">
+        <Icon class="icon reload" :class="{ spinning: loading }" icon="ion:reload" width="15" height="15" @click="refresh"/>
         <span class="email-count" v-if="total">{{ $t('emailCount', {total: total}) }}</span>
         <div class="mail-pager" v-if="total > pageSize">
           <button type="button" class="pager-btn" :disabled="page <= 1" :title="t('prevPage')" @click="goPage(-1)">‹</button>
@@ -73,7 +65,7 @@
                         :key="keyCount"
         >
           <template #default="{ data: item, index }" >
-            <div :class="['email-row', props.type, { 'is-unread': item.unread === EmailUnreadEnum.UNREAD && showUnread }]"
+            <div :class="['email-row', props.type, { 'is-unread': item.unread === EmailUnreadEnum.UNREAD && showUnread, 'is-open': emailStore.contentData?.email?.emailId === item.emailId }]"
                  :data-checked="item.checked"
                  @click="jumpDetails(item)"
                  v-if="!item.expand"
@@ -402,7 +394,7 @@ const emit = defineEmits(['jump', 'refresh-before', 'delete-draft', 'right-searc
 const {t} = useI18n()
 const settingStore = useSettingStore()
 const uiStore = useUiStore();
-const showAvatars = computed(() => settingStore.settings.showAvatar !== 0 && settingStore.settings.showAvatar !== false)
+const showAvatars = computed(() => settingStore.showAvatars !== false && settingStore.settings.showAvatar !== 0 && settingStore.settings.showAvatar !== false)
 const emailStore = useEmailStore();
 const loading = ref(false);
 const followLoading = ref(false);
@@ -503,7 +495,7 @@ const pageTitle = computed(() => {
   if (activeCategory.value !== 'primary') return categoryLabel(activeCategory.value)
   return t(route.meta?.title || 'inbox')
 })
-const titleEn = { email: 'Inbox', unread: 'Unread', spam: 'Spam', deleted: 'Trash', send: 'Sent', draft: 'Drafts', star: 'Starred', 'all-email': 'All mail' }
+const titleEn = { email: 'Inbox', unread: 'Unread', spam: 'Spam', deleted: 'Trash', send: 'Sent', draft: 'Drafts', star: 'Starred', allMail: 'All mail', 'all-email': 'All mail' }
 const categoryEn = { social: 'Social', promotion: 'Promotions', updates: 'Updates', ads: 'Ads', spam: 'Spam' }
 const categoryTabEn = { primary: 'Primary', social: 'Social', promotion: 'Promotions', updates: 'Updates' }
 const pageTitleEn = computed(() => activeCategory.value !== 'primary'
@@ -763,6 +755,7 @@ const handleContextmenu = (event, email) => {
 
   rightClickEmail.value = email;
   rightClickEmail.value.rightChecked = true
+  if (!email.checked) email.checked = true
 }
 
 function updateHasScrollbar() {
@@ -1928,6 +1921,10 @@ ul {
 :deep(.email-row .email-right) { display: none !important; }
 :deep(.email-row .mail-category-tag) { font-size: 9px; padding: 1px 5px; line-height: 14px; }
 :deep(.email-row .email-status) { display: none !important; }
+.email-row .unread { display:none !important; }
+.email-container .header-right { display:flex; align-items:center; gap:10px; }
+.email-container .header-right .reload { opacity:.65; }
+.email-container .header-right .reload:hover { opacity:1; }
 </style>
 
 

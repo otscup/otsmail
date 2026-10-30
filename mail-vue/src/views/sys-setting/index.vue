@@ -113,13 +113,6 @@
                 </div>
               </div>
               <div class="setting-item">
-                <div class="title-item"><span>{{ $t('chatBackgroundOpacity') }}</span></div>
-                <div>
-                  <el-input-number size="small" v-model="chatOpacity" @change="saveChatOpacity" :precision="2"
-                                   :step="0.01" :max="1" :min="0"/>
-                </div>
-              </div>
-              <div class="setting-item">
                 <div class="title-item"><span>{{ $t('showSenderAvatar') }}</span></div>
                 <div>
                   <el-switch v-model="setting.showAvatar" :active-value="1" :inactive-value="0" @change="saveShowAvatar"/>
@@ -146,32 +139,6 @@
                       <Icon icon="lsicon:edit-outline" width="16" height="16"/>
                     </el-button>
                     <el-button class="opt-button" size="small" type="primary" @click="delBackground('background')">
-                      <Icon icon="material-symbols:delete-outline-rounded" width="16" height="16"/>
-                    </el-button>
-                  </div>
-                </div>
-              </div>
-              <div class="setting-item personalized">
-                <div><span>{{ $t('chatBackground') }}</span></div>
-                <div>
-                  <el-image
-                      class="background"
-                      :src="cvtR2Url(setting.chatBackground)"
-                      :preview-src-list="[cvtR2Url(setting.chatBackground)]"
-                      show-progress
-                      fit="cover"
-                  >
-                    <template #error>
-                      <div class="error-image">
-                        <Icon icon="ph:image" width="24" height="24"/>
-                      </div>
-                    </template>
-                  </el-image>
-                  <div class="background-btn">
-                    <el-button class="opt-button" size="small" type="primary" @click="openSetBackground('chatBackground')">
-                      <Icon icon="lsicon:edit-outline" width="16" height="16"/>
-                    </el-button>
-                    <el-button class="opt-button" size="small" type="primary" @click="delBackground('chatBackground')">
                       <Icon icon="material-symbols:delete-outline-rounded" width="16" height="16"/>
                     </el-button>
                   </div>
@@ -524,6 +491,21 @@
                   </el-select>
                   <el-button v-if="setting.aiClassifyMode === 'manual'" :loading="aiClassifyLoading"
                              @click="classifyNow">分类最近邮件</el-button>
+                </div>
+              </div>
+              <div class="setting-item">
+                <div>
+                  <span>AI 摘要</span>
+                  <el-tooltip effect="dark" content="手动：点开邮件后按 AI Brief 生成；自动：打开邮件时自动生成。">
+                    <Icon class="warning" icon="fe:warning" width="18" height="18"/>
+                  </el-tooltip>
+                </div>
+                <div>
+                  <el-select v-model="setting.aiSummaryMode" style="width: 180px"
+                             @change="changeField('aiSummaryMode', $event)">
+                    <el-option label="手动生成摘要" value="manual"/>
+                    <el-option label="自动生成摘要" value="auto"/>
+                  </el-select>
                 </div>
               </div>
               <div class="setting-item">
@@ -1288,6 +1270,7 @@ function getSettings() {
   settingQuery().then(settingData => {
     setting.value = settingData
     setting.value.aiClassifyMode = setting.value.aiClassifyMode || 'off'
+    setting.value.aiSummaryMode = setting.value.aiSummaryMode || 'manual'
     aiModelList.value = setting.value.aiModel ? [setting.value.aiModel] : []
     settingStore.domainList = settingData.domainList;
     settingStore.settings.showAvatar = settingData.showAvatar ?? 0;
@@ -2003,6 +1986,7 @@ function change(e) {
 function changeField(key, value) {
   if (!settingReady.value) return Promise.resolve(false)
   setting.value[key] = value
+  if (key === 'aiSummaryMode') settingStore.settings.aiSummaryMode = value
   return editSetting({[key]: value}, false)
 }
 

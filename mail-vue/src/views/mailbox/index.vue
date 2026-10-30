@@ -1,5 +1,6 @@
 <template>
   <div class="mailbox-page">
+    <div class="mailbox-list">
     <div class="mailbox-note" v-if="mailbox === 'spam'">
       自动判定：反垃圾头（X-Spam-Status / X-Spam-Flag / 分数≥5 / 五星标记）、主题含 [SPAM] 等标记，以及后台黑名单；
       也可以在邮件详情或列表右键里手动标记。
@@ -31,6 +32,11 @@
     <div class="mailbox-empty" v-if="isEmpty">
       <el-empty :description="$t(emptyKey)"/>
     </div>
+    </div>
+    <MailContent v-if="selectedEmailId" :key="selectedEmailId" embedded class="mailbox-reader" @close="closeContent"/>
+    <div v-else class="mailbox-reader-empty">
+      <span>Select a message</span><small>选择一封邮件开始阅读</small>
+    </div>
   </div>
 </template>
 
@@ -45,6 +51,7 @@ import {computed, defineOptions, onMounted, ref, watch} from "vue";
 import {useRoute} from "vue-router";
 import router from "@/router/index.js";
 import {ElMessageBox} from "element-plus";
+import MailContent from "@/views/content/index.vue";
 
 defineOptions({
   name: 'mailbox'
@@ -62,6 +69,7 @@ const emailStore = useEmailStore();
 const accountStore = useAccountStore();
 const {t} = useI18n();
 const scroll = ref({})
+const selectedEmailId = ref(null)
 
 // 参数化分类列表：props 优先，其次路由 meta.mailbox，缺省未读
 const mailbox = computed(() => props.mailbox || route.meta.mailbox || 'unread')
@@ -99,11 +107,16 @@ function getEmailList(emailId, size, category, page) {
 function jumpContent(email) {
   emailStore.contentData.email = email
   emailStore.contentData.delType = 'logic'
+  if (innerWidth > 1366) { selectedEmailId.value = email.emailId; return }
   // 未读列表里打开信件按常规标已读；垃圾/已删除不标
   emailStore.contentData.showUnread = mailbox.value === 'unread'
   emailStore.contentData.showStar = true
   emailStore.contentData.showReply = mailbox.value !== 'deleted'
   router.push('/mail')
+}
+
+function closeContent() {
+  selectedEmailId.value = null
 }
 
 function addStar(email) {
@@ -140,8 +153,23 @@ async function deleteForever(email) {
   height: 100%;
   position: relative;
   display: flex;
+  flex-direction: row;
+  min-height: 0;
+}
+.mailbox-list {
+  flex: 0 0 440px;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   min-height: 0;
+}
+.mailbox-reader { flex: 1 1 auto; min-width: 0; }
+.mailbox-reader-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--rd-muted); }
+.mailbox-reader-empty span { font-weight: 600; color: var(--rd-text); }
+.mailbox-reader-empty small { font-size: 12px; }
+@media (max-width: 1366px) {
+  .mailbox-page { display: block; }
+  .mailbox-reader-empty { display: none; }
 }
 
 .mailbox-page :deep(.email-container) {

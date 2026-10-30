@@ -26,6 +26,14 @@ describe('email category fallback', () => {
 		expect(classifyByRules({ sendEmail: 'alice@example.com', subject: 'Lunch', text: 'My account and login are fine' })).toBe('primary');
 	});
 
+	it('does not treat a generic 安全 subject as updates', () => {
+		expect(classifyByRules({ sendEmail: 'alice@example.com', subject: '安全' })).toBe('primary');
+	});
+
+	it('classifies strong security verification subjects as updates', () => {
+		expect(classifyByRules({ sendEmail: 'alice@example.com', subject: '安全验证码' })).toBe('updates');
+	});
+
 	it('falls back to primary', () => {
 		expect(classifyByRules({ name: 'Alice', sendEmail: 'alice@example.com', subject: 'Lunch' })).toBe('primary');
 	});

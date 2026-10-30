@@ -10,6 +10,10 @@
         </div>
       </div>
       <div class="item">
+        <div>{{$t('showSenderAvatar')}}</div>
+        <el-switch :model-value="settingStore.showAvatars" @change="settingStore.setShowAvatars"/>
+      </div>
+      <div class="item">
         <div>{{$t('username')}}</div>
         <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0;">
           <span v-if="setNameShow" style="display: flex; align-items: center; gap: 8px;">

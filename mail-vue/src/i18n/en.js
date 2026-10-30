@@ -9,7 +9,7 @@ const en = {
     categoryShare: 'Mail category share',
     receiveHeatmap: 'Receive heatmap',
     allUsers: 'All Users',
-    allMail: 'All Mail',
+    allMail: "All mail",
     permissions: 'Role',
     inviteCode: 'Invite Code',
     SystemSettings: 'System Settings',

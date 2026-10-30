@@ -60,6 +60,7 @@ export const setting = sqliteTable('setting', {
 	aiApiKey: text('ai_api_key').default('').notNull(),
 	aiModel: text('ai_model').default('').notNull(),
 	aiClassifyMode: text('ai_classify_mode').default('off').notNull(),
+	aiSummaryMode: text('ai_summary_mode').default('manual').notNull(),
 	emailFilters: text('email_filters').default('[]').notNull(),
 	syncDelete: integer('sync_delete').default(1).notNull(),
 	deeplKey: text('deepl_key').default('').notNull(),

@@ -267,6 +267,9 @@ const settingService = {
 				throw new BizError('Invalid AI classify mode', 400);
 			}
 		}
+		if (params.aiSummaryMode !== undefined && !['manual', 'auto'].includes(params.aiSummaryMode)) {
+			throw new BizError('Invalid AI summary mode', 400);
+		}
 
 		// 脱敏字段：前端回传含 ****** 的占位值说明未修改，剔除以免覆盖真实 key
 		['deeplKey', 'secretKey', 'tgBotToken', 's3AccessKey', 's3SecretKey', 'oidcClientSecret', 'aiApiKey'].forEach(k => {
@@ -382,6 +385,7 @@ const settingService = {
 			r2Domain: settingRow.r2Domain,
 			siteKey: settingRow.siteKey,
 			background: settingRow.background,
+			aiSummaryMode: settingRow.aiSummaryMode || 'manual',
 			chatBackground: settingRow.chatBackground || '',
 			chatOpacity: settingRow.chatOpacity,
 			showAvatar: settingRow.showAvatar !== 0,

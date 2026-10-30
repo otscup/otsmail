@@ -12,10 +12,7 @@
     <Teleport to="body">
       <div v-if="open" class="ai-chat-backdrop" :style="chatBackdropStyle" @click.self="closePanel"></div>
       <Transition :css="false" @enter="enterPanel" @leave="leavePanel">
-        <section v-if="open" class="ai-panel" :class="{ 'has-chat-bg': !!settingStore.settings.chatBackground }"
-                 :style="chatPanelStyle" role="dialog" :aria-label="t('aiAssistant')">
-          <img v-if="settingStore.settings.chatBackground" class="ai-chat-photo" :src="cvtR2Url(settingStore.settings.chatBackground)"
-               :style="{ opacity: Number(settingStore.settings.chatOpacity ?? 0.88) }" alt=""/>
+        <section v-if="open" class="ai-panel" role="dialog" :aria-label="t('aiAssistant')">
           <header class="ai-header">
             <div class="ai-brand">
               <span class="ai-mark">
@@ -756,8 +753,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 }
 .ai-chat-backdrop {
   pointer-events: auto;
-  background: rgba(7, 12, 24, .38) !important;
-  backdrop-filter: blur(5px);
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 .ai-header-actions { display:flex; align-items:center; gap:4px; }
 .ai-min {

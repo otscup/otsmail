@@ -23,6 +23,13 @@ const routes = [
                 }
             },
             {
+                path: '/all-mail',
+                name: 'allMail',
+                component: () => import('@/views/email/index.vue'),
+                props: {mailbox: 'all'},
+                meta: { title: 'allMail', name: 'allMail', menu: true, mailbox: 'all' }
+            },
+            {
                 path: '/mail',
                 name: 'content',
                 component: () => import('@/views/content/index.vue'),
@@ -78,6 +85,18 @@ const routes = [
                 component: () => import('@/views/mailbox/index.vue'),
                 props: {mailbox: 'spam'},
                 meta: {title: 'spamList', name: 'spam', menu: true, mailbox: 'spam'}
+            },
+            {
+                path: '/sent',
+                name: 'send',
+                component: () => import('@/views/send/index.vue'),
+                meta: {title: 'sent', name: 'send', menu: true}
+            },
+            {
+                path: '/drafts',
+                name: 'draft',
+                component: () => import('@/views/draft/index.vue'),
+                meta: {title: 'drafts', name: 'draft', menu: true}
             },
             {
                 path: '/contacts',
