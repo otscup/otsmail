@@ -37,10 +37,6 @@
           <span class="menu-name" style="margin-left: 21px"><b>Inbox</b><small>{{$t('inbox')}}</small></span>
           <span class="menu-badge" v-if="counts.inbox">{{ counts.inbox }}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'allMail'})" index="allMail">
-          <Icon icon="mdi:email-multiple-outline" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 21px"><b>All Mail</b><small>所有邮件</small></span>
-        </el-menu-item>
         <el-menu-item @click="router.push({name: 'unread'})" index="unread"
                       :class="route.meta.name === 'unread' ? 'choose-item' : ''">
           <Icon icon="mdi:email-multiple-outline" width="20" height="20" />
@@ -145,8 +141,11 @@ const route = useRoute();
 const counts = reactive({inbox: 0, sent: 0, deleted: 0, spam: 0, drafts: 0});
 let countTimer = null;
 const countRefreshMs = computed(() => Math.max(1, Number(settingStore.settings.countRefreshMinutes) || 2) * 60000);
+let lastCountsAt = 0; // local throttle: route changes within 30s reuse the last badge snapshot
 
-async function loadCounts() {
+async function loadCounts(force = false) {
+  if (!force && Date.now() - lastCountsAt < 30000) return;
+  lastCountsAt = Date.now();
   try {
     const data = await emailCounts();
     Object.assign(counts, data.menu);
@@ -159,7 +158,7 @@ async function loadCounts() {
 onMounted(() => {
   loadCounts();
   countTimer = setInterval(loadCounts, countRefreshMs.value);
-  window.addEventListener('otsmail:counts', loadCounts);
+  window.addEventListener('otsmail:counts', () => loadCounts(true));
 });
 
 onUnmounted(() => {
@@ -167,7 +166,7 @@ onUnmounted(() => {
   window.removeEventListener('otsmail:counts', loadCounts);
 });
 
-watch(() => route.name, loadCounts);
+watch(() => route.name, () => loadCounts());
 watch(countRefreshMs, value => {
   clearInterval(countTimer);
   countTimer = setInterval(loadCounts, value);

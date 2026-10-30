@@ -1,11 +1,6 @@
 <template>
   <div class="settings-container">
-    <button class="settings-back" type="button" @click="router.push('/settings')">{{ locale?.startsWith('zh') ? '个人设置' : 'Personal settings' }}</button>
-    <div class="settings-links">
-      <button type="button" @click="router.push('/analysis')"><Icon icon="fluent:data-pie-20-regular" width="17" height="17"/> {{ locale?.startsWith('zh') ? '数据分析' : 'Analytics' }}</button>
-      <button type="button" @click="router.push('/all-email')"><Icon icon="mdi:email-multiple-outline" width="17" height="17"/> {{ locale?.startsWith('zh') ? '所有账户邮件' : 'All accounts mail' }}</button>
-      <button type="button" @click="router.push('/reg-key')"><Icon icon="mdi:key-outline" width="17" height="17"/> {{ locale?.startsWith('zh') ? '注册码' : 'Registration codes' }}</button>
-    </div>
+    <settingsTabs/>
     <div class="loading" :class="firstLoading ? 'loading-show' : 'loading-hide'">
       <loading/>
     </div>
@@ -16,6 +11,10 @@
           <div class="settings-card">
             <div class="card-title" @click="toggleCard">{{ $t('websiteSetting') }}</div>
             <div class="card-content">
+              <div class="setting-item">
+                <div><span>登录标题</span></div>
+                <div><el-input v-model="setting.title" style="width:140px" @change="editSetting({title: setting.title})"/></div>
+              </div>
               <div class="setting-item">
                 <div><span>{{ $t('websiteReg') }}</span></div>
                 <div>

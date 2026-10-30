@@ -4,39 +4,6 @@
       <div class="mail-page-title"><b>{{ pageTitleEn }}</b><span>{{ pageTitle }}</span></div>
       <div class="header-left" :style="'padding-left:' + actionLeft">
 
-        <el-tooltip v-if="getSelectedMailsIds().length > 0" :content="t('cancel')" placement="top">
-          <button type="button" class="icon selection-clear" @click="clearSelection" aria-label="cancel selection">
-            <Icon icon="mingcute:close-line" width="16" height="16"/>
-          </button>
-        </el-tooltip>
-        <Icon v-perm="'email:delete'" class="icon delete" icon="uiw:delete" width="16" height="16"
-              v-if="getSelectedMailsIds().length > 0"
-              @click="handleDelete"/>
-        <Icon v-perm="'email:delete'" class="icon delete" icon="fluent:mail-read-20-regular" width="21" height="21"
-              v-if="getSelectedMailsIds().length > 0 && showUnread"
-              @click="handleRead"/>
-        <el-tooltip v-if="getSelectedMailsIds().length > 0 && showUnread" :content="t('markAsUnread')" placement="top">
-          <Icon class="icon delete" icon="fluent:mail-unread-20-regular" width="20" height="20" @click="handleUnread"/>
-        </el-tooltip>
-        <el-tooltip v-if="getSelectedMailsIds().length > 0 && props.type === 'email'"
-                    :content="t('markSpam')" placement="top">
-          <Icon class="icon delete" icon="mdi:email-remove-outline" width="20" height="20" @click="handleSpam"/>
-        </el-tooltip>
-        <el-dropdown v-if="getSelectedMailsIds().length > 0 && ['email','star','all-email'].includes(props.type)"
-                     trigger="click" @command="moveSelectedTo">
-          <Icon class="icon delete" icon="mdi:folder-move-outline" width="20" height="20"/>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item v-for="item in moveCategories" :key="'bulk-'+item.key"
-                                :command="item.key" :disabled="activeCategory === item.key">
-                <div class="right-dropdown-item">
-                  <Icon :icon="item.icon" width="18" height="18"/>
-                  <span>{{ t(item.label) }}</span>
-                </div>
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
       </div>
 
       <div class="header-right">

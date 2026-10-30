@@ -4,6 +4,7 @@
   </div>
   <el-scrollbar v-else style="height: 100%;">
     <div class="analysis" :key="boxKey">
+      <settingsTabs/>
       <div class="number">
         <div class="number-item">
           <div class="top">
@@ -119,6 +120,7 @@
 </template>
 
 <script setup>
+import settingsTabs from "@/components/settings-tabs/index.vue";
 import {Icon} from "@iconify/vue";
 import {useTransition} from "@vueuse/core";
 import {defineOptions, onActivated, onDeactivated, onMounted, reactive, ref, watch, computed} from "vue";

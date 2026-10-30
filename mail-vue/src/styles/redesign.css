@@ -1095,3 +1095,19 @@ html[data-theme="dark"] .send .write-box .editor-box { background: var(--rd-pane
 .layout-v2 .email-container .email-row .mail-category-tag.cat-updates{color:#6d28d9!important;background:rgba(139,92,246,.12)!important;}
 .layout-v2 .email-container .email-row .mail-category-tag.cat-ads{color:#b91c1c!important;background:rgba(239,68,68,.12)!important;}
 .layout-v2 .email-container .email-row .mail-category-tag.cat-spam{color:#9f1239!important;background:rgba(244,63,94,.12)!important;}
+
+
+/* v13: category tabs are text tabs, not pill boxes */
+.layout-v2 .email-container .mail-category,
+.layout-v2 .email-container .mail-category:hover,
+.layout-v2 .email-container .mail-category.active {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+}
+.layout-v2 .email-container .mail-category.active {
+  color: var(--rd-accent) !important;
+  border-bottom-color: var(--rd-accent) !important;
+}

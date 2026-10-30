@@ -1,7 +1,8 @@
 <template>
   <div class="box">
+    <settingsTabs/>
     <div class="container">
-      <div class="title">{{$t('profile')}}<router-link v-if="isAdmin" to="/sys-setting" class="admin-link">{{ $t('systemSettings') }}</router-link></div>
+      <div class="title">{{$t('profile')}}</div>
       <div class="item wide">
         <div>{{$t('avatar')}}</div>
         <div class="row-flex">
@@ -205,6 +206,7 @@ import {
   setTwoFactorRequired
 } from "@/request/my.js";
 import {useUserStore} from "@/store/user.js";
+import settingsTabs from "@/components/settings-tabs/index.vue";
 import router from "@/router/index.js";
 import {accountSetName} from "@/request/account.js";
 import {useAccountStore} from "@/store/account.js";

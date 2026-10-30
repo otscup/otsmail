@@ -1,5 +1,6 @@
 <template>
   <div class="reg-key">
+    <settingsTabs/>
     <div class="header-actions">
       <Icon class="icon" icon="ion:add-outline" width="23" height="23" @click="openAdd"/>
       <div class="search">
@@ -96,6 +97,7 @@
 </template>
 
 <script setup>
+import settingsTabs from "@/components/settings-tabs/index.vue";
 import {defineOptions, nextTick, reactive, ref, watch} from "vue"
 import {Icon} from "@iconify/vue";
 import loading from "@/components/loading/index.vue";

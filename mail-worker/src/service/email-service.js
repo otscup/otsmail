@@ -914,7 +914,7 @@ const emailService = {
 
 	async allList(c, params) {
 
-		let { emailId, size, name, subject, accountEmail, userEmail, type, timeSort, keyword, page } = params;
+		let { emailId, size, name, subject, accountEmail, userEmail, type, timeSort, keyword, page, category } = params;
 
 		size = Number(size);
 
@@ -952,6 +952,10 @@ const emailService = {
 
 		if (type === 'noone') {
 			conditions.push(eq(email.status, emailConst.status.NOONE));
+		}
+
+		if (category && category !== 'all') {
+			conditions.push(eq(email.category, category));
 		}
 
 		if (userEmail) {

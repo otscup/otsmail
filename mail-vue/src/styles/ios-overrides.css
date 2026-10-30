@@ -3209,6 +3209,19 @@ html.dark .email-container .email-row:hover {
   .email-container .header-actions .header-left { column-gap: 8px !important; }
 }
 
-/* v12: personal/system settings are one readable column, not a multi-card mosaic */
-.settings-container .card-grid { display: flex !important; flex-direction: column !important; align-items: stretch !important; width: 100% !important; max-width: 980px !important; margin: 0 auto !important; }
-.settings-container .settings-card, .settings-container .ai-settings-card { width: 100% !important; max-width: 980px !important; grid-column: auto !important; }
+/* v13: compact 4-column masonry; cards flow independently, no shared row alignment */
+.settings-container .card-grid { display: block !important; column-count: 4 !important; column-gap: 12px !important; width: 100% !important; max-width: none !important; margin: 0 !important; }
+.settings-container .settings-card, .settings-container .ai-settings-card { display: inline-block !important; width: 100% !important; max-width: none !important; margin: 0 0 10px !important; break-inside: avoid; grid-column: auto !important; }
+@media (max-width: 1200px) { .settings-container .card-grid { column-count: 2 !important; } }
+@media (max-width: 700px) { .settings-container .card-grid { column-count: 1 !important; } }
+
+
+/* v13: all-accounts mail uses the same 3-pane shell as inbox */
+.all-email-page { height:100%; display:flex; min-width:0; overflow:hidden; }
+.all-email-page .mailbox-list { flex:0 0 440px; min-width:0; display:flex; flex-direction:column; overflow:hidden; }
+.all-email-page .mailbox-list .email-container { flex:1 1 auto; min-height:0; height:auto; }
+.all-email-page .mailbox-reader { flex:1 1 auto; min-width:0; }
+.all-email-page .mailbox-reader-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:var(--rd-muted); }
+.all-email-page .mailbox-reader-empty span { font-weight:600; color:var(--rd-text); }
+.all-email-page .mailbox-reader-empty small { font-size:12px; }
+@media (max-width:1366px) { .all-email-page { display:block; overflow:auto; } .all-email-page .mailbox-reader-empty { display:none; } }

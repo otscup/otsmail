@@ -1,5 +1,6 @@
 <template>
-  <div class="email-list-box">
+  <div class="mailbox-page all-email-page">
+    <div class="mailbox-list">
     <emailScroll ref="sysEmailScroll"
                  :get-emailList="getEmailList"
                  :email-delete="allEmailDelete"
@@ -17,6 +18,7 @@
                  @refresh-before="refreshBefore"
                  @right-search="rightSearch"
                  :type="'all-email'"
+                 :show-categories="true"
 
     >
       <template #first>
@@ -45,6 +47,9 @@
         <Icon class="icon clear" icon="fluent:broom-sparkle-16-regular" width="22" height="22" @click="openBathDelete"/>
       </template>
     </emailScroll>
+    </div>
+    <MailContent v-if="selectedEmailId" :key="selectedEmailId" embedded class="mailbox-reader" @close="closeContent"/>
+    <div v-else class="mailbox-reader-empty"><span>Select a message</span><small>选择一封邮件开始阅读</small></div>
     <el-dialog v-model="showBathDelete" :title="$t('clearEmail')" width="335"
                @closed="closedClear">
       <div class="clear-email">
@@ -77,6 +82,7 @@
 import {starAdd, starCancel} from "@/request/star.js";
 import {emailUnread} from "@/request/email.js";
 import emailScroll from "@/components/email-scroll/index.vue"
+import MailContent from "@/views/content/index.vue"
 import {computed, defineOptions, reactive, ref, watch, onMounted, onUnmounted} from "vue";
 import {useEmailStore} from "@/store/email.js";
 import {
@@ -100,6 +106,7 @@ defineOptions({
 const route = useRoute()
 const {t} = useI18n();
 const emailStore = useEmailStore();
+const selectedEmailId = ref(null)
 const settingStore = useSettingStore();
 const clearTime = ref('')
 const sysEmailScroll = ref({})
@@ -280,16 +287,17 @@ function typeSelectChange() {
 }
 
 function jumpContent(email) {
+  selectedEmailId.value = email.emailId
   emailStore.contentData.email = email
   emailStore.contentData.delType = 'physics'
   emailStore.contentData.showStar = false
   emailStore.contentData.showReply = false
-  router.push({name: 'content'})
 }
+function closeContent() { selectedEmailId.value = null }
 
 
 function getEmailList(emailId, size, category, page) {
-  return allEmailList({emailId, size, page, ...params})
+  return allEmailList({emailId, size, page, category, ...params})
 }
 
 async function latest() {
