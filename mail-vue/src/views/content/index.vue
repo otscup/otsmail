@@ -174,8 +174,35 @@
         show-progress
         @close="showPreview = false"
     />
-    <el-dialog v-model="showAttachmentPreview" :title="attachmentName" width="min(1000px, 94vw)" class="att-preview-dialog" destroy-on-close>
-      <iframe v-if="attachmentUrl" :src="attachmentUrl" class="att-preview-frame" :title="attachmentName"/>
+    <el-dialog v-model="showAttachmentPreview" :title="attachmentName" width="min(1000px, 94vw)"
+               :fullscreen="attachmentFullscreen" class="att-preview-dialog" destroy-on-close
+               @closed="attachmentFullscreen = false">
+      <div class="att-preview-shell" :class="{ fullscreen: attachmentFullscreen }">
+        <div class="att-preview-head">
+          <span>{{ attachmentName }}</span>
+          <el-tooltip :content="attachmentFullscreen ? '退出全屏' : '放大全屏'" placement="bottom">
+            <button type="button" class="att-preview-expand" @click="attachmentFullscreen = !attachmentFullscreen">
+              <Icon :icon="attachmentFullscreen ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'" width="22" height="22"/>
+            </button>
+          </el-tooltip>
+        </div>
+        <div v-if="attachmentKind === 'csv'" class="att-csv-wrap">
+          <div v-if="attachmentCsvLoading" class="att-preview-note">正在读取 CSV…</div>
+          <div v-else-if="attachmentCsvError" class="att-preview-note error">{{ attachmentCsvError }}</div>
+          <table v-else class="att-csv-table">
+            <tbody>
+              <tr v-for="(row, ri) in attachmentCsv" :key="ri">
+                <td v-for="(cell, ci) in row" :key="ci">{{ cell }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="att-frame-wrap">
+          <div v-if="attachmentKind === 'office' && officeLoading" class="att-preview-note">正在加载 ONLYOFFICE 编辑器…</div>
+          <iframe v-if="attachmentUrl" :src="attachmentUrl" class="att-preview-frame" :title="attachmentName"
+                  @load="officeLoading = false"/>
+        </div>
+      </div>
     </el-dialog>
   </div>
 </template>
@@ -218,6 +245,12 @@ const showPreview = ref(false)
 const showAttachmentPreview = ref(false)
 const attachmentUrl = ref('')
 const attachmentName = ref('')
+const attachmentKind = ref('iframe')
+const attachmentFullscreen = ref(false)
+const attachmentCsv = ref([])
+const attachmentCsvLoading = ref(false)
+const attachmentCsvError = ref('')
+const officeLoading = ref(false)
 const showSummary = ref(false)
 const detailsOpen = ref(false)
 const summary = ref('')
@@ -424,7 +457,29 @@ function formatImage(content) {
 }
 
 function isPreviewable(filename) {
-  return ['pdf', 'txt', 'text', 'csv', 'json', 'md', 'log', 'xml', 'yml', 'yaml', 'ini'].includes(getExtName(filename))
+  return ['pdf', 'txt', 'text', 'json', 'md', 'log', 'xml', 'yml', 'yaml', 'ini'].includes(getExtName(filename))
+}
+
+function isCsv(filename) {
+  return ['csv', 'tsv'].includes(getExtName(filename))
+}
+
+function parseCsv(text) {
+  const rows = []
+  let row = [], field = '', quoted = false
+  for (let i = 0; i < text.length && rows.length < 500; i++) {
+    const ch = text[i]
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++ }
+      else if (ch === '"') quoted = false
+      else field += ch
+    } else if (ch === '"') quoted = true
+    else if (ch === ',') { row.push(field); field = '' }
+    else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = '' }
+    else if (ch !== '\r') field += ch
+  }
+  if (field || row.length) { row.push(field); rows.push(row) }
+  return rows
 }
 
 function isOnlyOffice(filename) {
@@ -448,16 +503,38 @@ function openOnlyOffice(att) {
     width: '100%',
     height: '100%'
   }
-  window.open(`https://office.otscup.com/onlyoffice.html?docConfig=${encodeURIComponent(JSON.stringify(config))}`, '_blank', 'noopener,noreferrer')
+  attachmentName.value = att.filename
+  attachmentKind.value = 'office'
+  attachmentFullscreen.value = false
+  officeLoading.value = true
+  attachmentUrl.value = `https://office.otscup.com/onlyoffice.html?docConfig=${encodeURIComponent(JSON.stringify(config))}`
+  showAttachmentPreview.value = true
 }
 
 function openAttachment(att) {
   if (isImage(att.filename)) return showImage(att.key)
+  attachmentName.value = att.filename
+  attachmentFullscreen.value = false
+  if (isCsv(att.filename)) {
+    attachmentKind.value = 'csv'
+    attachmentUrl.value = ''
+    attachmentCsv.value = []
+    attachmentCsvError.value = ''
+    attachmentCsvLoading.value = true
+    showAttachmentPreview.value = true
+    fetch(cvtR2Url(att.key)).then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return r.text()
+    }).then(text => { attachmentCsv.value = parseCsv(text) })
+      .catch(e => { attachmentCsvError.value = `CSV 读取失败：${e.message}` })
+      .finally(() => { attachmentCsvLoading.value = false })
+    return
+  }
   if (!isPreviewable(att.filename)) {
     window.open(cvtR2Url(att.key), '_blank', 'noopener,noreferrer')
     return
   }
-  attachmentName.value = att.filename
+  attachmentKind.value = 'iframe'
   attachmentUrl.value = cvtR2Url(att.key)
   showAttachmentPreview.value = true
 }

@@ -1225,3 +1225,26 @@ html[data-theme="dark"] .send .compose-account .el-select__wrapper {
 html[data-theme="dark"] .send .tox .tox-tbtn svg {
   fill: #cbd5e1 !important;
 }
+
+
+/* attachment preview: fullscreen, CSV table and inline ONLYOFFICE */
+.att-preview-dialog .el-dialog__body { padding: 0 !important; }
+.att-preview-shell { display: flex; flex-direction: column; height: 70vh; min-height: 420px; background: var(--rd-panel); }
+.att-preview-shell.fullscreen { height: calc(100vh - 96px); }
+.att-preview-head { display: flex; align-items: center; justify-content: flex-end; gap: 8px; height: 42px; padding: 0 12px; border-bottom: 1px solid var(--rd-line); color: var(--rd-muted); font-size: 12px; }
+.att-preview-head > span { margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-preview-expand { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--rd-text); cursor: pointer; }
+.att-preview-expand:hover { background: var(--rd-panel-2); }
+.att-frame-wrap { position: relative; flex: 1; min-height: 0; display: flex; }
+.att-preview-frame { width: 100%; height: 100%; border: 0; background: #fff; }
+.att-preview-note { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; background: var(--rd-panel); color: var(--rd-text); font-size: 14px; }
+.att-preview-note.error { color: #ef4444; }
+.att-csv-wrap { flex: 1; min-height: 0; overflow: auto; background: var(--rd-panel); }
+.att-csv-table { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+.att-csv-table td { border: 1px solid var(--rd-line); padding: 5px 8px; color: var(--rd-text); white-space: nowrap; }
+.att-csv-table tr:first-child td { font-weight: 700; background: var(--rd-panel-2); }
+.att-csv-table td:first-child { color: var(--rd-muted); }
+@media (max-width: 640px) {
+  .att-preview-shell { height: 76vh; min-height: 320px; }
+  .att-preview-shell.fullscreen { height: calc(100vh - 72px); }
+}
