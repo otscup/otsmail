@@ -102,9 +102,6 @@
                       <div class="unread" v-if="isMobile && (item.unread === EmailUnreadEnum.UNREAD && showUnread) "/>
                       <slot name="name" :email="item"><span v-html="highlightText(item.name || '')"></span></slot>
                     </span>
-                    <span>
-                      <Icon v-if="item.isStar" icon="fluent-color:star-16" width="18" height="18"/>
-                    </span>
                     <div v-if="!isMobile" class="email-actions">
                       <button type="button" class="email-action" :title="t('delete')" @click.stop="rightDelete(item.emailId)">
                         <Icon icon="fluent:delete-20-regular" width="14" height="14"/>
@@ -129,7 +126,10 @@
                           <span v-html="highlightText(item.subject || '\u200B')"></span>
                         </slot>
                       </span>
-                      <span v-if="categoryLabel(item.spam ? 'spam' : item.category)" class="mail-category-tag" :class="'cat-' + (item.spam ? 'spam' : item.category)">{{ categoryLabel(item.spam ? 'spam' : item.category) }}</span>
+                      <span class="row-markers">
+                        <Icon v-if="item.isStar" class="row-star" icon="fluent-color:star-16" width="14" height="14"/>
+                        <span v-if="categoryLabel(item.spam ? 'spam' : item.category)" class="mail-category-tag" :class="'cat-' + (item.spam ? 'spam' : item.category)">{{ categoryLabel(item.spam ? 'spam' : item.category) }}</span>
+                      </span>
                     </span>
                     <span class="email-content" v-html="highlightText(item.formatText || '\u200B')"></span>
                   </div>
