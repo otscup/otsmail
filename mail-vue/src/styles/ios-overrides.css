@@ -1,4 +1,4 @@
-﻿/* ============================================================================
+/* ============================================================================
    ios-overrides.css 鈥?promote iOS card style to all Element Plus components.
    Only references tokens from ios-tokens.css. Loaded after style.css.
    ========================================================================== */
@@ -3346,4 +3346,14 @@ html.dark .email-container .email-row:hover {
 }
 @media (max-width: 700px) {
   .settings-container .card-grid { column-count: 1 !important; }
+}
+
+/* The AI card is wide; keep it out of the 252px masonry column. */
+.settings-container .card-grid > .settings-card.ai-settings-card {
+  display: block !important;
+  column-span: all !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 0 16px !important;
+  break-inside: avoid;
 }

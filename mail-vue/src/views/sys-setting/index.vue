@@ -2821,8 +2821,16 @@ form .el-button {
 .settings-card.collapsed .card-content { display:none; }
 .setting-item { grid-template-columns: 180px minmax(0,1fr) !important; }
 .ai-settings-card {
+  display: block !important;
+  column-span: all;
   width: 100%;
-  max-width: 1100px;
+  max-width: none;
+}
+.card-grid > .ai-settings-card {
+  display: block !important;
+  column-span: all;
+  width: 100%;
+  max-width: none;
 }
 .ai-settings-card .card-content {
   display: grid;
