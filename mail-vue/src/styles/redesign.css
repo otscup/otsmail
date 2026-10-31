@@ -1235,7 +1235,7 @@ html[data-theme="dark"] .send .tox .tox-tbtn svg {
 .att-preview-head > span { margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .att-preview-expand { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--rd-text); cursor: pointer; }
 .att-preview-expand:hover { background: var(--rd-panel-2); }
-.att-frame-wrap { position: relative; flex: 1; min-height: 0; display: flex; }
+.att-frame-wrap { position: relative; flex: 1; min-height: 0; display: flex; overflow: hidden; }
 .att-preview-frame { width: 100%; height: 100%; border: 0; background: #fff; }
 .att-preview-note { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; background: var(--rd-panel); color: var(--rd-text); font-size: 14px; }
 .att-preview-note.error { color: #ef4444; }
@@ -1267,3 +1267,9 @@ html[data-theme="dark"] .send .tox .tox-tbtn svg {
 .att-md a { color: var(--rd-accent); }
 .att-md table { border-collapse: collapse; width: 100%; margin: .8em 0; }
 .att-md th, .att-md td { border: 1px solid var(--rd-line); padding: 6px 9px; }
+
+
+/* ONLYOFFICE proportional fit */
+.office-zoom { display: inline-flex; align-items: center; gap: 2px; height: 28px; padding: 0 5px; border: 1px solid var(--rd-line); border-radius: 7px; color: var(--rd-muted); font-size: 11px; }
+.office-zoom button { width: 20px; height: 22px; border: 0; background: transparent; color: var(--rd-text); cursor: pointer; font-size: 15px; line-height: 1; }
+.office-zoom span { min-width: 32px; text-align: center; }

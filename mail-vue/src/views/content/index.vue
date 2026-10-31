@@ -180,6 +180,11 @@
       <div ref="attachmentPreviewRef" class="att-preview-shell" :class="{ fullscreen: attachmentFullscreen }">
         <div class="att-preview-head">
           <span>{{ attachmentName }}</span>
+          <div v-if="attachmentKind === 'office'" class="office-zoom" title="ONLYOFFICE 缩放">
+            <button type="button" @click="officeScale = Math.max(0.5, Math.round((officeScale - 0.1) * 10) / 10)">−</button>
+            <span>{{ Math.round(officeScale * 100) }}%</span>
+            <button type="button" @click="officeScale = Math.min(1.2, Math.round((officeScale + 0.1) * 10) / 10)">+</button>
+          </div>
           <el-tooltip :content="attachmentFullscreen ? '退出全屏' : '放大全屏'" placement="bottom">
             <button type="button" class="att-preview-expand" @click="toggleAttachmentFullscreen">
               <Icon :icon="attachmentFullscreen ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'" width="22" height="22"/>
@@ -202,8 +207,9 @@
         </div>
         <div v-else class="att-frame-wrap">
           <div v-if="attachmentKind === 'office' && officeLoading" class="att-preview-note">正在加载 ONLYOFFICE 编辑器…</div>
-          <iframe v-if="attachmentUrl" :src="attachmentUrl" class="att-preview-frame" :title="attachmentName"
-                  @load="officeLoading = false"/>
+          <iframe v-if="attachmentUrl" :src="attachmentUrl" class="att-preview-frame"
+                  :style="attachmentKind === 'office' ? officeFrameStyle : undefined"
+                  :title="attachmentName" @load="officeLoading = false"/>
         </div>
       </div>
     </el-dialog>
@@ -254,6 +260,11 @@ const attachmentPreviewRef = ref(null)
 const attachmentKind = ref('iframe')
 const attachmentMarkdown = ref('')
 const attachmentMdLoading = ref(false)
+const officeScale = ref(0.8)
+const officeFrameStyle = computed(() => {
+  const s = officeScale.value
+  return { width: `${100 / s}%`, height: `${100 / s}%`, transform: `scale(${s})`, transformOrigin: 'top left' }
+})
 const attachmentMdError = ref('')
 const attachmentFullscreen = ref(false)
 const attachmentCsv = ref([])
