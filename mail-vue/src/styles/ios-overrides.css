@@ -3348,12 +3348,3 @@ html.dark .email-container .email-row:hover {
   .settings-container .card-grid { column-count: 1 !important; }
 }
 
-/* The AI card is wide; keep it out of the 252px masonry column. */
-.settings-container .card-grid > .settings-card.ai-settings-card {
-  display: block !important;
-  column-span: all !important;
-  width: 100% !important;
-  max-width: none !important;
-  margin: 0 0 16px !important;
-  break-inside: avoid;
-}

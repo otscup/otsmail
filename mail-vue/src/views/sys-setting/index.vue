@@ -2821,30 +2821,26 @@ form .el-button {
 .settings-card.collapsed .card-content { display:none; }
 .setting-item { grid-template-columns: 180px minmax(0,1fr) !important; }
 .ai-settings-card {
-  display: block !important;
-  column-span: all;
-  width: 100%;
-  max-width: none;
-}
-.card-grid > .ai-settings-card {
-  display: block !important;
-  column-span: all;
   width: 100%;
   max-width: none;
 }
 .ai-settings-card .card-content {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 26px;
+  grid-template-columns: 1fr;
+  gap: 12px;
 }
-.ai-settings-card .ai-setting-tip { grid-column: 1 / -1; }
 .ai-settings-card .setting-item {
-  grid-template-columns: 132px minmax(0, 1fr) !important;
+  grid-template-columns: 1fr !important;
   align-items: start;
 }
 .ai-settings-card .setting-item > div:last-child {
+  justify-self: stretch !important;
+  width: 100% !important;
   grid-template-columns: minmax(0, 1fr) !important;
   justify-items: stretch;
+}
+.ai-settings-card .setting-item input {
+  width: 100% !important;
 }
 .ai-settings-card .el-input,
 .ai-settings-card .el-select {

@@ -200,6 +200,11 @@
             </tbody>
           </table>
         </div>
+        <div v-else-if="attachmentKind === 'markdown'" class="att-md-wrap">
+          <div v-if="attachmentMdLoading" class="att-preview-note">正在读取 Markdown…</div>
+          <div v-else-if="attachmentMdError" class="att-preview-note error">{{ attachmentMdError }}</div>
+          <article v-else class="att-md" v-html="attachmentMarkdown"></article>
+        </div>
         <div v-else ref="officeWrapRef" class="att-frame-wrap">
           <div v-if="attachmentKind === 'office' && officeLoading" class="att-preview-note">正在加载 ONLYOFFICE 编辑器…</div>
           <iframe v-if="attachmentUrl" :src="attachmentUrl" class="att-preview-frame"
