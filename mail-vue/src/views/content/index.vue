@@ -258,22 +258,27 @@ const attachmentMdLoading = ref(false)
 const officeWrapRef = ref(null)
 const officeFitScale = ref(0.8)
 let officeResizeObserver = null
-const OFFICE_VIEWPORT = { width: 1440, height: 900 }
-const officeFrameStyle = computed(() => ({
-  width: `${OFFICE_VIEWPORT.width}px`,
-  height: `${OFFICE_VIEWPORT.height}px`,
-  position: 'absolute',
-  left: '50%',
-  top: '50%',
-  transform: `translate(-50%, -50%) scale(${officeFitScale.value})`,
-  transformOrigin: 'center center'
-}))
+const OFFICE_VIEWPORT = { width: 794, height: 1123 }
+const officeFrameStyle = computed(() => {
+  if (attachmentFullscreen.value) {
+    return { width: '100%', height: '100%', position: 'static', transform: 'none' }
+  }
+  return {
+    width: `${OFFICE_VIEWPORT.width}px`,
+    height: `${OFFICE_VIEWPORT.height}px`,
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    transform: `translate(-50%, -50%) scale(${officeFitScale.value})`,
+    transformOrigin: 'center center'
+  }
+})
 function fitOfficeFrame() {
   const el = officeWrapRef.value
   if (!el) return
   const w = el.clientWidth || 0, h = el.clientHeight || 0
   if (!w || !h) return
-  officeFitScale.value = Math.min(w / OFFICE_VIEWPORT.width, h / OFFICE_VIEWPORT.height, 1.2)
+  officeFitScale.value = Math.min(w / OFFICE_VIEWPORT.width, h / OFFICE_VIEWPORT.height, 1)
 }
 function bindOfficeResize() {
   if (officeResizeObserver) officeResizeObserver.disconnect()
