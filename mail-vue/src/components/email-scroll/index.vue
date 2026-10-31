@@ -1953,7 +1953,10 @@ ul {
 :deep(.email-row .email-sender .name) { font-size: 13px; line-height: 18px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 :deep(.email-row .phone-time) { display: block !important; font-size: 11px; color: var(--rd-muted, var(--label-3)); font-weight: 500; flex: 0 0 auto; }
 :deep(.email-row .email-text) { display: block !important; margin-top: 2px; }
-:deep(.email-row .email-subject) { display: flex !important; align-items: center; gap: 5px; min-width: 0; }
+:deep(.email-row .email-subject) { display: flex !important; align-items: center; gap: 5px; min-width: 0; width: 100%; flex: 1 1 auto; }
+:deep(.email-row .email-subject .subject-text) { flex: 1 1 auto; min-width: 0; }
+:deep(.email-row .row-markers) { display: flex; align-items: center; gap: 5px; flex: 0 0 auto; margin-left: auto; }
+:deep(.email-row .row-star) { flex: 0 0 auto; }
 :deep(.email-row .email-subject .subject-text) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 18px; font-weight: 620; color: var(--rd-text, var(--label)); }
 :deep(.email-row.is-unread .subject-text) { font-weight: 760; }
 :deep(.email-row .email-content) { display: block !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; line-height: 17px; color: var(--rd-muted, var(--label-3)); margin-top: 1px; }
