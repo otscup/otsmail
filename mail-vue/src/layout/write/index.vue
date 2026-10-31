@@ -1,6 +1,6 @@
 <template>
   <div class="send" v-show="show">
-    <div class="write-box">
+    <div class="write-box" :class="{ fullscreen: composeFullscreen }">
       <div class="title">
         <div class="title-left">
           <span class="title-text">
@@ -23,8 +23,14 @@
             />
           </el-select>
         </div>
-        <div @click="close" style="cursor: pointer;">
-          <Icon icon="material-symbols-light:close-rounded" width="22" height="22"/>
+        <div class="title-actions">
+          <button class="compose-icon-btn" type="button" :title="composeFullscreen ? '退出全屏' : '全屏'"
+                  @click="composeFullscreen = !composeFullscreen">
+            <Icon :icon="composeFullscreen ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'" width="22" height="22"/>
+          </button>
+          <button class="compose-icon-btn" type="button" title="关闭" @click="close">
+            <Icon icon="material-symbols-light:close-rounded" width="22" height="22"/>
+          </button>
         </div>
       </div>
       <div class="container">
@@ -174,6 +180,7 @@ const accountStore = useAccountStore()
 const editor = ref({})
 const userStore = useUserStore();
 const show = ref(false);
+const composeFullscreen = ref(false);
 const percent = ref(0)
 let percentMessage = null
 let sending = false
@@ -546,6 +553,7 @@ function addRecipientRecord() {
 }
 
 function resetForm() {
+  composeFullscreen.value = false
   form.receiveEmail = []
   form.cc = []
   form.bcc = []
@@ -739,7 +747,7 @@ function onAiFill(event) {
   editor.value.setContent(html + current)
   form.content = editor.value.getContent()
   form.text = text
-  document.body.classList.remove('compose-ai-open')
+  // Keep compose-ai-open so the editor width does not jump while the panel stays open.
   nextTick(() => editor.value?.focus())
 }
 
@@ -857,6 +865,15 @@ function close() {
 .compose-account-popper .el-select-dropdown__item.is-hovering {
   background: #f5f6f7 !important;
 }
+
+.send .write-box.fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 12px !important;
+}
 </style>
 <style scoped lang="scss">
 .send {
@@ -896,6 +913,30 @@ function close() {
       display: flex;
       justify-content: space-between;
       margin-bottom: 10px;
+
+      .title-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .compose-icon-btn {
+        border: 0;
+        background: transparent;
+        color: var(--el-text-color-primary);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border-radius: 7px;
+        cursor: pointer;
+      }
+
+      .compose-icon-btn:hover {
+        background: var(--el-fill-color-light);
+      }
 
       .title-left {
         align-items: center;

@@ -325,7 +325,8 @@ function applyDraft(text, subject = '') {
   emit('fill', {subject, text: value})
   window.dispatchEvent(new CustomEvent('otsmail:ai-fill', {detail: {text: value, subject}}))
   ElMessage.success(t('aiFilled'))
-  open.value = false
+  // Keep the panel open while composing; closing it resized the editor and made the window jump.
+  if (!composeMode.value) open.value = false
   return true
 }
 

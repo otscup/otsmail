@@ -2820,9 +2820,41 @@ form .el-button {
 .settings-card.collapsed .card-title::after { transform:rotate(-90deg); }
 .settings-card.collapsed .card-content { display:none; }
 .setting-item { grid-template-columns: 180px minmax(0,1fr) !important; }
-.ai-settings-card { grid-column: auto !important; width:100%; }
+.ai-settings-card {
+  width: 100%;
+  max-width: 1100px;
+}
+.ai-settings-card .card-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 26px;
+}
+.ai-settings-card .ai-setting-tip { grid-column: 1 / -1; }
+.ai-settings-card .setting-item {
+  grid-template-columns: 132px minmax(0, 1fr) !important;
+  align-items: start;
+}
+.ai-settings-card .setting-item > div:last-child {
+  grid-template-columns: minmax(0, 1fr) !important;
+  justify-items: stretch;
+}
+.ai-settings-card .el-input,
+.ai-settings-card .el-select {
+  width: 100% !important;
+  max-width: none;
+}
+.ai-settings-card .ai-model-row,
+.ai-settings-card .ai-classify-row {
+  width: 100%;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+@media (max-width: 1100px) {
+  .ai-settings-card .card-content { grid-template-columns: 1fr; }
+}
 @media (max-width: 640px) {
   .setting-item { grid-template-columns: 1fr !important; }
   .setting-item > div:last-child { justify-self:start; }
+  .ai-settings-card { max-width: none; }
 }
 </style>

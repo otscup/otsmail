@@ -593,6 +593,15 @@ function openOnlyOffice(att, readonly = false) {
   showAttachmentPreview.value = true
 }
 
+function openMicrosoftOffice(att) {
+  attachmentName.value = att.filename
+  attachmentKind.value = 'iframe'
+  attachmentFullscreen.value = false
+  officeLoading.value = false
+  attachmentUrl.value = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(cvtR2Url(att.key))}`
+  showAttachmentPreview.value = true
+}
+
 function openAttachment(att) {
   if (isImage(att.filename)) return showImage(att.key)
   attachmentName.value = att.filename
@@ -628,7 +637,7 @@ function openAttachment(att) {
     return
   }
   if (isOnlyOffice(att.filename)) {
-    return openOnlyOffice(att, true)
+    return openMicrosoftOffice(att)
   }
   if (!isPreviewable(att.filename)) {
     window.open(cvtR2Url(att.key), '_blank', 'noopener,noreferrer')
