@@ -40,10 +40,21 @@
       <div v-perm="'ai:use'" class="header-ai">
         <aiAssistant ref="aiAssistantRef" inline class="header-ai-window"/>
       </div>
-      <button type="button" class="mobile-avatar" @click="changeAside" :aria-label="$t('settings')">
-        <img v-if="userStore.user.avatar" :src="userStore.user.avatar" alt=""/>
-        <span v-else>{{ (userStore.user.name || userStore.user.email || 'A').slice(0,1).toUpperCase() }}</span>
-      </button>
+      <el-dropdown class="mobile-user-menu" trigger="click" @command="mobileUserCommand">
+        <button type="button" class="mobile-avatar" :aria-label="$t('settings')">
+          <img v-if="userStore.user.avatar" :src="userStore.user.avatar" alt=""/>
+          <span v-else>{{ (userStore.user.name || userStore.user.email || 'A').slice(0,1).toUpperCase() }}</span>
+        </button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item disabled>{{ userStore.user.name || 'OTSCUP' }}</el-dropdown-item>
+            <el-dropdown-item disabled>{{ userStore.user.email }}</el-dropdown-item>
+            <el-dropdown-item divided command="settings">{{ $t('settings') }}</el-dropdown-item>
+            <el-dropdown-item command="lang">{{ locale === 'en' ? '中文' : 'English' }}</el-dropdown-item>
+            <el-dropdown-item command="logout">{{ $t('logOut') }}</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
   </div>
 </template>
@@ -87,6 +98,16 @@ function openMobileSearch() {
 }
 function closeMobileSearch() {
   mobileSearchOpen.value = false
+}
+function mobileUserCommand(command) {
+  if (command === 'settings') { router.push('/settings'); return }
+  if (command === 'lang') { toggleLang(); return }
+  if (command === 'logout' && !logoutLoading.value) {
+    logoutLoading.value = true
+    logout().catch(() => {})
+    clearToken()
+    router.replace('/login').finally(() => { logoutLoading.value = false })
+  }
 }
 function toggleLang() {
   locale.value = locale.value === 'en' ? 'zh' : 'en'
