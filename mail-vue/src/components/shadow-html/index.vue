@@ -1,11 +1,11 @@
 <template>
   <div class="content-box" ref="contentBox">
-    <div ref="container" class="content-html"></div>
+    <div ref="container" class="content-html" :class="{ 'is-dark': isDark }"></div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUpdated, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, onUpdated, watch } from 'vue'
 import DOMPurify from 'dompurify'
 
 const props = defineProps({
@@ -18,6 +18,8 @@ const props = defineProps({
 const container = ref(null)
 const contentBox = ref(null)
 let shadowRoot = null
+const isDark = ref(false)
+let themeObserver = null
 
 // 邮件正文是完全不可信的输入（任何人给你的地址发一封邮件就能投递 HTML）。
 // Shadow DOM 只隔离样式，不是安全边界 —— 脚本照样在主页面上下文执行。
@@ -100,6 +102,25 @@ function updateContent() {
         color: #0E70DF;
       }
 
+      :host(.is-dark) {
+        color: #E5E7EB;
+      }
+
+      :host(.is-dark) .shadow-content {
+        background: #0B111D !important;
+        color: #E5E7EB !important;
+      }
+
+      :host(.is-dark) .shadow-content * {
+        color: #E5E7EB !important;
+        background-color: transparent !important;
+        border-color: rgba(148, 163, 184, .28) !important;
+      }
+
+      :host(.is-dark) a {
+        color: #67E8F9 !important;
+      }
+
       .shadow-content {
         background: #FFFFFF !important;
         color: #13181D !important;
@@ -146,10 +167,15 @@ function ensureShadow() {
 }
 
 onMounted(() => {
+  isDark.value = document.documentElement.dataset.theme === 'dark'
+  themeObserver = new MutationObserver(() => { isDark.value = document.documentElement.dataset.theme === 'dark' })
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
   ensureShadow()
   updateContent()
   autoScale()
 })
+
+onBeforeUnmount(() => themeObserver?.disconnect())
 
 onUpdated(() => {
   // Vue may replace the host node; only rebuild if the shadow root was lost.

@@ -73,15 +73,25 @@
             <div class="email-info-main">
               <div class="send"><span class="send-source">{{$t('from')}}</span>
                 <div class="send-name">
-                  <span class="send-name-title">{{ email.name }}</span>
-                  <span><{{ email.sendEmail }}></span>
+                  <el-tooltip :content="email.sendEmail" :disabled="!email.name || !email.sendEmail" placement="top">
+                    <span class="send-name-title">{{ email.name || email.sendEmail }}</span>
+                  </el-tooltip>
                   <el-tooltip :content="$t('contactAddQuick')" placement="top">
                     <Icon class="add-contact-inline" icon="mdi:account-plus-outline" width="18" height="18"
                           @click.stop="addSenderContact"/>
                   </el-tooltip>
                 </div>
               </div>
-              <div class="receive" v-if="detailsOpen"><span class="source">{{$t('recipient')}}</span><span class="receive-email">{{  formateReceive(email.recipient) }}</span></div>
+              <div class="receive" v-if="detailsOpen">
+                <span class="source">{{$t('recipient')}}</span>
+                <span class="receive-email">
+                  <template v-for="(item, index) in recipientList" :key="item.address + index">
+                    <el-tooltip :content="item.address" :disabled="!item.name" placement="top">
+                      <span>{{ item.name || item.address }}</span>
+                    </el-tooltip><span v-if="index < recipientList.length - 1">, </span>
+                  </template>
+                </span>
+              </div>
               <div class="date" v-if="detailsOpen">
                 <div>{{ formatDetailDate(email.createTime) }}</div>
               </div>
@@ -146,6 +156,7 @@
                 </div>
                 <div class="att-size">{{ formatBytes(att.size) }}</div>
                 <div class="opt-icon att-icon">
+                  <Icon v-if="isOnlyOffice(att.filename)" icon="mdi:file-edit-outline" width="22" height="22" title="ONLYOFFICE" @click="openOnlyOffice(att)"/>
                   <Icon v-if="isImage(att.filename) || isPreviewable(att.filename)" icon="hugeicons:view" width="22" height="22" @click="openAttachment(att)"/>
                   <a :href="cvtR2Url(att.key)" download>
                     <Icon icon="system-uicons:push-down" width="22" height="22"/>
@@ -213,6 +224,18 @@ const summary = ref('')
 const summaryLoading = ref(false)
 const summaryError = ref('')
 const srcList = reactive([])
+const recipientList = computed(() => {
+  let list = email.recipient
+  if (typeof list === 'string') { try { list = JSON.parse(list || '[]') } catch { list = [] } }
+  if (!Array.isArray(list)) list = list ? [list] : []
+  return list.map(item => {
+    if (typeof item === 'string') return {name: '', address: item.trim()}
+    return {
+      name: String(item?.name || '').trim(),
+      address: String(item?.address || item?.email || '').trim()
+    }
+  }).filter(item => item.name || item.address)
+})
 
 async function loadSummary() {
   if (!email?.emailId) return
@@ -402,6 +425,30 @@ function formatImage(content) {
 
 function isPreviewable(filename) {
   return ['pdf', 'txt', 'text', 'csv', 'json', 'md', 'log', 'xml', 'yml', 'yaml', 'ini'].includes(getExtName(filename))
+}
+
+function isOnlyOffice(filename) {
+  return ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'rtf'].includes(getExtName(filename))
+}
+
+function openOnlyOffice(att) {
+  const ext = getExtName(att.filename)
+  const documentType = ['xls', 'xlsx', 'ods'].includes(ext) ? 'cell'
+    : ['ppt', 'pptx', 'odp'].includes(ext) ? 'slide' : 'word'
+  const config = {
+    document: {
+      url: cvtR2Url(att.key),
+      title: att.filename,
+      fileType: ext,
+      key: `mail-${email.emailId}-${att.attId}`,
+      permissions: { edit: true, download: true, print: true }
+    },
+    documentType,
+    editorConfig: { mode: 'edit', lang: settingStore.lang === 'zh' ? 'zh' : 'en' },
+    width: '100%',
+    height: '100%'
+  }
+  window.open(`https://office.otscup.com/onlyoffice.html?docConfig=${encodeURIComponent(JSON.stringify(config))}`, '_blank', 'noopener,noreferrer')
 }
 
 function openAttachment(att) {

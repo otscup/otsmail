@@ -826,8 +826,8 @@ html[data-theme="dark"] .layout-v2 .header .header-ai .ai-assistant.is-inline .a
 .layout-v2 .header .avatar-text { padding:2px; background:conic-gradient(from 210deg,#6ee7ff,#7c7bff,#d56bff,#6ee7ff); }
 .layout-v2 .header .avatar-text img { border-radius:50%; }
 .layout-v2 .details-avatar { padding:2px; background:conic-gradient(from 210deg,#6ee7ff,#7c7bff,#d56bff,#6ee7ff); }
-.layout-v2 .header .lang-toggle { height:30px; min-width:34px; padding:0 8px; border:1px solid var(--rd-line); border-radius:9px; background:var(--rd-panel); color:var(--rd-muted); font-size:10px; font-weight:700; cursor:pointer; letter-spacing:.03em; }
-.layout-v2 .header .lang-toggle:hover { background:var(--rd-panel-2); color:var(--rd-text); }
+.layout-v2 .header .lang-toggle { height:34px; min-width:34px; padding:0 3px; border:0; border-radius:9px; background:transparent; color:var(--rd-text); font-size:11px; font-weight:750; cursor:pointer; letter-spacing:.02em; }
+.layout-v2 .header .lang-toggle:hover { background:transparent; color:var(--rd-text); }
 /* bilingual category tabs */
 .layout-v2 .email-container .mail-category { gap:4px !important; padding:0 9px !important; }
 .layout-v2 .email-container .mail-category .tab-text { display:flex; flex-direction:column; align-items:flex-start; line-height:1.08; }
@@ -1114,8 +1114,8 @@ html[data-theme="dark"] .send .write-box .editor-box { background: var(--rd-pane
 
 /* Email body is a light canvas in both themes: email HTML is written for light backgrounds. */
 html[data-theme="dark"] .mail-detail .content-box {
-  background: #ffffff !important;
-  color: #111827 !important;
+  background: var(--rd-panel) !important;
+  color: var(--rd-text) !important;
   padding: 18px 20px !important;
   box-shadow: inset 0 0 0 1px rgba(15,23,42,.08) !important;
   border-radius: 12px !important;
@@ -1129,7 +1129,7 @@ html[data-theme="dark"] .mail-detail .email-text {
 }
 
 html[data-theme="dark"] .mail-detail .shadow-html {
-  color: #13181d !important;
+  color: var(--rd-text) !important;
 }
 
 
@@ -1198,4 +1198,30 @@ html[data-theme="dark"] .mail-detail .shadow-html {
 @media (max-width: 767px) {
   .att-preview-dialog { width: 96vw !important; }
   .att-preview-frame { height: 62vh; }
+}
+
+
+/* dark compose surface */
+html[data-theme="dark"] .send .tox .tox-toolbar,
+html[data-theme="dark"] .send .tox .tox-toolbar-overlord,
+html[data-theme="dark"] .send .tox .tox-toolbar__primary,
+html[data-theme="dark"] .send .tox .tox-menubar,
+html[data-theme="dark"] .send .tox .tox-statusbar,
+html[data-theme="dark"] .send .tox .tox-edit-area {
+  background: #0b111d !important;
+  color: #e5e7eb !important;
+}
+html[data-theme="dark"] .send .tox .tox-tbtn {
+  color: #cbd5e1 !important;
+}
+
+
+/* compose account + editor controls follow the dark surface */
+html[data-theme="dark"] .send .compose-account .el-select__wrapper {
+  background: var(--rd-panel-2) !important;
+  box-shadow: none !important;
+  color: var(--rd-text) !important;
+}
+html[data-theme="dark"] .send .tox .tox-tbtn svg {
+  fill: #cbd5e1 !important;
 }
