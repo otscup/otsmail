@@ -157,7 +157,7 @@
                 <div class="att-size">{{ formatBytes(att.size) }}</div>
                 <div class="opt-icon att-icon">
                   <Icon v-if="isOnlyOffice(att.filename)" icon="mdi:file-edit-outline" width="22" height="22" title="编辑（ONLYOFFICE）" @click="openOnlyOffice(att)"/>
-                  <Icon v-if="isImage(att.filename) || isPreviewable(att.filename) || isOnlyOffice(att.filename) || isCsv(att.filename)" icon="hugeicons:view" width="22" height="22" title="预览" @click="openAttachment(att)"/>
+                  <Icon v-if="isImage(att.filename) || isPreviewable(att.filename) || isOnlyOffice(att.filename) || isCsv(att.filename) || isMarkdown(att.filename)" icon="hugeicons:view" width="22" height="22" title="预览" @click="openAttachment(att)"/>
                   <a :href="cvtR2Url(att.key)" download>
                     <Icon icon="system-uicons:push-down" width="22" height="22"/>
                   </a>
@@ -177,14 +177,17 @@
     <el-dialog v-model="showAttachmentPreview" :title="attachmentName" width="min(1000px, 94vw)"
                :fullscreen="attachmentFullscreen" class="att-preview-dialog" destroy-on-close
                @closed="attachmentFullscreen = false">
-      <div class="att-preview-shell" :class="{ fullscreen: attachmentFullscreen }">
+      <div ref="attachmentPreviewRef" class="att-preview-shell" :class="{ fullscreen: attachmentFullscreen }">
         <div class="att-preview-head">
           <span>{{ attachmentName }}</span>
           <el-tooltip :content="attachmentFullscreen ? '退出全屏' : '放大全屏'" placement="bottom">
-            <button type="button" class="att-preview-expand" @click="attachmentFullscreen = !attachmentFullscreen">
+            <button type="button" class="att-preview-expand" @click="toggleAttachmentFullscreen">
               <Icon :icon="attachmentFullscreen ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'" width="22" height="22"/>
             </button>
           </el-tooltip>
+          <button type="button" class="att-preview-expand" title="关闭" @click="closeAttachmentPreview">
+            <Icon icon="mdi:close" width="22" height="22"/>
+          </button>
         </div>
         <div v-if="attachmentKind === 'csv'" class="att-csv-wrap">
           <div v-if="attachmentCsvLoading" class="att-preview-note">正在读取 CSV…</div>
@@ -209,6 +212,8 @@
 <script setup>
 import ShadowHtml from '@/components/shadow-html/index.vue'
 import {reactive, ref, watch, onMounted, onUnmounted} from "vue";
+import DOMPurify from 'dompurify'
+import { marked } from 'marked'
 import {useRouter} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
 import {emailDelete, emailRead, emailDetail, emailSpam, emailSpamCancel, emailMoveCategory} from "@/request/email.js";
@@ -245,7 +250,11 @@ const showPreview = ref(false)
 const showAttachmentPreview = ref(false)
 const attachmentUrl = ref('')
 const attachmentName = ref('')
+const attachmentPreviewRef = ref(null)
 const attachmentKind = ref('iframe')
+const attachmentMarkdown = ref('')
+const attachmentMdLoading = ref(false)
+const attachmentMdError = ref('')
 const attachmentFullscreen = ref(false)
 const attachmentCsv = ref([])
 const attachmentCsvLoading = ref(false)
@@ -397,6 +406,7 @@ watch(() => accountStore.currentAccountId, () => {
 })
 
 onMounted(async () => {
+  document.addEventListener('fullscreenchange', onFullscreenChange)
   // T-02 edge: persisted contentData.email null -> no recoverable id, fall back to inbox list
   if (!email || !email.emailId) {
     if (!props.embedded) router.replace('/inbox')
@@ -421,6 +431,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
   emailStore.contentData.showUnread = false;
   window.removeEventListener('keydown', handleKeyDown);
 })
@@ -457,11 +468,42 @@ function formatImage(content) {
 }
 
 function isPreviewable(filename) {
-  return ['pdf', 'txt', 'text', 'json', 'md', 'log', 'xml', 'yml', 'yaml', 'ini'].includes(getExtName(filename))
+  return ['pdf', 'txt', 'text', 'json', 'log', 'xml', 'yml', 'yaml', 'ini'].includes(getExtName(filename))
 }
 
 function isCsv(filename) {
   return ['csv', 'tsv'].includes(getExtName(filename))
+}
+
+function isMarkdown(filename) {
+  return ['md', 'markdown'].includes(getExtName(filename))
+}
+
+async function toggleAttachmentFullscreen() {
+  const el = attachmentPreviewRef.value
+  if (!document.fullscreenElement) {
+    try {
+      if (el?.requestFullscreen) {
+        await el.requestFullscreen()
+        attachmentFullscreen.value = true
+        return
+      }
+    } catch (_) {}
+    attachmentFullscreen.value = true
+  } else {
+    await document.exitFullscreen().catch(() => {})
+    attachmentFullscreen.value = false
+  }
+}
+
+function closeAttachmentPreview() {
+  showAttachmentPreview.value = false
+  attachmentFullscreen.value = false
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+}
+
+function onFullscreenChange() {
+  if (!document.fullscreenElement) attachmentFullscreen.value = false
 }
 
 function parseCsv(text) {
@@ -515,6 +557,21 @@ function openAttachment(att) {
   if (isImage(att.filename)) return showImage(att.key)
   attachmentName.value = att.filename
   attachmentFullscreen.value = false
+  if (isMarkdown(att.filename)) {
+    attachmentKind.value = 'markdown'
+    attachmentUrl.value = ''
+    attachmentMarkdown.value = ''
+    attachmentMdError.value = ''
+    attachmentMdLoading.value = true
+    showAttachmentPreview.value = true
+    fetch(cvtR2Url(att.key)).then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return r.text()
+    }).then(text => { attachmentMarkdown.value = DOMPurify.sanitize(marked.parse(text)) })
+      .catch(e => { attachmentMdError.value = `Markdown load failed: ${e.message}` })
+      .finally(() => { attachmentMdLoading.value = false })
+    return
+  }
   if (isCsv(att.filename)) {
     attachmentKind.value = 'csv'
     attachmentUrl.value = ''
