@@ -1078,10 +1078,10 @@ body.compose-ai-open .write-box { width: min(700px, calc(100vw - 420px)) !import
 html[data-theme="dark"] .send .write-box,
 html[data-theme="dark"] .send .write-box .container,
 html[data-theme="dark"] .send .write-box .header,
-html[data-theme="dark"] .send .write-box .footer { background: var(--rd-panel) !important; color: var(--rd-text) !important; }
+html[data-theme="dark"] .send .write-box .footer { background: #111a2e !important; color: var(--rd-text) !important; }
 html[data-theme="dark"] .send .write-box .title,
 html[data-theme="dark"] .send .write-box .subject,
-html[data-theme="dark"] .send .write-box .editor-box { background: var(--rd-panel-2) !important; color: var(--rd-text) !important; }
+html[data-theme="dark"] .send .write-box .editor-box { background: #111a2e !important; color: var(--rd-text) !important; }
 @media (max-width: 1024px) {
   .mail-detail { height: 100%; min-height: 0; overflow: hidden; }
   .mail-detail .scrollbar { height: 100%; min-height: 0; }
@@ -1114,7 +1114,7 @@ html[data-theme="dark"] .send .write-box .editor-box { background: var(--rd-pane
 
 /* Email body is a light canvas in both themes: email HTML is written for light backgrounds. */
 html[data-theme="dark"] .mail-detail .content-box {
-  background: var(--rd-panel) !important;
+  background: #111a2e !important;
   color: var(--rd-text) !important;
   padding: 18px 20px !important;
   box-shadow: inset 0 0 0 1px rgba(15,23,42,.08) !important;
@@ -1208,7 +1208,7 @@ html[data-theme="dark"] .send .tox .tox-toolbar__primary,
 html[data-theme="dark"] .send .tox .tox-menubar,
 html[data-theme="dark"] .send .tox .tox-statusbar,
 html[data-theme="dark"] .send .tox .tox-edit-area {
-  background: #0b111d !important;
+  background: #111a2e !important;
   color: #e5e7eb !important;
 }
 html[data-theme="dark"] .send .tox .tox-tbtn {

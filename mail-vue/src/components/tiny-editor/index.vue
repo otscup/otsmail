@@ -106,6 +106,11 @@ function initEditor() {
     html, body, .mce-content-body {
       background: ${uiStore.dark ? '#0b111d' : '#ffffff'} !important;
       color: ${uiStore.dark ? '#e5e7eb' : '#13181d'} !important;
+    }
+    blockquote, blockquote * {
+      background: ${uiStore.dark ? '#111a2e' : 'transparent'} !important;
+      color: ${uiStore.dark ? '#e5e7eb' : '#13181d'} !important;
+      border-color: ${uiStore.dark ? '#334155' : '#cccccc'} !important;
     }`,
     plugins: 'link image advlist lists  emoticons fullscreen  table preview code',
     toolbar: 'bold emoticons forecolor backcolor italic fontsize | alignleft aligncenter alignright alignjustify | outdent indent |  bullist numlist | link image  | table code preview fullscreen',

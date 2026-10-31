@@ -156,8 +156,8 @@
                 </div>
                 <div class="att-size">{{ formatBytes(att.size) }}</div>
                 <div class="opt-icon att-icon">
-                  <Icon v-if="isOnlyOffice(att.filename)" icon="mdi:file-edit-outline" width="22" height="22" title="ONLYOFFICE" @click="openOnlyOffice(att)"/>
-                  <Icon v-if="isImage(att.filename) || isPreviewable(att.filename)" icon="hugeicons:view" width="22" height="22" @click="openAttachment(att)"/>
+                  <Icon v-if="isOnlyOffice(att.filename)" icon="mdi:file-edit-outline" width="22" height="22" title="编辑（ONLYOFFICE）" @click="openOnlyOffice(att)"/>
+                  <Icon v-if="isImage(att.filename) || isPreviewable(att.filename) || isOnlyOffice(att.filename) || isCsv(att.filename)" icon="hugeicons:view" width="22" height="22" title="预览" @click="openAttachment(att)"/>
                   <a :href="cvtR2Url(att.key)" download>
                     <Icon icon="system-uicons:push-down" width="22" height="22"/>
                   </a>
@@ -528,6 +528,12 @@ function openAttachment(att) {
     }).then(text => { attachmentCsv.value = parseCsv(text) })
       .catch(e => { attachmentCsvError.value = `CSV 读取失败：${e.message}` })
       .finally(() => { attachmentCsvLoading.value = false })
+    return
+  }
+  if (isOnlyOffice(att.filename)) {
+    attachmentKind.value = 'office-view'
+    attachmentUrl.value = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(cvtR2Url(att.key))}`
+    showAttachmentPreview.value = true
     return
   }
   if (!isPreviewable(att.filename)) {

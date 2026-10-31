@@ -107,7 +107,7 @@ function updateContent() {
       }
 
       :host(.is-dark) .shadow-content {
-        background: #0B111D !important;
+        background: #111A2E !important;
         color: #E5E7EB !important;
       }
 
