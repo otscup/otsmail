@@ -40,3 +40,7 @@ export function setTwoFactorRequired(required) {
     return http.put('/my/2fa/required', {required})
 }
 
+
+export function updateMySetting(data) {
+    return http.put('/my/setting', data)
+}

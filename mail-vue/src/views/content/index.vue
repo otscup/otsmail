@@ -138,15 +138,15 @@
             <div class="att-box">
 
               <div class="att-item" v-for="att in email.attList" :key="att.attId">
-                <div class="att-icon" @click="showImage(att.key)">
+                <div class="att-icon" @click="openAttachment(att)">
                   <Icon v-bind="getIconByName(att.filename)" />
                 </div>
-                <div class="att-name" @click="showImage(att.key)">
+                <div class="att-name" @click="openAttachment(att)">
                   {{ att.filename }}
                 </div>
                 <div class="att-size">{{ formatBytes(att.size) }}</div>
                 <div class="opt-icon att-icon">
-                  <Icon v-if="isImage(att.filename)" icon="hugeicons:view" width="22" height="22" @click="showImage(att.key)"/>
+                  <Icon v-if="isImage(att.filename) || isPreviewable(att.filename)" icon="hugeicons:view" width="22" height="22" @click="openAttachment(att)"/>
                   <a :href="cvtR2Url(att.key)" download>
                     <Icon icon="system-uicons:push-down" width="22" height="22"/>
                   </a>
@@ -163,6 +163,9 @@
         show-progress
         @close="showPreview = false"
     />
+    <el-dialog v-model="showAttachmentPreview" :title="attachmentName" width="min(1000px, 94vw)" class="att-preview-dialog" destroy-on-close>
+      <iframe v-if="attachmentUrl" :src="attachmentUrl" class="att-preview-frame" :title="attachmentName"/>
+    </el-dialog>
   </div>
 </template>
 <script setup>
@@ -201,6 +204,9 @@ const emit = defineEmits(['close'])
 const router = useRouter()
 const email = emailStore.contentData.email
 const showPreview = ref(false)
+const showAttachmentPreview = ref(false)
+const attachmentUrl = ref('')
+const attachmentName = ref('')
 const showSummary = ref(false)
 const detailsOpen = ref(false)
 const summary = ref('')
@@ -392,6 +398,21 @@ function formatImage(content) {
   content = content || '';
   const domain = settingStore.settings.r2Domain;
   return  content.replace(/{{domain}}/g, toOssDomain(domain) + '/');
+}
+
+function isPreviewable(filename) {
+  return ['pdf', 'txt', 'text', 'csv', 'json', 'md', 'log', 'xml', 'yml', 'yaml', 'ini'].includes(getExtName(filename))
+}
+
+function openAttachment(att) {
+  if (isImage(att.filename)) return showImage(att.key)
+  if (!isPreviewable(att.filename)) {
+    window.open(cvtR2Url(att.key), '_blank', 'noopener,noreferrer')
+    return
+  }
+  attachmentName.value = att.filename
+  attachmentUrl.value = cvtR2Url(att.key)
+  showAttachmentPreview.value = true
 }
 
 function showImage(key) {

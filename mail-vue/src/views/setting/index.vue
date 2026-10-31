@@ -56,6 +56,13 @@
         </div>
       </div>
       <div class="item wide">
+        <div>{{$t('signature')}}</div>
+        <div class="signature-editor">
+          <el-input v-model="signatureDraft" type="textarea" :rows="4" :maxlength="2000" show-word-limit :placeholder="$t('signaturePlaceholder')"/>
+          <el-button type="primary" :loading="signatureSaving" @click="saveSignature">{{$t('save')}}</el-button>
+        </div>
+      </div>
+      <div class="item wide">
         <div>{{$t('browserNotify')}}</div>
         <div class="row-flex">
           <el-switch :model-value="notifyOn" @change="toggleNotify"/>
@@ -216,12 +223,27 @@ import {clearToken} from "@/utils/token-store.js";
 import {oidcConfig, oauthBindings, oauthUnbind, oauthSetBindingActive} from "@/request/ouath.js";
 import {createPkce} from "@/utils/pkce.js";
 import {notifyEnabled, enableNotify, disableNotify} from "@/utils/notify.js";
+import {updateMySetting} from "@/request/my.js";
 
 const { t } = useI18n()
 const accountStore = useAccountStore()
 const settingStore = useSettingStore()
 const userStore = useUserStore();
 const isAdmin = computed(() => userStore.user?.role?.permKeys?.includes('*') || userStore.user?.role?.name === 'admin');
+const signatureDraft = ref(userStore.user?.signature || '')
+const signatureSaving = ref(false)
+async function saveSignature() {
+  signatureSaving.value = true
+  try {
+    const result = await updateMySetting({signature: signatureDraft.value})
+    userStore.user.signature = result.signature
+    ElMessage({message: t('signatureSaved'), type: 'success', plain: true})
+  } catch (e) {
+    ElMessage({message: e?.message || t('saveFailed'), type: 'error', plain: true})
+  } finally {
+    signatureSaving.value = false
+  }
+}
 const setPwdLoading = ref(false)
 const setNameShow = ref(false)
 const accountName = ref(null)

@@ -1188,3 +1188,14 @@ html[data-theme="dark"] .mail-detail .shadow-html {
   .settings-container .setting-item input,
   .settings-container .setting-item .el-input { max-width:100% !important; }
 }
+
+.signature-editor { display:flex; flex-direction:column; gap:8px; width:100%; max-width:520px; }
+
+
+/* attachment preview */
+.att-preview-dialog .el-dialog__body { padding: 0 16px 16px; }
+.att-preview-frame { width: 100%; height: 70vh; border: 0; background:#fff; border-radius: 10px; }
+@media (max-width: 767px) {
+  .att-preview-dialog { width: 96vw !important; }
+  .att-preview-frame { height: 62vh; }
+}

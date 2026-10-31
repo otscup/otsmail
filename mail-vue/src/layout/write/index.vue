@@ -584,6 +584,7 @@ function openForward(email) {
 
   setTimeout(() => {
     defValue.value = `
+      ${signatureHtml()}
       ${formatImage(email.content) || `<pre style="font-family: inherit;word-break: break-word;white-space: pre-wrap;margin: 0">${email.text}</pre>`}
     `
     open()
@@ -618,6 +619,7 @@ function openReply(email) {
   setTimeout(() => {
     defValue.value = `
     <div></div>
+    ${signatureHtml()}
     <div>
     <br>
         ${formatDetailDate(email.createTime)} ${email.name} &lt${email.sendEmail}&gt ${t('wrote')}:
@@ -668,11 +670,18 @@ function openAiReply(email, text) {
   form.subject = /^(Re:|Re：|回复：|回复:)/.test(email.subject) ? email.subject : 'Re: ' + email.subject
   form.sendType = 'reply'
   form.emailId = email.emailId
-  defValue.value = String(text || '')
+  defValue.value = signatureHtml() + String(text || '')
       .split('\n')
       .map(line => `<div>${line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') || '<br>'}</div>`)
       .join('')
   open()
+}
+
+function signatureHtml() {
+  const text = String(userStore.user?.signature || '').trim()
+  if (!text) return ''
+  const html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+  return `<div class="mail-signature"><br><div>--</div><div>${html}</div></div>`
 }
 
 function formatImage(content) {
@@ -687,6 +696,7 @@ function open() {
   form.accountId = sender.accountId;
   form.name = sender.name;
   loadComposeAccounts()
+  if (!form.sendType) defValue.value = signatureHtml()
   show.value = true;
   editor.value.focus()
 }
