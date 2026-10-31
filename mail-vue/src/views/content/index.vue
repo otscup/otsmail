@@ -258,7 +258,8 @@ const attachmentMdLoading = ref(false)
 const officeWrapRef = ref(null)
 const officeFitScale = ref(0.8)
 let officeResizeObserver = null
-const OFFICE_VIEWPORT = { width: 794, height: 1123 }
+// Virtual viewport large enough for OnlyOffice's chrome + a full A4 page; the whole iframe is scaled to fit.
+const OFFICE_VIEWPORT = { width: 1280, height: 1600 }
 const officeFrameStyle = computed(() => {
   if (attachmentFullscreen.value) {
     return { width: '100%', height: '100%', position: 'static', transform: 'none' }
@@ -567,7 +568,7 @@ function isOnlyOffice(filename) {
   return ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'rtf'].includes(getExtName(filename))
 }
 
-function openOnlyOffice(att) {
+function openOnlyOffice(att, readonly = false) {
   const ext = getExtName(att.filename)
   const documentType = ['xls', 'xlsx', 'ods'].includes(ext) ? 'cell'
     : ['ppt', 'pptx', 'odp'].includes(ext) ? 'slide' : 'word'
@@ -576,11 +577,11 @@ function openOnlyOffice(att) {
       url: cvtR2Url(att.key),
       title: att.filename,
       fileType: ext,
-      key: `mail-${email.emailId}-${att.attId}`,
-      permissions: { edit: true, download: true, print: true }
+      key: `mail-${readonly ? 'view' : 'edit'}-${email.emailId}-${att.attId}`,
+      permissions: { edit: !readonly, download: true, print: true }
     },
     documentType,
-    editorConfig: { mode: 'edit', lang: settingStore.lang === 'zh' ? 'zh' : 'en' },
+    editorConfig: { mode: readonly ? 'view' : 'edit', lang: settingStore.lang === 'zh' ? 'zh' : 'en' },
     width: '100%',
     height: '100%'
   }
@@ -627,10 +628,7 @@ function openAttachment(att) {
     return
   }
   if (isOnlyOffice(att.filename)) {
-    attachmentKind.value = 'office-view'
-    attachmentUrl.value = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(cvtR2Url(att.key))}`
-    showAttachmentPreview.value = true
-    return
+    return openOnlyOffice(att, true)
   }
   if (!isPreviewable(att.filename)) {
     window.open(cvtR2Url(att.key), '_blank', 'noopener,noreferrer')
