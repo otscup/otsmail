@@ -143,6 +143,8 @@ import {getIconByName} from "@/utils/icon-utils.js";
 import sendPercent from "@/components/send-percent/index.vue"
 import {toOssDomain} from "@/utils/convert.js";
 import {formatDetailDate} from "@/utils/day.js";
+import {marked} from "marked";
+import DOMPurify from "dompurify";
 import {contactList} from "@/request/contact.js";
 import {useSettingStore} from "@/store/setting.js";
 import {userDraftStore} from "@/store/draft.js";
@@ -729,13 +731,16 @@ function openComposeAi() {
 }
 
 function onAiFill(event) {
-  const text = String(event.detail?.text || '')
-  if (!text) return
-  const html = text.split('\n').map(line => `<p>${line.replace(/</g, '&lt;')}</p>`).join('')
-  editor.value?.setContent(html)
-  form.content = html
+  const text = String(event.detail?.text || '').trim()
+  if (!text || !editor.value) return
+  const html = DOMPurify.sanitize(marked.parse(text))
+  const current = editor.value.getContent?.() || ''
+  // Keep the existing signature/quoted reply below the generated body.
+  editor.value.setContent(html + current)
+  form.content = editor.value.getContent()
   form.text = text
   document.body.classList.remove('compose-ai-open')
+  nextTick(() => editor.value?.focus())
 }
 
 onMounted(() => {

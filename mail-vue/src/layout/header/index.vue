@@ -122,17 +122,12 @@ function openAiFromMenu() {
 function openAiForEmail(event) {
   aiAssistantRef.value?.openPanel(Number(event.detail?.emailId) || 0, String(event.detail?.subject || ''))
 }
-function openAiForCompose(event) {
-  aiAssistantRef.value?.openPanel(0, '', String(event.detail?.text || ''))
-}
 onMounted(() => {
   document.documentElement.lang = locale.value
   window.addEventListener('otsmail:ai', openAiForEmail)
-  window.addEventListener('otsmail:ai-compose', openAiForCompose)
 })
 onUnmounted(() => {
   window.removeEventListener('otsmail:ai', openAiForEmail)
-  window.removeEventListener('otsmail:ai-compose', openAiForCompose)
 })
 const showMailSearch = computed(() => ['email', 'star', 'unread', 'deleted', 'spam', 'all-email', 'send', 'draft', 'contacts', 'user'].includes(route.name))
 const searchOptions = computed(() => {

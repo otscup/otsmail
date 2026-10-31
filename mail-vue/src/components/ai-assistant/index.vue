@@ -118,8 +118,10 @@ const minimized = ref(false)
 const emailStore = useEmailStore()
 const activeEmailId = ref(props.emailId)
 const activeEmailSubject = ref(props.emailSubject)
+const composeMode = ref(false)
 const panelText = ref(props.text)
 function openPanel(emailId = 0, subject = '', draftText = '') {
+  composeMode.value = false
   if (!emailId) {
     const current = emailStore.contentData?.email
     if (current?.emailId) {
@@ -173,6 +175,7 @@ function onComposeAi(event) {
   activeEmailId.value = Number(detail.emailId) || current?.emailId || 0
   activeEmailSubject.value = detail.subject || current?.subject || ''
   panelText.value = detail.text || ''
+  composeMode.value = true
   minimized.value = false
   open.value = true
   document.body.classList.add('compose-ai-open')
@@ -270,6 +273,7 @@ async function doReply() {
   busy.value = true
   try {
     draft.value = await aiReply(activeEmailId.value, props.tone)
+    if (composeMode.value) applyDraft(draft.value?.text, draft.value?.subject)
   } finally {
     busy.value = false
   }
@@ -298,6 +302,10 @@ async function send() {
   try {
     const res = await aiCommand(text, useAccountStore().currentAccountId, history, activeEmailId.value)
     messages.value.push({role: 'ai', text: res?.reply || '', actions: res?.actions || []})
+    const draftAction = (res?.actions || []).find(action => action.ok && action.type === 'draft' && action.text)
+    if (draftAction && composeMode.value) {
+      applyDraft(draftAction.text, draftAction.subject)
+    }
     // 删除/已读等动作已落库，刷新背后的邮件列表，避免界面和数据不一致
     if (res?.actions?.some(action => action.ok)) {
       useEmailStore().emailScroll?.refreshList()
@@ -311,12 +319,18 @@ async function send() {
   }
 }
 
-function fillDraft() {
-  const text = draft.value?.text || ''
-  emit('fill', {subject: draft.value?.subject || '', text})
-  window.dispatchEvent(new CustomEvent('otsmail:ai-fill', {detail: {text, subject: draft.value?.subject || ''}}))
+function applyDraft(text, subject = '') {
+  const value = String(text || '').trim()
+  if (!value) return false
+  emit('fill', {subject, text: value})
+  window.dispatchEvent(new CustomEvent('otsmail:ai-fill', {detail: {text: value, subject}}))
   ElMessage.success(t('aiFilled'))
   open.value = false
+  return true
+}
+
+function fillDraft() {
+  applyDraft(draft.value?.text, draft.value?.subject)
 }
 
 async function scrollToBottom() {

@@ -15,7 +15,7 @@ import { and, asc, count, desc, eq, like, or } from 'drizzle-orm';
 import { t } from '../i18n/i18n';
 
 // AI 指令只允许这几类动作，白名单外一律拒绝
-const ACTION_TYPES = ['delete', 'read', 'unread', 'star', 'unstar', 'send', 'reply'];
+const ACTION_TYPES = ['delete', 'read', 'unread', 'star', 'unstar', 'send', 'reply', 'draft'];
 // 一次最多执行的动作数 / 喂给模型的候选邮件数 / 联系人候选数
 const MAX_ACTIONS = 20;
 const COMMAND_CANDIDATES = 50;
@@ -449,6 +449,8 @@ const aiService = {
 				'{"type":"delete|read|unread|star|unstar","emailId":<number>}',
 				'{"type":"send","to":"<contact name or email>","subject":"<subject>","text":"<body>"}',
 				'{"type":"reply","emailId":<number>,"text":"<body>"}',
+				'{"type":"draft","subject":"<subject>","text":"<body>"}',
+				'When the user asks you to write an email or a reply draft, return a draft action instead of saying drafts cannot be saved. Never claim you saved a draft; the client inserts it into the compose box.',
 				'Use only email ids from the list below. For send, use only a contact name/email from the contact list.',
 				'If the recipient is unknown or ambiguous, do not send; ask the user for the exact email address in reply.',
 				'For send/reply, write a complete, natural email body in the user\'s language. Do not invent facts.',
@@ -482,6 +484,21 @@ const aiService = {
 
 			if (!ACTION_TYPES.includes(type)) {
 				actions.push({ type, emailId, ok: false, error: t('aiUnknownAction') });
+				continue;
+			}
+
+			if (type === 'draft') {
+				const draftText = String(item?.text || '').trim();
+				if (!draftText) {
+					actions.push({ type, ok: false, error: 'Empty draft' });
+					continue;
+				}
+				actions.push({
+					type,
+					subject: String(item?.subject || '').trim().slice(0, 200),
+					text: draftText.slice(0, 20000),
+					ok: true
+				});
 				continue;
 			}
 
