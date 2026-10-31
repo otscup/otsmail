@@ -1230,7 +1230,8 @@ html[data-theme="dark"] .send .tox .tox-tbtn svg {
 /* attachment preview: fullscreen, CSV table and inline ONLYOFFICE */
 .att-preview-dialog .el-dialog__body { padding: 0 !important; }
 .att-preview-shell { display: flex; flex-direction: column; height: 70vh; min-height: 420px; background: var(--rd-panel); }
-.att-preview-shell.fullscreen { height: calc(100vh - 96px); }
+.att-preview-shell.fullscreen { width: 100vw !important; height: 100vh !important; max-width: none !important; border-radius: 0; }
+.att-preview-shell.fullscreen .att-frame-wrap { width:100%; }
 .att-preview-head { display: flex; align-items: center; justify-content: flex-end; gap: 8px; height: 42px; padding: 0 12px; border-bottom: 1px solid var(--rd-line); color: var(--rd-muted); font-size: 12px; }
 .att-preview-head > span { margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .att-preview-expand { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--rd-text); cursor: pointer; }
@@ -1251,7 +1252,7 @@ html[data-theme="dark"] .send .tox .tox-tbtn svg {
 
 
 /* native fullscreen preview + markdown */
-.att-preview-shell:fullscreen { width: 100vw; height: 100vh; background: var(--rd-panel); }
+.att-preview-shell:fullscreen { width: 100vw !important; height: 100vh !important; max-width: none !important; background: var(--rd-panel); }
 .att-preview-shell:fullscreen .att-preview-head { height: 52px; }
 .att-preview-shell:fullscreen .att-preview-frame { background: #fff; }
 .att-md-wrap { flex: 1; min-height: 0; overflow: auto; background: var(--rd-panel); padding: 26px 32px 48px; }

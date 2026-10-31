@@ -180,11 +180,6 @@
       <div ref="attachmentPreviewRef" class="att-preview-shell" :class="{ fullscreen: attachmentFullscreen }">
         <div class="att-preview-head">
           <span>{{ attachmentName }}</span>
-          <div v-if="attachmentKind === 'office'" class="office-zoom" title="ONLYOFFICE 缩放">
-            <button type="button" @click="officeScale = Math.max(0.5, Math.round((officeScale - 0.1) * 10) / 10)">−</button>
-            <span>{{ Math.round(officeScale * 100) }}%</span>
-            <button type="button" @click="officeScale = Math.min(1.2, Math.round((officeScale + 0.1) * 10) / 10)">+</button>
-          </div>
           <el-tooltip :content="attachmentFullscreen ? '退出全屏' : '放大全屏'" placement="bottom">
             <button type="button" class="att-preview-expand" @click="toggleAttachmentFullscreen">
               <Icon :icon="attachmentFullscreen ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'" width="22" height="22"/>
@@ -205,7 +200,7 @@
             </tbody>
           </table>
         </div>
-        <div v-else class="att-frame-wrap">
+        <div v-else ref="officeWrapRef" class="att-frame-wrap">
           <div v-if="attachmentKind === 'office' && officeLoading" class="att-preview-note">正在加载 ONLYOFFICE 编辑器…</div>
           <iframe v-if="attachmentUrl" :src="attachmentUrl" class="att-preview-frame"
                   :style="attachmentKind === 'office' ? officeFrameStyle : undefined"
@@ -217,7 +212,7 @@
 </template>
 <script setup>
 import ShadowHtml from '@/components/shadow-html/index.vue'
-import {reactive, ref, watch, onMounted, onUnmounted} from "vue";
+import {reactive, ref, watch, onMounted, onUnmounted, nextTick} from "vue";
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import {useRouter} from 'vue-router'
@@ -260,10 +255,36 @@ const attachmentPreviewRef = ref(null)
 const attachmentKind = ref('iframe')
 const attachmentMarkdown = ref('')
 const attachmentMdLoading = ref(false)
-const officeScale = ref(0.8)
-const officeFrameStyle = computed(() => {
-  const s = officeScale.value
-  return { width: `${100 / s}%`, height: `${100 / s}%`, transform: `scale(${s})`, transformOrigin: 'top left' }
+const officeWrapRef = ref(null)
+const officeFitScale = ref(0.8)
+let officeResizeObserver = null
+const OFFICE_VIEWPORT = { width: 1440, height: 900 }
+const officeFrameStyle = computed(() => ({
+  width: `${OFFICE_VIEWPORT.width}px`,
+  height: `${OFFICE_VIEWPORT.height}px`,
+  position: 'absolute',
+  left: '50%',
+  top: '50%',
+  transform: `translate(-50%, -50%) scale(${officeFitScale.value})`,
+  transformOrigin: 'center center'
+}))
+function fitOfficeFrame() {
+  const el = officeWrapRef.value
+  if (!el) return
+  const w = el.clientWidth || 0, h = el.clientHeight || 0
+  if (!w || !h) return
+  officeFitScale.value = Math.min(w / OFFICE_VIEWPORT.width, h / OFFICE_VIEWPORT.height, 1.2)
+}
+function bindOfficeResize() {
+  if (officeResizeObserver) officeResizeObserver.disconnect()
+  if (!officeWrapRef.value) return
+  fitOfficeFrame()
+  officeResizeObserver = new ResizeObserver(fitOfficeFrame)
+  officeResizeObserver.observe(officeWrapRef.value)
+}
+watch([showAttachmentPreview, attachmentKind], async ([show, kind]) => {
+  if (show && kind === 'office') { await nextTick(); bindOfficeResize() }
+  else if (officeResizeObserver) { officeResizeObserver.disconnect(); officeResizeObserver = null }
 })
 const attachmentMdError = ref('')
 const attachmentFullscreen = ref(false)
@@ -443,6 +464,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('fullscreenchange', onFullscreenChange)
+  if (officeResizeObserver) { officeResizeObserver.disconnect(); officeResizeObserver = null }
   emailStore.contentData.showUnread = false;
   window.removeEventListener('keydown', handleKeyDown);
 })
@@ -515,6 +537,7 @@ function closeAttachmentPreview() {
 
 function onFullscreenChange() {
   if (!document.fullscreenElement) attachmentFullscreen.value = false
+  nextTick(fitOfficeFrame)
 }
 
 function parseCsv(text) {

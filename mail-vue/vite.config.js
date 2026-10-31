@@ -54,6 +54,14 @@ export default defineConfig(({mode}) => {
         },
         build: {
             target: 'es2022',
+            rollupOptions: env.VITE_ASSET_VERSION ? {
+                output: {
+                    inlineDynamicImports: env.VITE_SINGLE_BUNDLE === '1',
+                    entryFileNames: `assets/${env.VITE_ASSET_VERSION}/[name]-[hash].js`,
+                    chunkFileNames: `assets/${env.VITE_ASSET_VERSION}/[name]-[hash].js`,
+                    assetFileNames: `assets/${env.VITE_ASSET_VERSION}/[name]-[hash][extname]`
+                }
+            } : undefined,
             outDir: env.VITE_OUT_DIR || 'dist',
             emptyOutDir: true,
             assetsInclude: ['**/*.json']
