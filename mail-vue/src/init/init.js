@@ -7,6 +7,7 @@ import router from "@/router";
 import {websiteConfig} from "@/request/setting.js";
 import i18n from "@/i18n/index.js";
 import {getToken} from "@/utils/token-store.js";
+import {applySkin, getStoredSkin} from "@/utils/appearance.js";
 
 export async function init() {
     document.title = '\u200B'
@@ -39,6 +40,7 @@ export async function init() {
             accountStore.currentAccountId = user.account.accountId;
             accountStore.currentAccount = user.account;
             userStore.user = user;
+            applySkin(user.skin || getStoredSkin(), Boolean(user.skin));
 
             const routers = permsToRouter(user.permKeys);
             routers.forEach(routerData => {

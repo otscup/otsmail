@@ -63,6 +63,8 @@ const dbInit = {
 		await this.otsmail_27DB(c);
 		await this.otsmail_28DB(c);
 		await this.otsmail_29DB(c);
+		await this.otsmail_30DB(c);
+		await this.otsmail_31DB(c);
 		await this.otsmail_9DB(c);
 		await settingService.refresh(c);
 		await c.env.kv.put('init_done', '1');
@@ -1154,6 +1156,112 @@ async otsmail_5DB(c) {
 	async otsmail_29DB(c) {
 		try {
 			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN login_theme TEXT NOT NULL DEFAULT 'paper';`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+	async otsmail_30DB(c) {
+		const countSql = `
+			INSERT OR REPLACE INTO email_count
+			(user_id, account_id, inbox, sent, deleted, spam, primary_c, social, promotion, updates, important, ads)
+			SELECT user_id, account_id,
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND unread=0 THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND spam=0 AND type=1 THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=1 THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=1 AND unread=0 THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='primary' THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='social' THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='promotion' THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='updates' THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='important' THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='ads' THEN 1 ELSE 0 END),0)
+			FROM email GROUP BY user_id, account_id;`;
+		const add = key => `
+			MAX(0, ${key} - CASE WHEN OLD.is_del=0 AND OLD.type=0 AND OLD.unread=0 THEN 1 ELSE 0 END
+				+ CASE WHEN NEW.is_del=0 AND NEW.type=0 AND NEW.unread=0 THEN 1 ELSE 0 END)`;
+		const sent = key => `
+			MAX(0, ${key} - CASE WHEN OLD.is_del=0 AND OLD.spam=0 AND OLD.type=1 THEN 1 ELSE 0 END
+				+ CASE WHEN NEW.is_del=0 AND NEW.spam=0 AND NEW.type=1 THEN 1 ELSE 0 END)`;
+		const deleted = key => `
+			MAX(0, ${key} - CASE WHEN OLD.is_del=1 THEN 1 ELSE 0 END
+				+ CASE WHEN NEW.is_del=1 THEN 1 ELSE 0 END)`;
+		const spam = key => `
+			MAX(0, ${key} - CASE WHEN OLD.is_del=0 AND OLD.type=0 AND OLD.spam=1 AND OLD.unread=0 THEN 1 ELSE 0 END
+				+ CASE WHEN NEW.is_del=0 AND NEW.type=0 AND NEW.spam=1 AND NEW.unread=0 THEN 1 ELSE 0 END)`;
+		const cat = (key, name) => `
+			MAX(0, ${key} - CASE WHEN OLD.is_del=0 AND OLD.type=0 AND OLD.spam=0 AND OLD.unread=0 AND OLD.category='${name}' THEN 1 ELSE 0 END
+				+ CASE WHEN NEW.is_del=0 AND NEW.type=0 AND NEW.spam=0 AND NEW.unread=0 AND NEW.category='${name}' THEN 1 ELSE 0 END)`;
+		try {
+			await c.env.db.prepare(`CREATE TABLE IF NOT EXISTS email_count (
+				user_id INTEGER NOT NULL,
+				account_id INTEGER NOT NULL,
+				inbox INTEGER NOT NULL DEFAULT 0,
+				sent INTEGER NOT NULL DEFAULT 0,
+				deleted INTEGER NOT NULL DEFAULT 0,
+				spam INTEGER NOT NULL DEFAULT 0,
+				primary_c INTEGER NOT NULL DEFAULT 0,
+				social INTEGER NOT NULL DEFAULT 0,
+				promotion INTEGER NOT NULL DEFAULT 0,
+				updates INTEGER NOT NULL DEFAULT 0,
+				important INTEGER NOT NULL DEFAULT 0,
+				ads INTEGER NOT NULL DEFAULT 0,
+				PRIMARY KEY (user_id, account_id)
+			);`).run();
+			await c.env.db.batch([
+				c.env.db.prepare(`DROP TRIGGER IF EXISTS email_count_ai;`),
+				c.env.db.prepare(`DROP TRIGGER IF EXISTS email_count_au;`),
+				c.env.db.prepare(`DROP TRIGGER IF EXISTS email_count_ad;`),
+				c.env.db.prepare(`CREATE TRIGGER email_count_ai AFTER INSERT ON email BEGIN
+					INSERT INTO email_count (user_id,account_id,inbox,sent,deleted,spam,primary_c,social,promotion,updates,important,ads)
+					VALUES (NEW.user_id,NEW.account_id,
+						CASE WHEN NEW.is_del=0 AND NEW.type=0 AND NEW.unread=0 THEN 1 ELSE 0 END,
+						CASE WHEN NEW.is_del=0 AND NEW.spam=0 AND NEW.type=1 THEN 1 ELSE 0 END,
+						CASE WHEN NEW.is_del=1 THEN 1 ELSE 0 END,
+						CASE WHEN NEW.is_del=0 AND NEW.type=0 AND NEW.spam=1 AND NEW.unread=0 THEN 1 ELSE 0 END,
+						CASE WHEN NEW.is_del=0 AND NEW.type=0 AND NEW.spam=0 AND NEW.unread=0 AND NEW.category='primary' THEN 1 ELSE 0 END,
+						CASE WHEN NEW.is_del=0 AND NEW.type=0 AND NEW.spam=0 AND NEW.unread=0 AND NEW.category='social' THEN 1 ELSE 0 END,
+						CASE WHEN NEW.is_del=0 AND NEW.type=0 AND NEW.spam=0 AND NEW.unread=0 AND NEW.category='promotion' THEN 1 ELSE 0 END,
+						CASE WHEN NEW.is_del=0 AND NEW.type=0 AND NEW.spam=0 AND NEW.unread=0 AND NEW.category='updates' THEN 1 ELSE 0 END,
+						CASE WHEN NEW.is_del=0 AND NEW.type=0 AND NEW.spam=0 AND NEW.unread=0 AND NEW.category='important' THEN 1 ELSE 0 END,
+						CASE WHEN NEW.is_del=0 AND NEW.type=0 AND NEW.spam=0 AND NEW.unread=0 AND NEW.category='ads' THEN 1 ELSE 0 END)
+					ON CONFLICT(user_id,account_id) DO UPDATE SET
+						inbox=email_count.inbox+excluded.inbox, sent=email_count.sent+excluded.sent, deleted=email_count.deleted+excluded.deleted,
+						spam=email_count.spam+excluded.spam, primary_c=email_count.primary_c+excluded.primary_c, social=email_count.social+excluded.social,
+						promotion=email_count.promotion+excluded.promotion, updates=email_count.updates+excluded.updates, important=email_count.important+excluded.important, ads=email_count.ads+excluded.ads;
+				END;`),
+				c.env.db.prepare(`CREATE TRIGGER email_count_au AFTER UPDATE ON email BEGIN
+					UPDATE email_count SET
+						inbox=${add('inbox')}, sent=${sent('sent')}, deleted=${deleted('deleted')}, spam=${spam('spam')},
+						primary_c=${cat('primary_c','primary')}, social=${cat('social','social')}, promotion=${cat('promotion','promotion')},
+						updates=${cat('updates','updates')}, important=${cat('important','important')}, ads=${cat('ads','ads')}
+					WHERE user_id=OLD.user_id AND account_id=OLD.account_id;
+				END;`),
+				c.env.db.prepare(`CREATE TRIGGER email_count_ad AFTER DELETE ON email BEGIN
+					UPDATE email_count SET
+						inbox=MAX(0,inbox-(CASE WHEN OLD.is_del=0 AND OLD.type=0 AND OLD.unread=0 THEN 1 ELSE 0 END)),
+						sent=MAX(0,sent-(CASE WHEN OLD.is_del=0 AND OLD.spam=0 AND OLD.type=1 THEN 1 ELSE 0 END)),
+						deleted=MAX(0,deleted-(CASE WHEN OLD.is_del=1 THEN 1 ELSE 0 END)),
+						spam=MAX(0,spam-(CASE WHEN OLD.is_del=0 AND OLD.type=0 AND OLD.spam=1 AND OLD.unread=0 THEN 1 ELSE 0 END)),
+						primary_c=MAX(0,primary_c-(CASE WHEN OLD.is_del=0 AND OLD.type=0 AND OLD.spam=0 AND OLD.unread=0 AND OLD.category='primary' THEN 1 ELSE 0 END)),
+						social=MAX(0,social-(CASE WHEN OLD.is_del=0 AND OLD.type=0 AND OLD.spam=0 AND OLD.unread=0 AND OLD.category='social' THEN 1 ELSE 0 END)),
+						promotion=MAX(0,promotion-(CASE WHEN OLD.is_del=0 AND OLD.type=0 AND OLD.spam=0 AND OLD.unread=0 AND OLD.category='promotion' THEN 1 ELSE 0 END)),
+						updates=MAX(0,updates-(CASE WHEN OLD.is_del=0 AND OLD.type=0 AND OLD.spam=0 AND OLD.unread=0 AND OLD.category='updates' THEN 1 ELSE 0 END)),
+						important=MAX(0,important-(CASE WHEN OLD.is_del=0 AND OLD.type=0 AND OLD.spam=0 AND OLD.unread=0 AND OLD.category='important' THEN 1 ELSE 0 END)),
+						ads=MAX(0,ads-(CASE WHEN OLD.is_del=0 AND OLD.type=0 AND OLD.spam=0 AND OLD.unread=0 AND OLD.category='ads' THEN 1 ELSE 0 END))
+					WHERE user_id=OLD.user_id AND account_id=OLD.account_id;
+				END;`)
+			]);
+			const existing = await c.env.db.prepare('SELECT COUNT(*) AS total FROM email_count').get();
+			if (!existing || Number(existing.total) === 0) await c.env.db.prepare(countSql).run();
+		} catch (e) {
+			console.warn(`跳过计数迁移：${e.message}`);
+		}
+	},
+
+	async otsmail_31DB(c) {
+		try {
+			await c.env.db.prepare(`ALTER TABLE user ADD COLUMN skin TEXT NOT NULL DEFAULT 'paper';`).run();
 		} catch (e) {
 			console.warn(`跳过字段：${e.message}`);
 		}

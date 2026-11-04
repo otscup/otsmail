@@ -37,6 +37,17 @@ mail-worker/tmp
 .env.local
 .otsmail-deploy.env
 mail-worker/wrangler.oneclick.toml
+mail-worker/wrangler.production.toml
+.dryroot
+dev/
+mail-vue/sfc-check.cjs
+mail-worker/dev3.err
+mail-worker/dist.bak/
+CODE_AUDIT_REPORT.md
+DEPLOYMENT_REPORT.md
+FCM-ANDROID-PUSH-HANDOFF.md
+FEASIBILITY_OIDC_CCBCC_ADMIN.md
+UPSTREAM_COMPARISON.md
 
 # 临时验证脚本 / 数据导出（迁移时产生的 D1 dump 可能含用户邮件内容）
 _*.mjs

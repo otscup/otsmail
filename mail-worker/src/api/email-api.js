@@ -5,31 +5,9 @@ import result from '../model/result';
 import userContext from '../security/user-context';
 import attService from '../service/att-service';
 
-const countVersionKey = userId => `email:counts:ver:${userId}`;
-const countKey = (userId, version, accountId, allReceive) =>
-	`email:counts:${userId}:${version}:${accountId || 0}:${allReceive ? 1 : 0}`;
-
 async function getCounts(c, userId, accountId, allReceive) {
-	const version = await c.env.kv?.get(countVersionKey(userId)) || '0';
-	const key = countKey(userId, version, accountId, allReceive);
-	const cached = await c.env.kv?.get(key, 'json');
-	if (cached) return cached;
-	const data = await emailService.counts(c, userId, accountId, allReceive);
-	// 角标按账号缓存 10 分钟；任何邮件写入/入站都会递增版本，旧缓存立即失效。
-	await c.env.kv?.put(key, JSON.stringify(data), { expirationTtl: 600 });
-	return data;
+	return emailService.counts(c, userId, accountId, allReceive);
 }
-
-// Any email mutation invalidates the cached counters. Inbound delivery invalidates separately.
-app.use('/email/*', async (c, next) => {
-	await next();
-	if (c.req.method !== 'GET') {
-		try {
-			const userId = userContext.getUserId(c);
-			if (userId) await emailService.bumpCounts(c, userId);
-		} catch (e) { /* auth failure already handled by the route */ }
-	}
-});
 app.get('/email/list', async (c) => {
 	const data = await emailService.list(c, c.req.query(), userContext.getUserId(c));
 	return c.json(result.ok(data));

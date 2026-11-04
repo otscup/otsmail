@@ -7,7 +7,7 @@ import emailMsgTemplate from '../src/template/email-msg';
 
 describe('emailMsgTemplate — TG 正文摘要（折叠长行 + 截断）', () => {
 
-  const base = { subject: 'Hi', name: 'Bob', sendEmail: 'bob@x.com', toEmail: 'me@otscup.com', code: '' };
+  const base = { subject: 'Hi', name: 'Bob', sendEmail: 'bob@x.com', toEmail: 'me@example.com', code: '' };
 
   it('短正文原样保留（不截断、不折叠）', () => {
     const html = emailMsgTemplate({ ...base, text: 'hello world', content: '' }, 'show', 'show', 'show');

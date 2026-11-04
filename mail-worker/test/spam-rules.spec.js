@@ -12,7 +12,7 @@ describe('spam rules', () => {
 	});
 
 	it('treats a null availDomain as unrestricted', () => {
-		expect(roleService.hasAvailDomainPerm(null, 'gmail@otscup.com')).toBe(true);
-		expect(roleService.hasAvailDomainPerm('otscup.com', 'gmail@otscup.com')).toBe(true);
+		expect(roleService.hasAvailDomainPerm(null, 'gmail@example.com')).toBe(true);
+		expect(roleService.hasAvailDomainPerm('example.com', 'gmail@example.com')).toBe(true);
 	});
 });

@@ -100,6 +100,7 @@ const zh = {
 	imageFormatInvalid: '插图格式不支持，仅支持 png / jpeg / webp / gif',
 	imageTooLarge: '插图不能超过 5MB',
 	sendOnEnterInvalid: '发送方式只能是 enter / ctrl / off',
+	skinInvalid: '外观皮肤无效',
 	twoFactorNotSetup: '请先获取两步验证密钥',
 	twoFactorAlreadyOpen: '两步验证已开启，如需重置请先关闭',
 	twoFactorCodeInvalid: '验证码错误',

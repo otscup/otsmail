@@ -100,9 +100,25 @@ Cloudflare Email Routing
 
 1. 打开 `https://<你的域名>/setup`，输入 `init_secret` 初始化数据库；
 2. 到 Cloudflare Dashboard → Email Routing，把邮箱域名的 catch-all 指向该 Worker；
-3. 如需附件/背景图公网访问，绑定 R2 自定义域名，并在系统设置里填写 `r2_domain`。
+3. 系统设置里的 `r2_domain` 填 `https://<你的域名>/oss`，不要绑定公开 R2 自定义域名；附件走 1 小时签名 URL。
 
-> 根目录的 `wrangler.toml` 是给 Deploy 按钮用的模板，不绑定现有生产资源；日常手动部署仍使用 `mail-worker/wrangler.toml`。Deploy 按钮只支持公开的 GitHub/GitLab 仓库。
+> 根目录的 `wrangler.toml` 是给 Deploy 按钮用的模板，不绑定现有生产资源。手动部署前把 `mail-worker/wrangler.toml` 复制为 `mail-worker/wrangler.production.toml`，填入自己的 account_id、D1/KV ID 和域名；该文件已加入 `.gitignore`，不会提交。Deploy 按钮只支持公开的 GitHub/GitLab 仓库。
+
+### Fork 后要改哪里
+
+不要在代码里写自己的域名、邮箱或项目 ID。以下值都在 Cloudflare Dashboard → Worker `otsmail` → Settings → Variables and Secrets 配置：
+
+| 名称 | 类型 | 说明 |
+| --- | --- | --- |
+| `domain` | Variable (JSON) | 收信域名数组，例如 `["example.com"]` |
+| `admin` | Variable | 管理员邮箱，必须与登录账号完全一致 |
+| `jwt_secret` | Secret | 随机 64 位十六进制，生成后不要换 |
+| `init_secret` | Secret | 首次 `/setup` 使用，初始化后可保留 |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Variable/Secret | Web Push；不需要可留空 |
+| `FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` | Variable/Secret | Android FCM；未配置时自动跳过 |
+| `CF_ANALYTICS_TOKEN` / `CF_ACCOUNT_ID` | Secret/Variable | 可选，数据分析页的账户用量 |
+
+FCM 的 service account 私钥只放 Secret，不要写进 `fcm-service.js` 或 `wrangler.toml`。没有 Firebase 配置时，Android 推送直接跳过，不影响收发信。
 
 ## 本地开发
 

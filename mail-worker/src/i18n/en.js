@@ -100,6 +100,7 @@ const en = {
 	imageFormatInvalid: 'Unsupported inline image format, only png / jpeg / webp / gif are allowed',
 	imageTooLarge: 'Inline image must be smaller than 5MB',
 	sendOnEnterInvalid: 'Send mode must be enter / ctrl / off',
+	skinInvalid: 'Invalid appearance skin',
 	twoFactorNotSetup: 'Get a two-factor secret first',
 	twoFactorAlreadyOpen: 'Two-factor authentication is already on, turn it off first to reset',
 	twoFactorCodeInvalid: 'Invalid verification code',

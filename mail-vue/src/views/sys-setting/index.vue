@@ -1344,7 +1344,7 @@ function getSettings() {
     setting.value = settingData
     setting.value.aiClassifyMode = setting.value.aiClassifyMode || 'off'
     setting.value.aiSummaryMode = setting.value.aiSummaryMode || 'manual'
-    setting.value.countRefreshMinutes = setting.value.countRefreshMinutes || 2
+    setting.value.countRefreshMinutes = setting.value.countRefreshMinutes || 10
     aiModelList.value = setting.value.aiModel ? [setting.value.aiModel] : []
     settingStore.domainList = settingData.domainList;
     settingStore.settings.showAvatar = settingData.showAvatar ?? 0;

@@ -15,17 +15,17 @@
       </div>
       <button type="button" class="compose-btn" @click="openCompose">
         <Icon icon="material-symbols:add-rounded" width="20" height="20"/>
-        <span>Compose <small>写邮件</small></span>
+        <span>{{ $t('compose') }}</span>
       </button>
       <div class="acct" v-perm="'account:query'">
         <button type="button" class="acct-toggle" @click="toggleAcct">
           <Icon icon="mdi:account-multiple-outline" width="18" height="18"/>
-          <span class="acct-label">Accounts <small>邮箱账户</small></span>
+          <span class="acct-label">{{ $t('accounts') }}</span>
           <Icon class="acct-chevron" :class="{ open: acctOpen }" icon="mingcute:down-small-fill" width="18" height="18"/>
         </button>
         <el-collapse-transition>
           <div class="acct-panel" v-show="acctOpen">
-            <button type="button" class="all-accounts" @click="router.push('/all-email')"><Icon icon="mdi:inbox-multiple-outline" width="17" height="17"/><span>All accounts mail <small>所有账户邮件</small></span></button>
+            <button type="button" class="all-accounts" @click="router.push('/all-email')"><Icon icon="mdi:inbox-multiple-outline" width="17" height="17"/><span>{{ $t('allAccounts') }}</span></button>
             <Account/>
           </div>
         </el-collapse-transition>
@@ -34,55 +34,55 @@
         <el-menu-item @click="router.push({name: 'email'})" index="email"
                       :class="route.meta.name === 'email' ? 'choose-item' : ''">
           <Icon icon="mdi:email-outline" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 21px"><b>Inbox</b><small>{{$t('inbox')}}</small></span>
+          <span class="menu-name" style="margin-left: 21px">{{ $t('inbox') }}</span>
           <span class="menu-badge" v-if="counts.inbox">{{ counts.inbox }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'unread'})" index="unread"
                       :class="route.meta.name === 'unread' ? 'choose-item' : ''">
           <Icon icon="mdi:email-open-outline" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 21px"><b>Unread</b><small>{{$t('unreadList')}}</small></span>
+          <span class="menu-name" style="margin-left: 21px">{{ $t('unreadList') }}</span>
           <span class="menu-badge" v-if="counts.inbox">{{ counts.inbox }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'spam'})" index="spam"
                       :class="route.meta.name === 'spam' ? 'choose-item' : ''">
           <Icon icon="mdi:alert-octagon-outline" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 21px"><b>Spam</b><small>{{$t('spamList')}}</small></span>
+          <span class="menu-name" style="margin-left: 21px">{{ $t('spamList') }}</span>
           <span class="menu-badge" v-if="counts.spam">{{ counts.spam }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'deleted'})" index="deleted"
                       :class="route.meta.name === 'deleted' ? 'choose-item' : ''">
           <Icon icon="mdi:trash-can-outline" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 21px"><b>Trash</b><small>{{$t('deletedList')}}</small></span>
+          <span class="menu-name" style="margin-left: 21px">{{ $t('deletedList') }}</span>
           <span class="menu-badge" v-if="counts.deleted">{{ counts.deleted }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'send'})" index="send" v-perm="'email:send'"
                       :class="route.meta.name === 'send' ? 'choose-item' : ''">
           <Icon icon="cil:send" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 21px"><b>Sent</b><small>{{$t('sent')}}</small></span>
+          <span class="menu-name" style="margin-left: 21px">{{ $t('sent') }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'draft'})" index="draft" v-perm="'email:send'"
                       :class="route.meta.name === 'draft' ? 'choose-item' : ''">
           <Icon icon="ep:document" width="19" height="19" />
-          <span class="menu-name" style="margin-left: 22px"><b>Drafts</b><small>{{$t('drafts')}}</small></span>
+          <span class="menu-name" style="margin-left: 22px">{{ $t('drafts') }}</span>
           <span class="menu-badge" v-if="counts.drafts">{{ counts.drafts }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'contacts'})" index="contacts">
           <Icon icon="hugeicons:contact-01" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 21px"><b>Contacts</b><small>联系人</small></span>
+          <span class="menu-name" style="margin-left: 21px">{{ $t('contacts') }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'star'})" index="star"
                       :class="route.meta.name === 'star' ? 'choose-item' : ''">
           <Icon icon="solar:star-line-duotone" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 21px"><b>Starred</b><small>{{$t('starred')}}</small></span>
+          <span class="menu-name" style="margin-left: 21px">{{ $t('starred') }}</span>
         </el-menu-item>
       </el-menu>
     </div>
     <div class="side-footer">
       <button type="button" class="side-foot-btn" @click="router.push({name:'setting'})">
-        <Icon icon="fluent:settings-48-regular" width="18" height="18"/><span>Settings <small>设置</small></span>
+        <Icon icon="fluent:settings-48-regular" width="18" height="18"/><span>{{ $t('settings') }}</span>
       </button>
       <button type="button" class="side-foot-btn" @click="openHelp">
-        <Icon icon="mingcute:question-line" width="18" height="18"/><span>Help <small>帮助</small></span>
+        <Icon icon="mingcute:question-line" width="18" height="18"/><span>{{ $t('help') }}</span>
       </button>
       <el-dropdown class="side-user-dd" trigger="click" placement="top-start" @command="sideUserCommand">
         <button type="button" class="side-user">
@@ -142,8 +142,14 @@ function openHelp(){ window.open('https://github.com/otscup/otsmail','_blank','n
 const route = useRoute();
 const counts = reactive({inbox: 0, sent: 0, deleted: 0, spam: 0, drafts: 0});
 let countTimer = null;
-const countRefreshMs = computed(() => Math.max(1, Number(settingStore.settings.countRefreshMinutes) || 2) * 60000);
+const countRefreshMs = computed(() => Math.max(1, Number(settingStore.settings.countRefreshMinutes) || 10) * 60000);
 let lastCountsAt = 0; // local throttle: route changes within 30s reuse the last badge snapshot
+
+let countsRefreshTimer = null;
+function scheduleCountsRefresh() {
+  clearTimeout(countsRefreshTimer);
+  countsRefreshTimer = setTimeout(() => loadCounts(true), 1500);
+}
 
 async function loadCounts(force = false) {
   if (!force && Date.now() - lastCountsAt < 30000) return;
@@ -160,9 +166,9 @@ async function loadCounts(force = false) {
 onMounted(() => {
   loadCounts();
   countTimer = setInterval(loadCounts, countRefreshMs.value);
-  window.addEventListener('otsmail:counts', () => loadCounts(true));
+  window.addEventListener('otsmail:counts', scheduleCountsRefresh);
   startEmailEvents((email) => {
-    loadCounts(true);
+    scheduleCountsRefresh();
     if (email?.subject) notifyNewEmail(email);
     window.dispatchEvent(new CustomEvent('otsmail:email'));
   });
@@ -170,8 +176,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearInterval(countTimer);
+  clearTimeout(countsRefreshTimer);
   stopEmailEvents();
-  window.removeEventListener('otsmail:counts', loadCounts);
+  window.removeEventListener('otsmail:counts', scheduleCountsRefresh);
 });
 
 watch(() => route.name, () => loadCounts());

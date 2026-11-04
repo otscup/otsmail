@@ -56,10 +56,7 @@
       <button v-for="item in tabCategories" :key="item.key" type="button" role="tab"
               class="mail-category" :class="{active: activeCategory === item.key}"
               :aria-selected="activeCategory === item.key" @click="selectCategory(item.key)">
-        <span class="tab-text">
-          <span class="tab-en">{{ categoryTabEn[item.key] || item.key }}</span>
-          <span class="tab-zh">{{ t(item.label) }}</span>
-        </span>
+        <span class="tab-text">{{ t(item.label) }}</span>
         <span v-if="categoryCounts[item.key]" class="mail-category-count">{{ categoryCounts[item.key] }}</span>
       </button>
     </div>
@@ -618,9 +615,13 @@ onActivated(() => {
 
 onUpdated(bindInertia)
 
+let realtimeTimer = null
 function onRealtimeEmail() {
-  refreshList();
-  loadCategoryCounts();
+  clearTimeout(realtimeTimer)
+  realtimeTimer = setTimeout(() => {
+    refreshList()
+    loadCategoryCounts()
+  }, 1500)
 }
 
 onMounted(() => {
@@ -640,6 +641,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearInterval(timer)
+  clearTimeout(realtimeTimer)
   window.removeEventListener('otsmail:email', onRealtimeEmail);
   if (offlineHandlers) {
     window.removeEventListener('online', offlineHandlers.onOnline)
@@ -2027,14 +2029,8 @@ ul {
 :deep(.email-sender .email-action) { width:20px; height:20px; border:0; background:transparent; border-radius:5px; color:var(--rd-muted); display:grid; place-items:center; padding:0; }
 :deep(.email-sender .email-action:hover) { background:var(--rd-panel-2); color:var(--rd-text); }
 :deep(.email-sender .email-action.disabled) { opacity:.32; }
-:deep(.mail-category-tag) { flex:0 0 auto; }
-/* v12 category colors */
-:deep(.mail-category-tag.cat-social){ color:#087f5b!important; background:rgba(16,185,129,.12)!important; }
-:deep(.mail-category-tag.cat-promotion){ color:#b45309!important; background:rgba(245,158,11,.14)!important; }
-:deep(.mail-category-tag.cat-updates){ color:#1d4ed8!important; background:rgba(59,130,246,.12)!important; }
-:deep(.mail-category-tag.cat-important){ color:#a16207!important; background:rgba(234,179,8,.16)!important; }
-:deep(.mail-category-tag.cat-ads){ color:#b91c1c!important; background:rgba(239,68,68,.12)!important; }
-:deep(.mail-category-tag.cat-spam){ color:#9f1239!important; background:rgba(244,63,94,.12)!important; }
+:deep(.mail-category-tag) { flex:0 0 auto; color:var(--rd-muted)!important; background:transparent!important; border:1px solid var(--rd-line)!important; }
+/* category tags stay neutral; status tags carry the only semantic color */
 
 .pager-ico{width:6px;height:6px;border-top:1.6px solid currentColor;border-right:1.6px solid currentColor;display:inline-block;}
 .pager-ico.left{transform:rotate(-135deg);margin-left:2px;}

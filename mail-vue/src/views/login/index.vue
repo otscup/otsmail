@@ -241,13 +241,17 @@ import {
 import {setToken} from "@/utils/token-store.js";
 import {createPkce, takePkce} from "@/utils/pkce.js";
 import {normalizeLoginTheme} from './themes.js';
+import {applySkin, getStoredSkin, loginThemeForSkin} from '@/utils/appearance.js';
 
 const {t} = useI18n();
 const accountStore = useAccountStore();
 const userStore = useUserStore();
 const uiStore = useUiStore();
 const settingStore = useSettingStore();
-const loginTheme = computed(() => normalizeLoginTheme(settingStore.settings.loginTheme));
+const loginTheme = computed(() => {
+  const skin = localStorage.getItem('otsmail_skin')
+  return skin ? loginThemeForSkin(getStoredSkin()) : normalizeLoginTheme(settingStore.settings.loginTheme)
+});
 const hasProviderButtons = computed(() =>
     Boolean(settingStore.settings.linuxdoSwitch || settingStore.settings.githubSwitch || settingStore.settings.googleSwitch)
 );
@@ -433,6 +437,34 @@ async function oauthGetUser() {
   const code = params.get('code')
   const state = params.get('state')
   const oauthError = params.get('error_description') || params.get('error')
+
+  // Android App 用系统浏览器走 OIDC：IdP 只注册了网页回调，需在 takePkce 消费 code 前原样转回 App。
+  // 网页 nonce 是纯 32 位 hex，只有 App 会拼 app 后缀，因此不会误伤网页登录。
+  const bridgeNonce = (state || '').split(':').pop() || ''
+  if (/^[0-9a-f]{32}app$/.test(bridgeNonce)) {
+    const q = new URLSearchParams()
+    if (code) q.set('code', code)
+    if (state) q.set('state', state)
+    if (oauthError) q.set('error_description', oauthError)
+    const target = 'otsmail://oauth/callback?' + q.toString()
+    try {
+      window.location.replace(target)
+    } catch (e) {
+      // 浏览器拒绝自定义 scheme 时，下面给可点击链接兜底。
+    }
+    setTimeout(() => {
+      if (document.getElementById('ots-app-bridge')) return
+      const a = document.createElement('a')
+      a.id = 'ots-app-bridge'
+      a.href = target
+      a.textContent = '返回 OTSMail 完成登录'
+      a.style.cssText = 'display:block;margin:24px auto;padding:14px 22px;max-width:260px;' +
+        'text-align:center;border-radius:10px;background:#111;color:#fff;' +
+        'font:600 16px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;text-decoration:none'
+      document.body.appendChild(a)
+    }, 1200)
+    return
+  }
 
   if (!code && oauthError) {
     ElMessage({message: oauthError, type: 'error', plain: true, duration: 6000})
@@ -621,6 +653,7 @@ async function saveToken(token) {
   accountStore.currentAccountId = user.account.accountId;
   accountStore.currentAccount = user.account;
   userStore.user = user;
+  if (user.skin) applySkin(user.skin);
   const routers = permsToRouter(user.permKeys);
   routers.forEach(routerData => {
     router.addRoute('layout', routerData);
@@ -1995,7 +2028,7 @@ function submitRegister() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f4ede3;
+  background: #f4ede3 !important;
 }
 #login-box[data-login-theme="gala"] .form-wrapper .container {
   width: min(430px, 100%) !important;

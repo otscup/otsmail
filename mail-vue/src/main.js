@@ -13,7 +13,10 @@ import 'nprogress/nprogress.css';
 import perm from "@/perm/perm.js";
 const pinia = createPinia().use(piniaPersistedState)
 import i18n from "@/i18n/index.js";
+import {applySkin, getSavedSkin, DEFAULT_HOME_SKIN} from '@/utils/appearance.js';
 const app = createApp(App).use(pinia)
+// 先应用本机皮肤，登录态返回的账号皮肤会在 init 内覆盖；没有存过就不写默认值。
+applySkin(getSavedSkin() || DEFAULT_HOME_SKIN, false)
 await init()
 app.use(router).use(i18n).directive('perm',perm)
 app.config.devtools = true;

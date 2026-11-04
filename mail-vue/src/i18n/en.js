@@ -319,7 +319,7 @@ const en = {
     notificationsOff: 'Notifications off',
     notificationsBlocked: 'Allow notifications in the browser settings',
     notificationBlockedTitle: 'Notifications are blocked for this site',
-    notificationBlockedDetail: 'Chrome / Edge: click the lock or settings icon left of the address bar → Site settings → Notifications → Allow. Or open chrome://settings/content/notifications and remove the block for mail.otscup.com. Then reload and click the bell again.',
+    notificationBlockedDetail: 'Chrome / Edge: click the lock or settings icon left of the address bar → Site settings → Notifications → Allow. Or open chrome://settings/content/notifications and remove the block for this site. Then reload and click the bell again.',
     notificationPermissionNeeded: 'Notification permission is not granted yet. Click the bell again and choose Allow.',
     notificationPushFailedTitle: 'Browser notifications are allowed, but background push subscription failed',
     notificationPushFailedDetail: 'Web Push subscription failed: ',
@@ -614,6 +614,16 @@ const en = {
     askAiAboutEmail: 'Ask AI',
     moveToCategory: 'Move to category',
     movedToCategory: 'Moved to "{category}"',
+    appearance: "Personal appearance",
+    appearanceDesc: "Pick a home skin. The login page follows with the matching layout.",
+    allAccounts: "All accounts",
+    skinSyncFailed: "Could not save appearance; reverted",
+    skinPaper: "Paper",
+    skinPaperDesc: "Warm paper and cobalt, easy on the eyes for long reading.",
+    skinFresh: "Fresh",
+    skinFreshDesc: "Pale mint and pine; light, crisp and calm.",
+    skinGala: "Gala",
+    skinGalaDesc: "Oxblood and champagne for a more ceremonial brand.",
 }
 
 export default en

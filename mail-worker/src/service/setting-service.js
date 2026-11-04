@@ -402,7 +402,7 @@ const settingService = {
 			siteKey: settingRow.siteKey,
 			background: settingRow.background,
 			aiSummaryMode: settingRow.aiSummaryMode || 'manual',
-			countRefreshMinutes: settingRow.countRefreshMinutes || 2,
+			countRefreshMinutes: settingRow.countRefreshMinutes || 10,
 			chatBackground: settingRow.chatBackground || '',
 			chatOpacity: settingRow.chatOpacity,
 			showAvatar: settingRow.showAvatar !== 0,

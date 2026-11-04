@@ -46,7 +46,7 @@ const pushService = {
 		if (subscriptions.length === 0) return [];
 
 		const vapid = {
-			subject: c.env.VAPID_SUBJECT || 'mailto:admin@otscup.com',
+			subject: c.env.VAPID_SUBJECT || 'mailto:admin@example.com',
 			publicKey,
 			privateKey
 		};

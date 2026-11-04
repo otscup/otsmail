@@ -161,9 +161,9 @@ const emailService = {
 
 		const listQuery = page > 0 ? query.limit(size).offset((page - 1) * size).all() : query.limit(size).all();
 
-		// 列表每次刷新都会 COUNT 整个邮箱；同一筛选 60 秒内复用结果。
+		// 同一筛选的 total 跨分页复用 30 分钟；不发邮件通知、不改计数快照。
 		const totalCacheKey = searchConditions.length === 0
-			? `email:total:${userId}:${allReceive ? 1 : 0}:${accountId || 0}:${type ?? ''}:${mailbox || 'inbox'}:${category || 'all'}`
+			? `email:total:${userId}:${allReceive ? 1 : 0}:${accountId || 0}:${type ?? ''}:${mailbox || 'inbox'}:${category || 'all'}:${status || 0}:${timeSort ? 1 : 0}`
 			: null;
 		const cachedTotal = totalCacheKey ? await c.env.kv?.get(totalCacheKey) : null;
 		const totalQuery = cachedTotal !== null && cachedTotal !== undefined
@@ -185,8 +185,8 @@ const emailService = {
 						...searchConditions
 					)
 				).get().then(async row => {
-					// 5 分钟内同一筛选的 total 只回源一次，控制 KV 写入量。
-					if (totalCacheKey) await c.env.kv?.put(totalCacheKey, String(row.total), { expirationTtl: 600 });
+					// 30 分钟内同一筛选的 total 只回源一次，控制 KV 写入量与 D1 扫描。
+					if (totalCacheKey) await c.env.kv?.put(totalCacheKey, String(row.total), { expirationTtl: 1800 });
 					return row;
 				});
 
@@ -1267,37 +1267,51 @@ const emailService = {
 				.where(and(eq(email.userId, userId), inArray(email.emailId, ids))).run();
 		},
 
-	// 计数缓存版本：任何邮件变更/入站都递增版本，旧缓存自然过期。
-	async bumpCounts(c, userId) {
-		if (!c.env.kv || !userId) return;
-		const key = `email:counts:ver:${userId}`;
-		const version = Number(await c.env.kv.get(key) || 0) + 1;
-		await c.env.kv.put(key, String(version), { expirationTtl: 86400 });
-		await c.env.kv.delete(`email:counts:${userId}`);
-	},
-
-	// 一次扫描同时算菜单/分类计数；原先 6 条 COUNT 各扫一遍用户全部邮件
+	// 计数由 email 表触发器增量维护，读路径只取一行，不再扫描整表。
 	async counts(c, userId, accountId = null, allReceive = false) {
 		const scoped = Boolean(accountId && !allReceive);
 		const row = await c.env.db.prepare(`
 			SELECT
-				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND unread = 0 THEN 1 ELSE 0 END), 0) AS inbox,
-				COALESCE(SUM(CASE WHEN is_del = 0 AND spam = 0 AND type = 1 THEN 1 ELSE 0 END), 0) AS sent,
-				COALESCE(SUM(CASE WHEN is_del = 1 THEN 1 ELSE 0 END), 0) AS deleted,
-				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 1 AND unread = 0 THEN 1 ELSE 0 END), 0) AS spam,
-				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'primary' THEN 1 ELSE 0 END), 0) AS primary_c,
-				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'social' THEN 1 ELSE 0 END), 0) AS social,
-				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'promotion' THEN 1 ELSE 0 END), 0) AS promotion,
-				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'updates' THEN 1 ELSE 0 END), 0) AS updates,
-				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'important' THEN 1 ELSE 0 END), 0) AS important,
-				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'ads' THEN 1 ELSE 0 END), 0) AS ads
-			FROM email WHERE user_id = ?${scoped ? ' AND account_id = ?' : ''}
+				COALESCE(SUM(inbox), 0) AS inbox,
+				COALESCE(SUM(sent), 0) AS sent,
+				COALESCE(SUM(deleted), 0) AS deleted,
+				COALESCE(SUM(spam), 0) AS spam,
+				COALESCE(SUM(primary_c), 0) AS primary_c,
+				COALESCE(SUM(social), 0) AS social,
+				COALESCE(SUM(promotion), 0) AS promotion,
+				COALESCE(SUM(updates), 0) AS updates,
+				COALESCE(SUM(important), 0) AS important,
+				COALESCE(SUM(ads), 0) AS ads
+			FROM email_count WHERE user_id = ?${scoped ? ' AND account_id = ?' : ''}
 		`).bind(...(scoped ? [userId, accountId] : [userId])).first();
 		const n = key => Number(row?.[key]) || 0;
 		return {
 			menu: { inbox: n('inbox'), sent: n('sent'), deleted: n('deleted'), spam: n('spam') },
 			category: { primary: n('primary_c'), social: n('social'), promotion: n('promotion'), updates: n('updates'), important: n('important'), ads: n('ads'), spam: n('spam') }
 		};
+	},
+
+	// 仅修复口径时使用；日常读路径不调用。
+	async repairCounts(c, userId = null) {
+		const where = userId ? 'WHERE user_id = ?' : '';
+		const bind = userId ? [userId] : [];
+		await c.env.db.prepare(`DELETE FROM email_count ${where}`).bind(...bind).run();
+		await c.env.db.prepare(`
+			INSERT INTO email_count
+			(user_id, account_id, inbox, sent, deleted, spam, primary_c, social, promotion, updates, important, ads)
+			SELECT user_id, account_id,
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND unread=0 THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND spam=0 AND type=1 THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=1 THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=1 AND unread=0 THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='primary' THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='social' THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='promotion' THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='updates' THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='important' THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='ads' THEN 1 ELSE 0 END),0)
+			FROM email ${where} GROUP BY user_id, account_id
+		`).bind(...bind).run();
 	},
 
 	async categoryCounts(c, userId) {

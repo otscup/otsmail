@@ -57,6 +57,7 @@ const userService = {
 		user.twoFactor = userRow.twoFactorSwitch === 1;
 		user.twoFactorRequired = userRow.twoFactorRequired === 1;
 		user.signature = userRow.signature || '';
+		user.skin = ['paper', 'fresh', 'gala'].includes(userRow.skin) ? userRow.skin : 'paper';
 		user.sendOnEnter = ['enter', 'ctrl', 'off'][userRow.sendOnEnter || 0] || 'enter';
 
 		if (c.env.admin === userRow.email) {
@@ -551,12 +552,20 @@ const userService = {
 			}
 			data.sendOnEnter = ['enter', 'ctrl', 'off'].indexOf(mode);
 		}
+		if (params.skin !== undefined) {
+			const skin = String(params.skin);
+			if (['paper', 'fresh', 'gala'].indexOf(skin) === -1) {
+				throw new BizError(t('skinInvalid'));
+			}
+			data.skin = skin;
+		}
 		if (Object.keys(data).length > 0) {
 			await orm(c).update(user).set(data).where(eq(user.userId, userId)).run();
 		}
 		const userRow = await this.selectById(c, userId);
 		return {
 			signature: userRow?.signature || '',
+			skin: ['paper', 'fresh', 'gala'].includes(userRow?.skin) ? userRow.skin : 'paper',
 			sendOnEnter: ['enter', 'ctrl', 'off'][userRow?.sendOnEnter || 0] || 'enter'
 		};
 	},

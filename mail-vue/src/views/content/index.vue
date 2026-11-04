@@ -671,7 +671,7 @@ function openOnlyOffice(att, readonly = false) {
   attachmentKind.value = 'office'
   attachmentFullscreen.value = false
   officeLoading.value = true
-  attachmentUrl.value = `https://office.otscup.com/onlyoffice.html?docConfig=${encodeURIComponent(JSON.stringify(config))}`
+  attachmentUrl.value = `${import.meta.env.VITE_ONLYOFFICE_URL || '/onlyoffice.html'}?docConfig=${encodeURIComponent(JSON.stringify(config))}`
   showAttachmentPreview.value = true
 }
 

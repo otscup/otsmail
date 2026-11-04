@@ -135,7 +135,8 @@ const fcmService = {
 		const accessToken = await getAccessToken(env);
 		if (!accessToken) return [];
 
-		const projectId = env.FIREBASE_PROJECT_ID || 'otsmail-app';
+		const projectId = env.FIREBASE_PROJECT_ID;
+		if (!projectId) return [];
 		const results = [];
 
 		for (const token of tokens) {

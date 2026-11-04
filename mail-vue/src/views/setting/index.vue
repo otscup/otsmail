@@ -2,6 +2,12 @@
   <div class="box">
     <settingsTabs/>
     <div class="container">
+      <div class="title">{{$t('appearance')}}</div>
+      <div class="item wide">
+        <SkinSelector/>
+      </div>
+    </div>
+    <div class="container">
       <div class="title">{{$t('profile')}}</div>
       <div class="item wide">
         <div>{{$t('avatar')}}</div>
@@ -217,6 +223,7 @@ import {
 } from "@/request/my.js";
 import {useUserStore} from "@/store/user.js";
 import settingsTabs from "@/components/settings-tabs/index.vue";
+import SkinSelector from "@/components/skin-selector/index.vue";
 import router from "@/router/index.js";
 import {accountSetName} from "@/request/account.js";
 import {useAccountStore} from "@/store/account.js";

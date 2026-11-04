@@ -69,6 +69,114 @@ html[data-theme="dark"] {
   --bar-bg: rgba(11, 17, 29, .78);
 }
 
+/* Personal appearance skins. They only alter the light shell; dark mode stays
+   the same so contrast is never mixed between two palettes. */
+html:not([data-theme="dark"])[data-skin="paper"] {
+  --rd-bg: #f6f1e7;
+  --rd-panel: #fffdf8;
+  --rd-panel-2: #f1eadf;
+  --rd-line: rgba(58, 44, 24, .12);
+  --rd-line-strong: rgba(58, 44, 24, .22);
+  --rd-text: #1b1915;
+  --rd-muted: #6e6558;
+  --rd-faint: #958878;
+  --rd-accent: #2452d8;
+  --rd-accent-2: #ad5f38;
+  --rd-accent-weak: rgba(36, 82, 216, .10);
+  --rd-header: rgba(255, 253, 248, .88);
+  --rd-rail: rgba(255, 253, 248, .94);
+  --rd-shadow: 0 12px 34px rgba(58, 44, 24, .08);
+  --rd-shadow-lg: 0 28px 70px rgba(58, 44, 24, .14);
+  --separator-opaque: #e2d8c9;
+  --bar-bg: rgba(255, 253, 248, .84);
+  --el-color-primary: #2452d8;
+}
+
+html:not([data-theme="dark"])[data-skin="fresh"] {
+  --rd-bg: #edf7f1;
+  --rd-panel: #fbfefc;
+  --rd-panel-2: #e7f3ec;
+  --rd-line: rgba(13, 56, 45, .12);
+  --rd-line-strong: rgba(13, 56, 45, .22);
+  --rd-text: #102a22;
+  --rd-muted: #536d63;
+  --rd-faint: #7f978d;
+  --rd-accent: #0d6b55;
+  --rd-accent-2: #b8753e;
+  --rd-accent-weak: rgba(13, 107, 85, .10);
+  --rd-header: rgba(251, 254, 252, .88);
+  --rd-rail: rgba(251, 254, 252, .94);
+  --rd-shadow: 0 12px 34px rgba(13, 56, 45, .08);
+  --rd-shadow-lg: 0 28px 70px rgba(13, 56, 45, .14);
+  --separator-opaque: #cfe4d9;
+  --bar-bg: rgba(251, 254, 252, .84);
+  --el-color-primary: #0d6b55;
+}
+
+html:not([data-theme="dark"])[data-skin="gala"] {
+  --rd-bg: #f4ede3;
+  --rd-panel: #fffaf3;
+  --rd-panel-2: #efe4d7;
+  --rd-line: rgba(70, 20, 28, .13);
+  --rd-line-strong: rgba(70, 20, 28, .23);
+  --rd-text: #2a1115;
+  --rd-muted: #765b58;
+  --rd-faint: #9e8983;
+  --rd-accent: #9e2738;
+  --rd-accent-2: #b48a4a;
+  --rd-accent-weak: rgba(158, 39, 56, .10);
+  --rd-header: rgba(255, 250, 243, .88);
+  --rd-rail: rgba(255, 250, 243, .94);
+  --rd-shadow: 0 12px 34px rgba(70, 20, 28, .08);
+  --rd-shadow-lg: 0 28px 70px rgba(70, 20, 28, .14);
+  --separator-opaque: #e3d2c2;
+  --bar-bg: rgba(255, 250, 243, .84);
+  --el-color-primary: #9e2738;
+}
+
+html:not([data-theme="dark"])[data-skin] {
+  --el-color-primary-light-3: color-mix(in srgb, var(--rd-accent) 70%, white);
+  --el-color-primary-light-5: color-mix(in srgb, var(--rd-accent) 50%, white);
+  --el-color-primary-light-7: color-mix(in srgb, var(--rd-accent) 30%, white);
+  --el-color-primary-light-8: color-mix(in srgb, var(--rd-accent) 20%, white);
+  --el-color-primary-light-9: color-mix(in srgb, var(--rd-accent) 10%, white);
+  --el-color-primary-dark-2: color-mix(in srgb, var(--rd-accent) 80%, black);
+}
+
+/* Dark variants: each skin keeps its own temperature instead of falling back to blue. */
+html[data-theme="dark"][data-skin="paper"] {
+  --rd-bg: #12100d; --rd-panel: #191612; --rd-panel-2: #201c17;
+  --rd-line: rgba(231, 215, 190, .10); --rd-line-strong: rgba(231, 215, 190, .18);
+  --rd-text: #f4ecdf; --rd-muted: #c0b09b; --rd-faint: #877967;
+  --rd-accent: #9db6ff; --rd-accent-2: #d39a78; --rd-accent-weak: rgba(157, 182, 255, .12);
+  --rd-header: rgba(18, 16, 13, .78); --rd-rail: rgba(18, 16, 13, .9);
+  --el-color-primary: #9db6ff;
+}
+html[data-theme="dark"][data-skin="fresh"] {
+  --rd-bg: #07130f; --rd-panel: #0c1b16; --rd-panel-2: #10241d;
+  --rd-line: rgba(188, 231, 216, .10); --rd-line-strong: rgba(188, 231, 216, .18);
+  --rd-text: #e6f5ee; --rd-muted: #a6c7ba; --rd-faint: #6f917f;
+  --rd-accent: #7bd8b8; --rd-accent-2: #d7a56f; --rd-accent-weak: rgba(123, 216, 184, .12);
+  --rd-header: rgba(7, 19, 15, .78); --rd-rail: rgba(7, 19, 15, .9);
+  --el-color-primary: #7bd8b8;
+}
+html[data-theme="dark"][data-skin="gala"] {
+  --rd-bg: #150a0d; --rd-panel: #1e0e13; --rd-panel-2: #271219;
+  --rd-line: rgba(240, 208, 179, .10); --rd-line-strong: rgba(240, 208, 179, .18);
+  --rd-text: #f9e9e5; --rd-muted: #d0aba8; --rd-faint: #92706f;
+  --rd-accent: #e57789; --rd-accent-2: #d8b46a; --rd-accent-weak: rgba(229, 119, 137, .12);
+  --rd-header: rgba(21, 10, 13, .78); --rd-rail: rgba(21, 10, 13, .9);
+  --el-color-primary: #e57789;
+}
+html[data-theme="dark"][data-skin] {
+  --el-color-primary-light-3: color-mix(in srgb, var(--rd-accent) 70%, black);
+  --el-color-primary-light-5: color-mix(in srgb, var(--rd-accent) 50%, black);
+  --el-color-primary-light-7: color-mix(in srgb, var(--rd-accent) 30%, black);
+  --el-color-primary-light-8: color-mix(in srgb, var(--rd-accent) 20%, black);
+  --el-color-primary-light-9: color-mix(in srgb, var(--rd-accent) 10%, black);
+  --el-color-primary-dark-2: color-mix(in srgb, var(--rd-accent) 80%, white);
+}
+
 html, body, #app {
   background: var(--rd-bg) !important;
   color: var(--rd-text);
@@ -432,9 +540,9 @@ html[data-theme="dark"] .layout-v2 .email-container .email-row:hover { box-shado
 .layout-v2 .email-container .email-row .email-content { color: var(--rd-faint) !important; }
 .layout-v2 .email-container .email-row .email-time { color: var(--rd-faint) !important; font-size: 10px; }
 .layout-v2 .email-container .email-row .mail-category-tag {
-  color: var(--rd-accent) !important;
-  background: var(--rd-accent-weak) !important;
-  border: 0 !important;
+  color: var(--rd-muted) !important;
+  background: transparent !important;
+  border: 1px solid var(--rd-line) !important;
   font-size: 8px !important;
   border-radius: 5px !important;
 }
@@ -792,8 +900,8 @@ html[data-theme="dark"] .layout-v2 .header .header-ai .ai-assistant.is-inline .a
 
 /* ---- v4 final: neon brand, avatars, unread bar, search, header AI ---- */
 .layout-v2 .aside .title { height:74px !important; padding:16px 18px 12px !important; }
-.layout-v2 .brand-logo { width:38px; height:38px; border-radius:12px; display:grid; place-items:center; color:#fff; position:relative; z-index:0; background:linear-gradient(145deg,#8b5cf6 0%,#5b8cff 52%,#28d7ff 100%); box-shadow:0 8px 24px rgba(99,102,241,.32), inset 0 1px 0 rgba(255,255,255,.35); }
-.layout-v2 .brand-logo::before { content:""; position:absolute; inset:-5px; border-radius:16px; background:linear-gradient(145deg,#8b5cf6,#28d7ff); filter:blur(11px); opacity:.45; z-index:-1; }
+.layout-v2 .brand-logo { width:38px; height:38px; border-radius:12px; display:grid; place-items:center; color:#fff; position:relative; z-index:0; background:var(--rd-accent); box-shadow:0 8px 22px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.28); }
+.layout-v2 .brand-logo::before { content:""; position:absolute; inset:-5px; border-radius:16px; background:var(--rd-accent); filter:blur(11px); opacity:.18; z-index:-1; }
 .layout-v2 .brand-logo svg { width:21px; height:21px; }
 .layout-v2 .title-main { font-size:17px !important; font-weight:800 !important; letter-spacing:.13em !important; line-height:1.1; }
 .layout-v2 .title-sub { font-size:8px !important; letter-spacing:.24em !important; opacity:.65 !important; margin-top:3px; }
@@ -830,9 +938,7 @@ html[data-theme="dark"] .layout-v2 .header .header-ai .ai-assistant.is-inline .a
 .layout-v2 .header .lang-toggle:hover { background:transparent; color:var(--rd-text); }
 /* bilingual category tabs */
 .layout-v2 .email-container .mail-category { gap:4px !important; padding:0 9px !important; }
-.layout-v2 .email-container .mail-category .tab-text { display:flex; flex-direction:column; align-items:flex-start; line-height:1.08; }
-.layout-v2 .email-container .mail-category .tab-en { font-size:9.5px; font-weight:700; letter-spacing:.01em; white-space:nowrap; }
-.layout-v2 .email-container .mail-category .tab-zh { font-size:7.5px; opacity:.55; white-space:nowrap; }
+.layout-v2 .email-container .mail-category .tab-text { font-size:9.5px; font-weight:700; letter-spacing:.01em; white-space:nowrap; line-height:1.08; }
 .layout-v2 .email-container .mail-category-count { margin-left:1px; font-size:10px; }
 @media (max-width:767px){
   .layout-v2 .header .header-mail-search { width:calc(100vw - 188px) !important; max-width:calc(100vw - 188px) !important; flex:0 0 calc(100vw - 188px) !important; }
@@ -1088,13 +1194,7 @@ html[data-theme="dark"] .send .write-box .editor-box { background: #111a2e !impo
   .mail-detail .scrollbar .el-scrollbar__wrap { overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
 }
 
-/* v12 category colors (beat legacy accent rule) */
-.layout-v2 .email-container .email-row .mail-category-tag.cat-primary{color:#1d4ed8!important;background:rgba(59,130,246,.12)!important;}
-.layout-v2 .email-container .email-row .mail-category-tag.cat-social{color:#087f5b!important;background:rgba(16,185,129,.12)!important;}
-.layout-v2 .email-container .email-row .mail-category-tag.cat-promotion{color:#b45309!important;background:rgba(245,158,11,.14)!important;}
-.layout-v2 .email-container .email-row .mail-category-tag.cat-updates{color:#6d28d9!important;background:rgba(139,92,246,.12)!important;}
-.layout-v2 .email-container .email-row .mail-category-tag.cat-ads{color:#b91c1c!important;background:rgba(239,68,68,.12)!important;}
-.layout-v2 .email-container .email-row .mail-category-tag.cat-spam{color:#9f1239!important;background:rgba(244,63,94,.12)!important;}
+/* category tags stay neutral; only send-failure status uses semantic color */
 
 
 /* v13: category tabs are text tabs, not pill boxes */

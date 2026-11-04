@@ -27,7 +27,7 @@
 | 边缘运行时 | Cloudflare Worker（`mail-worker`，Hono 框架） | 现存架构；Hono 轻量、CORS 白名单化、错误兜底已落实 |
 | 数据库 | Cloudflare D1（主数据，drizzle-orm 定义） | 现存主存储 |
 | 缓存/会话/配置 | Cloudflare KV | 会话 token 列表、setting 缓存、发件日计数、公开 token |
-| 对象存储 | Cloudflare R2（复用旧桶 `mail-r2`） | 热附件与前端 web 静态资源共用，公开域名 `r2.atproxy.eu.org` |
+| 对象存储 | Cloudflare R2（复用旧桶 `mail-r2`） | 热附件与前端 web 静态资源共用，公开域名 `r2.example.com` |
 | 邮件发送 | Cloudflare Email Service（优先）→ Resend（兜底），站内互发直写 DB | 已实现的 `sendByCloudflareEmail`/`sendByResend` 双通道 |
 | 邮件接收 | Resend webhook（`/webhooks`）+ `email` 入口模块 | 现存 `email/email.js` 收信回调链 |
 | AI 验证码 | Cloudflare Workers AI（`@cf/meta/llama-3.1-8b-instruct-fast`） | 现存 `ai-service.js`，`ai_model` 可配 |

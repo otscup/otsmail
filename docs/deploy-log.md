@@ -2,7 +2,7 @@
 
 ## 版本基线
 - 仓库：`E:/otsmail`，分支 `main`
-- 域名：`mail.otscup.com`（custom domain → Worker `otsmail`）
+- 域名：`mail.example.com`（custom domain → Worker `otsmail`）
 - Worker 入口：`https://otsmail.vincentdam93.workers.dev`
 
 ---
@@ -11,7 +11,7 @@
 - **操作**：D1 `setting.reg_key` 1(CLOSE) → **0(OPEN)**（`UPDATE setting SET reg_key=0 WHERE reg_key=1`）
 - **原因**：豆豆要求「注册必须填邀请码」。根因诊断：非代码漏洞，是配置未开——OAuth 与普通注册共用同一门禁（`login-service.register` 在 reg_key===OPEN 时均校验 code），无绕过。
 - **前提**：`reg_key` 表原本空，直接开启会锁死所有注册。已先插入救命邀请码：
-  - `OTSCUP-INVITE-2026`（count=50，role_id=1 普通用户，expire 2026-12-31，user_id=0）
+  - `INVITE-CODE`（count=50，role_id=1 普通用户，expire 2026-12-31，user_id=0）
 - **验证**：`reg_key=0` ✅；reg_key 表 cnt=1 ✅
 - **⚠️ 单一事实来源纪律固化**：期望生产值为 `reg_key=0(OPEN)`。换环境/重新初始化后需手工恢复此值 + 维护有效邀请码，勿凭部署翻转回 1。
 - **⚠️ 存量知情**：此前已通过 OAuth 无邀请码注册的账号**不会被追溯移除**（门禁开启前行），豆豆已知情。
@@ -34,7 +34,7 @@
 - **⚠️ 部署期发现 2 个阻塞缺陷（QA 实测拦下，已修）**：
   1. **`nodejs_compat` 缺失**（`9b41f52`）：MCP SDK 依赖 `node:http`，未配 flag 时 Cloudflare API 直接拒绝版本（`No such module "node:http"`, code 10021），部署静默失败、生产仍停旧版。已加 `compatibility_flags = ["nodejs_compat"]`。
   2. **`/mcp` 未接线**（`8ada18b`）：dev 注册了 `app.post/get('/mcp')` 但 index.js 入口无 `/mcp` 分发分支，请求全被 `webAssetService` 的 SPA fallback 抢成 HTML，**端点完全不可达**。已在 index.js `/api/` 分支后补 `if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) return app.fetch(...)`。
-  - 两处修复前：GET/POST /mcp 均返回前端 HTML。修复后：GET 返回 `{"code":401,"message":"身份认证失效,请重新登录"}`（JWT 强制生效，不再被 fallback 抢）；POST 同被 JWT 拦。mail.otscup.com 健康 200。
+  - 两处修复前：GET/POST /mcp 均返回前端 HTML。修复后：GET 返回 `{"code":401,"message":"身份认证失效,请重新登录"}`（JWT 强制生效，不再被 fallback 抢）；POST 同被 JWT 拦。mail.example.com 健康 200。
   - **Version**：`5fa35bf6-5de1-490c-bdad-526f9a2d00f0`。回滚：`wrangler rollback`（无 D1 schema 变更）。
   - **⚠️ 待补验证**：开关默认 OFF，RBAC/限速/审计的实际生效尚未端到端测（需豆豆先在 Cloudflare 把 `mcp_switch` 设为 `true`，再用 MCP 客户端带 JWT 调 5 个工具）。建议合并前或合并后紧跟一次端到端验证。
 
@@ -57,7 +57,7 @@
 - **验证**：
   - ✅ 单测 92/92 绿
   - ✅ QA 离线回归 87/87 gmail@ 样本无回退
-  - ✅ dry-run 通过；✅ 部署成功；✅ 健康检查 mail.otscup.com 200
+  - ✅ dry-run 通过；✅ 部署成功；✅ 健康检查 mail.example.com 200
 - **回滚方式**：`npx wrangler rollback`
 
 ---
@@ -73,7 +73,7 @@
 - **验证**：
   - ✅ 单测 92/92 绿（+email-msg 5，含短正文保留/长URL折叠/超长截断/hide/空正文）
   - ✅ QA 离线回归 87/87 gmail@ 样本仍全中（无回退）
-  - ✅ dry-run 通过；✅ 部署成功；✅ 健康检查 mail.otscup.com 200
+  - ✅ dry-run 通过；✅ 部署成功；✅ 健康检查 mail.example.com 200
 - **回滚方式**：`npx wrangler rollback`（回退到上一 Version）
 
 ---
@@ -88,7 +88,7 @@
 - **验证**：
   - ✅ dry-run 通过（3048 KiB / gzip 629 KiB）
   - ✅ `wrangler deploy` 成功
-  - ✅ 站点 200（mail.otscup.com / workers.dev）
+  - ✅ 站点 200（mail.example.com / workers.dev）
   - ✅ 新路由挂载实测：`/api/oauth/github/login`→501 授权码无效、`/api/oauth/google/login`→501 令牌失败、`/api/oauth/bind`→401 未认证（均为路由存在且正确校验）
   - ⏳ 前端 R2 上传后台进行中（234 文件）
 - **⚠️ 未完成项（豆豆实际使用时注意）**：
@@ -103,17 +103,17 @@
 - **时间**：2026-09-23 07:52 (CST)
 - **代码**：HEAD `33c8f9a`（feat(n02): routing-inbox primary signal §4.11 v1.3）
 - **变更**：
-  - 判定主信号改为**收件地址命中 `GMAIL_ROUTING_INBOX`**（默认 `gmail@otscup.com`，大小写不敏感）→ Google 通道只进 TG，跳过 forward
+  - 判定主信号改为**收件地址命中 `GMAIL_ROUTING_INBOX`**（默认 `gmail@example.com`，大小写不敏感）→ Google 通道只进 TG，跳过 forward
   - 来源域/签名头降为辅助（B 类 Gmail 自动转发 From 非 google 域 + CF 可能剥头 + D1 无 headers 列 → 均不可依赖）
   - 接入点 `email.js` 传 `message.to`，诊断日志加 `toEmailRouting`
-  - `wrangler.toml` 固化 `GMAIL_ROUTING_INBOX = "gmail@otscup.com"`（防 --var 丢失纪律）
+  - `wrangler.toml` 固化 `GMAIL_ROUTING_INBOX = "gmail@example.com"`（防 --var 丢失纪律）
 - **Version ID**：`01cd4205-487d-4c0b-97ae-eaa5531af754`
 - **验证**：
   - ✅ 单测 87/87 绿（原 85 + QA 离线回归 2）
-  - ✅ **QA 离线回归：D1 真实 `to_email=gmail@otscup.com` 87 封历史样本 → 主信号命中 87/87，未命中 0**
+  - ✅ **QA 离线回归：D1 真实 `to_email=gmail@example.com` 87 封历史样本 → 主信号命中 87/87，未命中 0**
   - ✅ dry-run（3048 KiB / gzip 629 KiB，vars 含 GMAIL_ROUTING_INBOX + SKIP_FORWARD_GMAIL_FORWARDED=true）
-  - ✅ 部署成功；✅ 健康检查 mail.otscup.com / worker 均 HTTP 200
-- **已知代价（豆豆已接受）**：163 等非 Google 来源直发 `gmail@otscup.com` 也归 Google 通道只进 TG（419 样本：vincent_dam@163.com → gmail@otscup.com）
+  - ✅ 部署成功；✅ 健康检查 mail.example.com / worker 均 HTTP 200
+- **已知代价（豆豆已接受）**：163 等非 Google 来源直发 `gmail@example.com` 也归 Google 通道只进 TG（419 样本：vincent_dam@163.com → gmail@example.com）
 - **回滚方式**：`npx wrangler rollback`（回退到部署 #3 `9d17e09d`；本次无 D1 schema 变更）
 
 ---

@@ -382,7 +382,7 @@ const zh = {
     notificationsOff: "通知已关闭",
     notificationsBlocked: "请在浏览器设置中允许通知",
     notificationBlockedTitle: "浏览器已阻止本站通知",
-    notificationBlockedDetail: "Chrome / Edge：点击地址栏左侧的锁或设置图标 → 网站设置 → 通知 → 允许；也可以打开 chrome://settings/content/notifications，删除 mail.otscup.com 的“阻止”。改完后刷新页面，再点铃铛。",
+    notificationBlockedDetail: "Chrome / Edge：点击地址栏左侧的锁或设置图标 → 网站设置 → 通知 → 允许；也可以在通知设置里删除本站的“阻止”。改完后刷新页面，再点铃铛。",
     notificationPermissionNeeded: "还没有获得通知权限，请再点一次铃铛并选择“允许”。",
     notificationPushFailedTitle: "浏览器已允许通知，但后台推送订阅失败",
     notificationPushFailedDetail: "Web Push 订阅失败：",
@@ -611,6 +611,16 @@ const zh = {
     askAiAboutEmail: "询问 AI",
     moveToCategory: "移动到分类",
     movedToCategory: "已移动到「{category}」",
+    appearance: "个人外观",
+    appearanceDesc: "选择一套主页皮肤；登录页会同步使用对应的版式。",
+    allAccounts: "所有账户",
+    skinSyncFailed: "外观保存失败，已恢复原皮肤",
+    skinPaper: "Paper · 纸张",
+    skinPaperDesc: "暖纸底、钴蓝强调，适合长时间读信。",
+    skinFresh: "Fresh · 薄荷",
+    skinFreshDesc: "浅薄荷与松绿，干净、轻快。",
+    skinGala: "Gala · 歌剧",
+    skinGalaDesc: "酒红与香槟金，适合更有仪式感的品牌。",
 }
 
 export default zh

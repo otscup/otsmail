@@ -1,107 +1,43 @@
-## otsmail — 独立维护版 Worker 配置
-##
-## ⚠️ Worker 名故意与上游 cloud-mail 不同。旧的 cloud-mail Worker（含其 D1/KV/R2
-##    和自定义域名路由）不受本项目部署影响，可以继续跑。确认过 `name` 不与账号里
-##    现有 Worker 冲突后再 deploy。
-##
-## ⚠️ jwt_secret 不要写在 [vars] 里（会进 git、Dashboard 明文可见）。
-##    改用 Worker Secret：
-##        npx wrangler secret put jwt_secret
-##    代码读的还是 env.jwt_secret，无需改动。
-
+# 生产/自托管配置模板。不要在这里写账号 ID、D1/KV ID 或真实邮箱。
+# 复制为 wrangler.production.toml 并填入自己的值；该文件已被 .gitignore 忽略。
 name = "otsmail"
-account_id = "f475b3dcf291c33ae82ab0b595f81958"
+account_id = "REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID"
 main = "src/index.js"
 compatibility_date = "2025-06-04"
-# MCP SDK (@modelcontextprotocol/sdk) 依赖 node:http 等 Node API，需启用 nodejs_compat，
-# 否则部署阶段 Cloudflare API 报 "No such module node:http" (code 10021) 并拒绝该版本。
 compatibility_flags = ["nodejs_compat"]
-keep_vars = true
 
 [observability]
 enabled = true
 
 [[d1_databases]]
-binding = "db"			#d1数据库绑定名默认不可修改
+binding = "db"
 database_name = "otsmail"
-database_id = "4db24bf3-789c-4760-aa34-3e4bad705967"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
 
 [[kv_namespaces]]
-binding = "kv"			#kv绑定名默认不可修改
-id = "8477df59698d4915afb7baaa000d4870"
+binding = "kv"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
 
 [[r2_buckets]]
-binding = "r2"			#r2对象存储绑定名默认不可修改
-## 直接共用旧 cloud-mail 的桶 mail-r2：
-## - 历史附件、背景图都在里面，公开域名 r2.atproxy.eu.org 已绑定它并就绪
-## - 新邮件附件写进同一个桶，前端按 r2_domain 拼 URL 立即可读
-## 迁移观察期后若要独立，再把对象整体迁到 otsmail-r2 并改这里 + 换绑公开域名。
-bucket_name = "mail-r2"
-
-#[[send_email]]
-#name = "email"			#CF发件, 配置后优先使用
+binding = "r2"
+bucket_name = "otsmail-r2"
 
 [ai]
 binding = "ai"
 
-## [assets] 已弃用：Cloudflare Assets 绑定存储层损坏(所有静态资源返回 0 字节)，
-## 前端改用 R2 托管 (web-asset-service.js 从 env.r2 读 web/ 前缀)。保留配置注释备查。
-#[assets]
-#binding = "assets"
-#directory = "./dist"
-#not_found_handling = "single-page-application"
-#run_worker_first = true
-
-## [triggers] cron 每日刷分析缓存 —— 免费档「每账号 5 个 cron」已满，暂不启用。
-## 需要的话改用本机 Hermes cron 定时打 /api 端点（不占 CF 配额）。
 [triggers]
-crons = ["*/5  * * * *"]	#每天晚上12点执行每日任务,刷新分析缓存
-
+crons = ["*/5 * * * *"]
 
 [vars]
-## Workers 免费档：口令哈希轮数下调到 8000（约 5ms），否则登录/注册会 1102 CPU 超时。
-## 仍远强于上游单轮 SHA-256；轮数写在哈希里，将来升付费档改回 210000 不影响老用户。
-pwd_iterations = 8000
-domain = ["atproxy.eu.org", "otscup.com"]	#邮件域名，@ 后面部分，可多个
-admin = "admin@atproxy.eu.org"				#管理员邮箱
-## N-02 分流开关：Google/Gmail 来源邮件只 TG+保存，不转发到 Outlook/QQ（默认 false 零回归）
-## 曾用 --var 临时注入导致后续部署丢失、N-02 回归；固化到 [vars] 使任何部署都保留（非敏感，可入 git）。
-CF_ACCOUNT_ID = "f475b3dcf291c33ae82ab0b595f81958"
-SKIP_FORWARD_GMAIL_FORWARDED = true
-## N-02 分流主信号（架构 §4.11 v1.3）：收件地址命中此 Gmail 定向通道即判 Google 来源只进 TG。
-## 该地址不对外公开，整体视为 Google 转发通道；163 等非 Google 来源直发到此也归此通道(419 代价样本,豆豆已接受)。
-GMAIL_ROUTING_INBOX = "gmail@otscup.com"
-## OAuth provider 显示开关（git_github_switch/google_switch）：已启用且豆豆实测通过，固化进 toml
-## 防止后续 worker 部署丢开关导致登录按钮消失（同类 --var 注入丢失根因）。
-github_switch = true
-google_switch = true
-## MCP 开关：默认关(OFF)。MCP 是自动化入口，需显式开启；开启后才能用 AI 客户端收发/删邮件。
-mcp_switch = true
-#ai_model = ""			#ai模型,不填默认使用@cf/meta/llama-3.1-8b-instruct-fast
-#analysis_cache = false			#是否开启分析数据缓存
-#orm_log = false			#是否sql日志
-#domain = []				#邮件域名可可配置多个 示例: ["example1.com","example2.com"]
-#admin = ""				#管理员的邮箱	示例: admin@example.com
-## jwt_secret 见文件头：用 `wrangler secret put jwt_secret`，不要写在这里。
-## allow_origin 可选：跨域白名单，逗号分隔。不设时只允许同源（推荐留空）。
-##   示例: allow_origin = "https://mail.example.com"
-#allow_origin = ""
-## pwd_iterations 可选：口令哈希（PBKDF2-SHA256）轮数。
-##   不设 = 210000（OWASP 推荐），单次约 120ms CPU —— 需要 Workers 付费档。
-##   ⚠️ Workers 免费档限 10ms CPU/请求，必须下调，否则登录/注册会 1102 超时：
-##   免费档建议 pwd_iterations = 8000（约 5ms，仍远强于上游的单轮 SHA-256）。
-##   轮数写在哈希里，随时改配置不会让老用户登不上。
-#pwd_iterations = 8000
-
-## [build] 本机 8.5GB 内存跑 pnpm build 会 OOM（exit 3221226505）。
-## dist 已由独立的 `pnpm --prefix ../mail-vue run build` 预先构建好，deploy 直接上传。
-## 需要重建前端时单独跑上面那条命令，别让 wrangler 的 build hook 触发。
-#[build]
-#command = "pnpm --prefix ../mail-vue install && pnpm --prefix ../mail-vue run build"
-
-# Web Push��VAPID����Կ�ɹ�����˽Կ�� wrangler secret put VAPID_PRIVATE_KEY ����
-VAPID_SUBJECT = "mailto:admin@otscup.com"
-VAPID_PUBLIC_KEY = "BP1f-0NK1Bc8ZbsJKr8DfoE6qXoNssMpXKWNISEt2ettQFQEWPJP6yKuu71MLFkKB504xa4r40G11ZQNKOt6XJ8"
+domain = ["example.com"]
+admin = "admin@example.com"
+CF_ACCOUNT_ID = ""
+GMAIL_ROUTING_INBOX = "gmail@example.com"
+VAPID_SUBJECT = "mailto:admin@example.com"
+# VAPID_PUBLIC_KEY 在 Cloudflare 后台变量中填写自己的公钥；私钥用 secret。
+github_switch = false
+google_switch = false
+mcp_switch = false
 
 [[durable_objects.bindings]]
 name = "EMAIL_HUB"
