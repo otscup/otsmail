@@ -25,11 +25,12 @@ export function detectLang(text) {
 	}
 	if (total === 0) return 'und';
 
-	// 有假名 → 日语（即便夹汉字）
+	// 只看「主要语言」：阈值必须够高，否则英文正文 + 中文签名/引用会被误判成 zh，
+	// 进而跳过翻译、直接回「目标已是中文」。
 	if ((hira + kata) / total > 0.05) return 'ja';
-	if (hangul / total > 0.2) return 'ko';
-	if (han / total > 0.2) return 'zh';
-	if (cyr / total > 0.3) return 'ru';
-	if (latin / total > 0.5) return 'en'; // 拉丁系统一按 en 粗判（只为跳过同语翻译）
+	if (hangul / total > 0.3) return 'ko';
+	if (han / total >= 0.5) return 'zh';
+	if (cyr / total > 0.4) return 'ru';
+	if (latin / total >= 0.6) return 'en'; // 拉丁系统一按 en 粗判（只为跳过同语翻译）
 	return 'und';
 }

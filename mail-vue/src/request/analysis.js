@@ -7,3 +7,11 @@ export function analysisEcharts(timeZone) {
 export function analysisInsight(range, timeZone) {
     return http.get('/analysis/insight',{params: {range, timeZone}});
 }
+
+export function analysisUsage() {
+    return http.get('/analysis/usage');
+}
+
+export function analysisCloudflare() {
+    return http.get('/analysis/cloudflare');
+}

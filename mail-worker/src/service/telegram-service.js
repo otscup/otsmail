@@ -40,7 +40,11 @@ const telegramService = {
 			return emailTextTemplate('Access denied')
 		}
 
-		const emailRow = await orm(c).select().from(email).where(eq(email.emailId, result.emailId)).get();
+		const emailRow = await orm(c).select().from(email).where(and(
+			eq(email.emailId, result.emailId),
+			eq(email.userId, result.userId),
+			eq(email.isDel, isDel.NORMAL)
+		)).get();
 
 		if (emailRow) {
 
@@ -121,7 +125,7 @@ const telegramService = {
 
 		const tgChatIds = tgChatId.split(',');
 
-		const jwtToken = await jwtUtils.generateToken(c, { emailId: email.emailId }, 24 * 60 * 60)
+		const jwtToken = await jwtUtils.generateToken(c, { emailId: email.emailId, userId: email.userId }, 15 * 60)
 
 		const webAppUrl = customDomain ? `${domainUtils.toOssDomain(customDomain)}/api/telegram/getEmail/${jwtToken}` : 'https://www.cloudflare.com/404'
 		const inlineKeyboard = [
@@ -375,6 +379,23 @@ const telegramService = {
 		} catch (e) {
 			console.error('Telegram 回复失败:', e.message);
 		}
+	},
+
+	async sendDailyDigest(c) {
+		const { tgBotToken, tgChatId, tgDigest } = await settingService.query(c);
+		if (!tgBotToken || !tgChatId || Number(tgDigest ?? 1) !== 1) return;
+		const row = await c.env.db.prepare(`SELECT
+			(SELECT COUNT(*) FROM email WHERE type = 0 AND create_time >= datetime('now','-1 day')) AS received,
+			(SELECT COUNT(*) FROM email WHERE type = 0 AND unread = 0 AND is_del = 0) AS unread,
+			(SELECT COUNT(*) FROM email WHERE type = 1 AND status IN (3,8)) AS failed,
+			(SELECT COUNT(*) FROM user) AS users
+		`).first();
+		const text = `otsmail 日报 ${new Date(c.scheduledTime || Date.now()).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n`
+			+ `过去 24 小时收件：${row?.received || 0}\n`
+			+ `当前未读：${row?.unread || 0}\n`
+			+ `发送失败：${row?.failed || 0}\n`
+			+ `用户总数：${row?.users || 0}`;
+		await this.sendAlert(c, text);
 	}
 
 }

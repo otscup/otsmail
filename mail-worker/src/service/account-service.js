@@ -55,6 +55,8 @@ const accountService = {
 		// 再走正常的新增流程。有 syncDelete 开关的用户本来就已经是物理删除，
 		// 这里只是把「软删残留」这条历史数据路径补齐。
 		if (accountRow && accountRow.isDel === isDel.DELETE) {
+			// 只有原主人可以清理自己的软删地址；他人不能靠“重新添加”物理销毁。
+			if (accountRow.userId !== userId) throw new BizError(t('notOwner'), 403);
 			await this.physicsDelete(c, { accountId: accountRow.accountId });
 			accountRow = null;
 		}

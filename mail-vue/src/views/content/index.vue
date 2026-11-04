@@ -29,10 +29,29 @@
           </el-dropdown-menu>
         </template>
       </el-dropdown>
+      <el-dropdown trigger="click" @command="learnCurrent" :teleported="false">
+        <Icon class="icon" icon="mdi:brain" width="20" height="20" :title="$t('learnCategory')"/>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item v-for="item in categories" :key="item.key" :command="item.key">
+              <div class="move-category-item">
+                <Icon :icon="item.icon" width="18" height="18"/>
+                <span>{{ $t('learnAs', {category: $t(item.label)}) }}</span>
+              </div>
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+      <el-tooltip v-if="email.listUnsubscribe" :content="$t('unsubscribe')" placement="top">
+        <Icon class="icon" icon="mdi:email-off-outline" width="20" height="20" @click="unsubscribeCurrent"/>
+      </el-tooltip>
       <aiAssistant class="detail-ai" inline reader :email-id="email.emailId" :email-subject="email.subject"/>
       <button type="button" class="reader-summary-btn" :class="{active: showSummary}" @click="toggleSummary">
         <Icon icon="mdi:star-four-points" width="16" height="16"/><span>AI Brief</span>
       </button>
+      <el-tooltip v-if="email.type === 1 && [3,5,8].includes(email.status)" :content="$t('retrySend')" placement="bottom">
+        <Icon class="icon" :class="{ 'is-loading': retrying }" icon="mdi:refresh" width="20" height="20" @click="retrySend"/>
+      </el-tooltip>
       <el-tooltip v-if="emailStore.contentData.showReply" :content="$t('reply')" placement="bottom">
         <Icon class="icon" v-perm="'email:send'" @click="openReply" icon="la:reply" width="21" height="21" />
       </el-tooltip>
@@ -105,6 +124,14 @@
           </div>
           <el-alert v-if="senderUnverified" class="sender-risk" type="warning" :closable="false" show-icon
                     :title="$t('senderUnverified')" :description="$t('senderUnverifiedDesc')" />
+          <div v-if="calendarEvent" class="calendar-card">
+            <Icon icon="mdi:calendar-clock" width="22" height="22"/>
+            <div class="calendar-main">
+              <strong>{{ calendarEvent.summary }}</strong>
+              <small>{{ calendarEvent.when }}</small>
+            </div>
+            <el-button size="small" type="primary" plain @click.stop="downloadAttachment(calendarEvent.att)">{{ $t('addToCalendar') }}</el-button>
+          </div>
           <div v-if="email.code || email.otpLink" class="otp-bar">
             <button v-if="email.code" type="button" class="otp-chip" @click="copyOtp">
               <Icon icon="fluent-color:clipboard-24" width="16" height="16"/>
@@ -170,7 +197,7 @@
                 <div class="opt-icon att-icon">
                   <Icon v-if="isOnlyOffice(att.filename)" icon="mdi:file-edit-outline" width="22" height="22" title="编辑（ONLYOFFICE）" @click="openOnlyOffice(att)"/>
                   <Icon v-if="isImage(att.filename) || isPreviewable(att.filename) || isOnlyOffice(att.filename) || isCsv(att.filename) || isMarkdown(att.filename)" icon="hugeicons:view" width="22" height="22" title="预览" @click="openAttachment(att)"/>
-                  <a :href="cvtR2Url(att.key)" download @click.prevent="downloadAttachment(att)">
+                  <a :href="fileUrl(att)" download @click.prevent="downloadAttachment(att)">
                     <Icon icon="system-uicons:push-down" width="22" height="22"/>
                   </a>
                 </div>
@@ -235,7 +262,7 @@ import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import {useRouter} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
-import {emailDelete, emailRead, emailDetail, emailSpam, emailSpamCancel, emailMoveCategory} from "@/request/email.js";
+import {emailDelete, emailRead, emailDetail, emailSpam, emailSpamCancel, emailMoveCategory, emailRetry, emailLearn} from "@/request/email.js";
 import {Icon} from "@iconify/vue";
 import aiAssistant from '@/components/ai-assistant/index.vue';
 import {useEmailStore} from "@/store/email.js";
@@ -266,7 +293,30 @@ const emit = defineEmits(['close'])
 const router = useRouter()
 const email = emailStore.contentData.email
 const senderUnverified = computed(() => email?.authDmarc === 'fail' || (email?.authDmarc !== 'pass' && email?.authSpf === 'fail'))
+const calendarEvent = ref(null)
+
+function icsValue(text, key) {
+  const line = String(text || '').split(/\r?\n/).find(item => item.startsWith(key + ':') || item.startsWith(key + ';'))
+  return line ? line.slice(line.indexOf(':') + 1).replace(/\\n/g, ' ').trim() : ''
+}
+
+async function loadCalendarEvent() {
+  calendarEvent.value = null
+  const att = (email?.attList || []).find(item => /\.ics$/i.test(item.filename || '') || item.mimeType === 'text/calendar')
+  if (!att) return
+  try {
+    const text = await (await fetch(cvtR2Url(att.key))).text()
+    const rawStart = icsValue(text, 'DTSTART')
+    const when = rawStart
+      ? rawStart.replace(/^(\d{4})(\d{2})(\d{2})T?(\d{2})?(\d{2})?.*/, '$1-$2-$3 $4:$5').trim()
+      : ''
+    calendarEvent.value = {att, summary: icsValue(text, 'SUMMARY') || att.filename, when}
+  } catch {
+    calendarEvent.value = {att, summary: att.filename, when: ''}
+  }
+}
 const showPreview = ref(false)
+const retrying = ref(false)
 const showAttachmentPreview = ref(false)
 const attachmentUrl = ref('')
 const attachmentName = ref('')
@@ -389,6 +439,7 @@ const categories = [
   {key: 'social', label: 'categorySocial', icon: 'mdi:account-group-outline'},
   {key: 'promotion', label: 'categoryPromotion', icon: 'mdi:tag-outline'},
   {key: 'updates', label: 'categoryUpdates', icon: 'mdi:bell-outline'},
+  {key: 'important', label: 'categoryImportant', icon: 'mdi:star-outline'},
   {key: 'ads', label: 'categoryAds', icon: 'mdi:bullhorn-outline'},
   {key: 'spam', label: 'categorySpam', icon: 'mdi:alert-octagon-outline'},
 ]
@@ -489,6 +540,7 @@ onMounted(async () => {
     } catch (e) {
       // 兜底失败不阻塞其它 onMounted 逻辑（错误已有 axios 拦截器 Toast）
     }
+    loadCalendarEvent()
   }
   if (emailStore.contentData.showUnread && email.unread === EmailUnreadEnum.UNREAD) {
     email.unread = EmailUnreadEnum.READ;
@@ -604,7 +656,7 @@ function openOnlyOffice(att, readonly = false) {
     : ['ppt', 'pptx', 'odp'].includes(ext) ? 'slide' : 'word'
   const config = {
     document: {
-      url: cvtR2Url(att.key),
+      url: fileUrl(att),
       title: att.filename,
       fileType: ext,
       key: `mail-${readonly ? 'view' : 'edit'}-${email.emailId}-${att.attId}`,
@@ -628,12 +680,12 @@ function openMicrosoftOffice(att) {
   attachmentKind.value = 'iframe'
   attachmentFullscreen.value = false
   officeLoading.value = false
-  attachmentUrl.value = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(cvtR2Url(att.key))}`
+  attachmentUrl.value = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl(att))}`
   showAttachmentPreview.value = true
 }
 
 function openAttachment(att) {
-  if (isImage(att.filename)) return showImage(att.key)
+  if (isImage(att.filename)) return showImage(att)
   attachmentName.value = att.filename
   attachmentFullscreen.value = false
   if (isMarkdown(att.filename)) {
@@ -643,7 +695,7 @@ function openAttachment(att) {
     attachmentMdError.value = ''
     attachmentMdLoading.value = true
     showAttachmentPreview.value = true
-    fetch(cvtR2Url(att.key)).then(r => {
+    fetch(fileUrl(att)).then(r => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.text()
     }).then(text => { attachmentMarkdown.value = DOMPurify.sanitize(marked.parse(text)) })
@@ -658,7 +710,7 @@ function openAttachment(att) {
     attachmentCsvError.value = ''
     attachmentCsvLoading.value = true
     showAttachmentPreview.value = true
-    fetch(cvtR2Url(att.key)).then(r => {
+    fetch(fileUrl(att)).then(r => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.text()
     }).then(text => { attachmentCsv.value = parseCsv(text) })
@@ -674,13 +726,13 @@ function openAttachment(att) {
     return
   }
   attachmentKind.value = 'iframe'
-  attachmentUrl.value = cvtR2Url(att.key)
+  attachmentUrl.value = fileUrl(att)
   showAttachmentPreview.value = true
 }
 
 async function downloadAttachment(att) {
   try {
-    const res = await fetch(cvtR2Url(att.key))
+    const res = await fetch(fileUrl(att))
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const url = URL.createObjectURL(await res.blob())
     const a = document.createElement('a')
@@ -696,9 +748,9 @@ async function downloadAttachment(att) {
   }
 }
 
-function showImage(key) {
-  if (!isImage(key)) return;
-  const url = cvtR2Url(key)
+function showImage(att) {
+  if (!isImage(att?.filename)) return;
+  const url = fileUrl(att)
   srcList.length = 0
   srcList.push(url)
   showPreview.value = true
@@ -708,9 +760,29 @@ function isImage(filename) {
   return ['png', 'jpg', 'jpeg', 'bmp', 'gif','jfif'].includes(getExtName(filename))
 }
 
+function fileUrl(att) {
+  const url = att?.url || cvtR2Url(att?.key)
+  return url?.startsWith('/') ? `${location.origin}${url}` : url
+}
+
 function formateReceive(recipient) {
   recipient = JSON.parse(recipient)
   return recipient.map(item => item.address).join(', ')
+}
+
+async function retrySend() {
+  if (retrying.value) return
+  retrying.value = true
+  try {
+    await emailRetry(email.emailId)
+    ElMessage({message: t('retrySuccess'), type: 'success', plain: true})
+    emailStore.emailScroll?.refreshList()
+    window.dispatchEvent(new CustomEvent('otsmail:counts'))
+  } catch (e) {
+    ElMessage({message: e?.message || t('operationFailed'), type: 'error', plain: true})
+  } finally {
+    retrying.value = false
+  }
 }
 
 function changeStar() {
@@ -745,7 +817,59 @@ function toggleSpam() {
   const req = target ? emailSpam : emailSpamCancel
   req(email.emailId).then(() => {
     email.spam = target
+    // 手动标记垃圾/非垃圾同时训练该发件人，下一次收信直接生效。
+    emailLearn(email.emailId, target ? 'spam' : 'primary').catch(() => {})
   })
+}
+
+async function unsubscribeCurrent() {
+  const raw = String(email?.listUnsubscribe || '')
+  const url = (raw.match(/<(https?:\/\/[^>]+)>/i) || [])[1] || (raw.match(/https?:\/\/[^\s,>]+/i) || [])[0]
+  if (url) {
+    if (/one-click/i.test(email?.listUnsubscribePost || '')) {
+      try {
+        await fetch(url, {
+          method: 'POST',
+          mode: 'cors',
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: 'List-Unsubscribe=One-Click'
+        })
+        ElMessage.success(t('unsubscribeSent'))
+        return
+      } catch {
+        // 跨域失败时退回打开链接
+      }
+    }
+    window.open(url, '_blank', 'noopener')
+    return
+  }
+  const mailto = (raw.match(/<mailto:([^>]+)>/i) || [])[1]
+  if (mailto) {
+    window.open(`mailto:${mailto}?subject=unsubscribe`, '_blank')
+    return
+  }
+  ElMessage.warning(t('unsubscribeNoLink'))
+}
+
+async function learnCurrent(category) {
+  try {
+    let keyword = ''
+    if (category === 'important') {
+      const answer = await ElMessageBox.prompt(t('learnKeywordPrompt'), t('learnKeywordTitle'), {
+        inputPlaceholder: t('learnKeywordPlaceholder'),
+        confirmButtonText: t('confirm'),
+        cancelButtonText: t('cancel'),
+        inputValue: ''
+      }).catch(() => null)
+      if (!answer) return
+      keyword = (answer.value || '').trim()
+    }
+    await emailLearn(email.emailId, category, keyword)
+    const label = t(categories.find(item => item.key === category)?.label || 'categoryPrimary')
+    ElMessage({message: t('learnedCategory', {category: label}), type: 'success', plain: true})
+  } catch (e) {
+    ElMessage({message: e?.message || t('operationFailed'), type: 'error', plain: true})
+  }
 }
 
 async function moveCurrentTo(category) {
@@ -1054,5 +1178,9 @@ const handleDelete = () => {
 .otp-bar { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:0 0 14px; }
 .otp-chip,.otp-link { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--rd-line); border-radius:8px; background:var(--rd-panel); color:var(--rd-text); font-size:12px; cursor:pointer; text-decoration:none; }
 .otp-chip:hover,.otp-link:hover { border-color:var(--rd-accent); color:var(--rd-accent); }
+.calendar-card { display:flex; align-items:center; gap:10px; margin:0 0 14px; padding:10px 12px; border:1px solid var(--rd-line); border-radius:10px; background:var(--rd-panel); }
+.calendar-main { display:grid; gap:2px; min-width:0; flex:1; }
+.calendar-main strong { font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.calendar-main small { font-size:11px; color:var(--rd-muted); }
 .spinning { animation: spin 1s linear infinite; }
 </style>

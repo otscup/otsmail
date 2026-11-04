@@ -1,4 +1,5 @@
 import app from '../hono/hono';
+import result from '../model/result';
 import telegramService from '../service/telegram-service';
 
 app.get('/telegram/getEmail/:token', async (c) => {

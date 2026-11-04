@@ -55,7 +55,7 @@ binding = "ai"
 ## [triggers] cron 每日刷分析缓存 —— 免费档「每账号 5 个 cron」已满，暂不启用。
 ## 需要的话改用本机 Hermes cron 定时打 /api 端点（不占 CF 配额）。
 [triggers]
-crons = ["*/30 * * * *"]	#每天晚上12点执行每日任务,刷新分析缓存
+crons = ["*/5  * * * *"]	#每天晚上12点执行每日任务,刷新分析缓存
 
 
 [vars]
@@ -66,6 +66,7 @@ domain = ["atproxy.eu.org", "otscup.com"]	#邮件域名，@ 后面部分，可�
 admin = "admin@atproxy.eu.org"				#管理员邮箱
 ## N-02 分流开关：Google/Gmail 来源邮件只 TG+保存，不转发到 Outlook/QQ（默认 false 零回归）
 ## 曾用 --var 临时注入导致后续部署丢失、N-02 回归；固化到 [vars] 使任何部署都保留（非敏感，可入 git）。
+CF_ACCOUNT_ID = "f475b3dcf291c33ae82ab0b595f81958"
 SKIP_FORWARD_GMAIL_FORWARDED = true
 ## N-02 分流主信号（架构 §4.11 v1.3）：收件地址命中此 Gmail 定向通道即判 Google 来源只进 TG。
 ## 该地址不对外公开，整体视为 Google 转发通道；163 等非 Google 来源直发到此也归此通道(419 代价样本,豆豆已接受)。

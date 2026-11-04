@@ -51,7 +51,9 @@ const translationService = {
 
 		const rawHtml = e.content || '';
 		const rawText = e.text || '';
-		const detected = detectLang(htmlToPlainText(rawHtml || rawText).slice(0, 500));
+		// 采样 2000 字判断「正文主要语言」：只看开头 500 字时，长正文前段是英文、
+		// 后段夹中文签名也会被判成 zh，随后误判「已经是目标语言」而跳过翻译。
+		const detected = detectLang(htmlToPlainText(rawHtml || rawText).slice(0, 2000));
 		if (detected !== 'und' && detected === targetLang) {
 			return { alreadyInTargetLang: true, sourceLang: detected };
 		}

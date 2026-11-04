@@ -17,6 +17,11 @@
                :type="'send'"
   >
     <template #first>
+      <el-select v-model="statusFilter" size="small" class="send-status-filter" :placeholder="$t('all')" clearable @change="refreshList">
+        <el-option :label="$t('bounced')" :value="3"/>
+        <el-option :label="$t('delayed')" :value="5"/>
+        <el-option :label="$t('sendFailed')" :value="8"/>
+      </el-select>
       <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-down-outline"
             v-if="params.timeSort === 0" width="28" height="28"/>
       <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-up-outline" v-else
@@ -48,6 +53,7 @@ const emailStore = useEmailStore();
 const accountStore = useAccountStore();
 const sendScroll = ref({})
 const selectedEmailId = ref(null)
+const statusFilter = ref(null)
 const params = reactive({
   timeSort: 0,
 })
@@ -62,6 +68,10 @@ watch(() => accountStore.currentAccountId, () => {
 
 function changeTimeSort() {
   params.timeSort = params.timeSort ? 0 : 1
+  sendScroll.value.refreshList();
+}
+
+function refreshList() {
   sendScroll.value.refreshList();
 }
 
@@ -87,7 +97,7 @@ function cancelStar(email) {
 function getEmailList(emailId, size, category, page) {
   const accountId =  accountStore.currentAccountId;
   const allReceive = accountStore.currentAccount.allReceive;
-  return emailList(accountId, allReceive, emailId, params.timeSort, size, 1, emailStore.searchParams, undefined, undefined, page).then(data => {
+  return emailList(accountId, allReceive, emailId, params.timeSort, size, 1, emailStore.searchParams, undefined, undefined, page, statusFilter.value).then(data => {
     data.latestEmail.reqAccountId = accountId;
     data.latestEmail.allReceive = allReceive;
     return data;
@@ -100,6 +110,8 @@ function getEmailList(emailId, size, category, page) {
 .icon {
   cursor: pointer;
 }
+.send-status-filter { width: 112px; margin-right: 4px; }
+.send-status-filter :deep(.el-select__wrapper) { min-height: 28px; }
 </style>
 <style scoped>
 .mail-list-split { height:100%; display:flex; min-height:0; }

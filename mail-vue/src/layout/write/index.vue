@@ -103,7 +103,8 @@
           <button type="button" class="ai-compose-btn" @click="openComposeAi">
             <Icon icon="mdi:star-four-points" width="15" height="15"/> AI
           </button>
-          <div>
+          <div class="send-actions">
+            <el-button v-perm="'email:send'" @click="openSchedule">{{ $t('scheduleSend') }}</el-button>
             <el-button type="primary" @click="sendEmail" v-if="form.sendType === 'reply'">{{ $t('reply') }}</el-button>
             <el-button type="primary" @click="sendEmail" v-else-if="form.sendType === 'forward'">{{ $t('forward') }}</el-button>
             <el-button type="primary" @click="sendEmail" v-else>{{ $t('send') }}</el-button>
@@ -132,6 +133,15 @@
         <el-button type="primary" @click="chooseContact">{{t('selectContacts')}}</el-button>
       </div>
     </el-dialog>
+    <el-dialog v-model="scheduleShow" :title="t('scheduleSend')" width="420px">
+      <p class="schedule-tip">{{ t('scheduleTip') }}</p>
+      <el-date-picker v-model="scheduleAt" type="datetime" :placeholder="t('scheduleTime')"
+                      value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%"/>
+      <template #footer>
+        <el-button @click="scheduleShow = false">{{ t('cancel') }}</el-button>
+        <el-button type="primary" :loading="sending" @click="confirmSchedule">{{ t('scheduleConfirm') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 <script setup>
@@ -139,7 +149,7 @@ import tinyEditor from '@/components/tiny-editor/index.vue'
 import {h, nextTick, onMounted, onUnmounted, reactive, ref, toRaw, computed} from "vue";
 import {Icon} from "@iconify/vue";
 import {useUserStore} from "@/store/user.js";
-import {emailSend} from "@/request/email.js";
+import {emailSend, emailSchedule} from "@/request/email.js";
 import {isEmail} from "@/utils/verify-utils.js";
 import {useAccountStore} from "@/store/account.js";
 import {accountList} from "@/request/account.js";
@@ -181,6 +191,8 @@ const editor = ref({})
 const userStore = useUserStore();
 const show = ref(false);
 const composeFullscreen = ref(false);
+const scheduleShow = ref(false);
+const scheduleAt = ref('');
 const percent = ref(0)
 let percentMessage = null
 let sending = false
@@ -541,6 +553,44 @@ async function sendEmail() {
     percent.value = 0
     sending = false
   })
+}
+
+function openSchedule() {
+  if (form.receiveEmail.length === 0) {
+    ElMessage({message: t('emptyRecipientMsg'), type: 'error', plain: true})
+    return
+  }
+  if (!form.subject) {
+    ElMessage({message: t('emptySubjectMsg'), type: 'error', plain: true})
+    return
+  }
+  if (!form.content) form.content = editor.value.getContent()
+  if (!form.content) {
+    ElMessage({message: t('emptyContentMsg'), type: 'error', plain: true})
+    return
+  }
+  scheduleAt.value = dayjs().add(1, 'hour').format('YYYY-MM-DD HH:mm:ss')
+  scheduleShow.value = true
+}
+
+async function confirmSchedule() {
+  if (!scheduleAt.value || new Date(scheduleAt.value).getTime() <= Date.now()) {
+    ElMessage({message: t('scheduleTimeInvalid'), type: 'error', plain: true})
+    return
+  }
+  if (sending) return
+  sending = true
+  try {
+    await emailSchedule(toRaw(form), new Date(scheduleAt.value).toISOString())
+    ElMessage({message: t('scheduleSuccess'), type: 'success', plain: true})
+    scheduleShow.value = false
+    show.value = false
+    resetForm()
+  } catch (e) {
+    ElMessage({message: e?.message || t('operationFailed'), type: 'error', plain: true})
+  } finally {
+    sending = false
+  }
 }
 
 function addRecipientRecord() {

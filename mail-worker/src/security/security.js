@@ -27,12 +27,16 @@ const exclude = [
 
 const requirePerms = [
 	'/email/send',
+	'/email/schedule',
+	'/email/retry',
 	'/email/delete',
 	'/account/list',
 	'/account/delete',
 	'/account/add',
 	'/my/delete',
 	'/analysis/echarts',
+	'/analysis/usage',
+	'/analysis/cloudflare',
 	'/role/add',
 	'/role/list',
 	'/role/delete',
@@ -73,7 +77,7 @@ const requirePerms = [
 
 const premKey = {
 	'email:delete': ['/email/delete'],
-	'email:send': ['/email/send'],
+	'email:send': ['/email/send', '/email/schedule', '/email/retry'],
 	'account:add': ['/account/add'],
 	'account:query': ['/account/list'],
 	'account:delete': ['/account/delete'],
@@ -93,7 +97,7 @@ const premKey = {
 	'all-email:delete': ['/allEmail/delete','/allEmail/batchDelete'],
 	'setting:query': ['/setting/query'],
 	'setting:set': ['/setting/set', '/setting/setBackground','/setting/deleteBackground','/setting/setBlacklist','/setting/webhookTest','/setting/tgWebhook','/setting/aiModels'],
-	'analysis:query': ['/analysis/echarts'],
+	'analysis:query': ['/analysis/echarts', '/analysis/usage', '/analysis/cloudflare'],
 	'reg-key:add': ['/regKey/add'],
 	'reg-key:query': ['/regKey/list','/regKey/history'],
 	'reg-key:delete': ['/regKey/delete','/regKey/clearNotUse'],
@@ -150,6 +154,14 @@ app.use('*', async (c, next) => {
 
 	if (!result.viaMcp && !authInfo.tokens.includes(token)) {
 		throw new BizError(t('authExpired'), 401);
+	}
+
+	// 系统管理员权限不能只信 KV 快照：降级后旧快照最多还能活到跨天。
+	if (!result.viaMcp && Number(authInfo.user.type) === 0) {
+		const liveUser = await userService.selectById(c, userId);
+		if (!liveUser || Number(liveUser.type) !== 0) {
+			throw new BizError(t('authExpired'), 401);
+		}
 	}
 
 	const permIndex = requirePerms.findIndex(item => {

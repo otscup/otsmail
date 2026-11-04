@@ -79,16 +79,8 @@ const loginService = {
 
 		const accountRow = await accountService.selectByEmailIncludeDel(c, email);
 
-		// issue #433 / #426 / #494：注销过的邮箱无法重新注册。
-		// 与 accountService.add 保持一致：清掉软删残留后允许重新注册，
-		// 而不是永久锁死这个地址。
-		if (accountRow && accountRow.isDel === isDel.DELETE) {
-			await accountService.physicsDelete(c, { accountId: accountRow.accountId });
-			const oldUser = await userService.selectByEmailIncludeDel(c, email);
-			if (oldUser && oldUser.isDel === isDel.DELETE) {
-				await userService.physicsDelete(c, { userIds: String(oldUser.userId) });
-			}
-		} else if (accountRow) {
+		// 软删账号保留原数据；陌生注册者不能靠重新注册触发物理销毁。
+		if (accountRow) {
 			throw new BizError(t('isRegAccount'));
 		}
 
@@ -252,6 +244,9 @@ const loginService = {
 				throw new BizError(t('needTwoFactorCode'), 428);
 			}
 			if (!await totpUtils.verify(userRow.twoFactorSecret, twoFactorCode)) {
+				if (await loginGuard.recordFailure(c, email)) {
+					throw new BizError(t('loginLocked'), 429);
+				}
 				throw new BizError(t('twoFactorCodeInvalid'), 428);
 			}
 		}
@@ -262,7 +257,7 @@ const loginService = {
 		if (userRow.email === c.env.admin) userRow.type = 0;
 
 		const uuid = uuidv4();
-		const jwt = await JwtUtils.generateToken(c,{ userId: userRow.userId, token: uuid });
+		const jwt = await JwtUtils.generateToken(c, { userId: userRow.userId, token: uuid }, constant.TOKEN_EXPIRE);
 
 		let authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userRow.userId, { type: 'json' });
 

@@ -14,7 +14,7 @@ import cryptoUtils from '../utils/crypto-utils';
  */
 const TOKEN_PREFIX = 'mcp_';
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const OAUTH_EXPIRES_IN = 3600;
+const OAUTH_EXPIRES_IN = 30 * 24 * 60 * 60;
 
 function randomHex(bytes) {
 	const buf = new Uint8Array(bytes);
@@ -163,7 +163,10 @@ const mcpService = {
 		const hash = await sha256Hex(clientSecret);
 		if (!cryptoUtils.timingSafeEqual(hash, row.clientSecretHash)) return null;
 
-		// shortcut: 每次换 token 落一行 mcp_token，高频调用会累积；需要时改成按 client 复用 + 定时清理
+		// 同一 client 只保留最新 token，避免每小时换发后旧 token 继续有效、无限累积。
+		await orm(c).update(mcpToken).set({ revoked: 1 })
+			.where(and(eq(mcpToken.clientId, clientId), eq(mcpToken.userId, row.userId)))
+			.run();
 		const secret = randomHex(24);
 		const token = TOKEN_PREFIX + secret;
 		await orm(c).insert(mcpToken).values({

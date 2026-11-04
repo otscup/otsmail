@@ -17,6 +17,10 @@ describe('mail security metadata', () => {
 		expect(extractOtp({ subject: '登录验证', text: '您的验证码是 483920，10 分钟内有效' }).code).toBe('483920');
 	});
 
+	it('extracts a code that appears before the keyword', () => {
+		expect(extractOtp({ subject: 'Sign in', text: '483920 is your verification code. It expires in 10 minutes.' }).code).toBe('483920');
+	});
+
 	it('does not treat an order number as a code', () => {
 		expect(extractOtp({ subject: 'Order 20261031', text: 'Order 20261031 shipped' }).code).toBe('');
 	});

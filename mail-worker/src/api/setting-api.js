@@ -50,9 +50,10 @@ app.post('/setting/aiModels', async (c) => {
 app.post('/setting/webhookTest', async (c) => {
 	const body = await c.req.json();
 	const setting = await settingService.query(c);
+	// 测试接口不再把库里的 webhookSecret 发往请求体指定的 URL，避免 setting:set 持有者用测试接口偷密钥。
 	const resultData = await webhookService.test(c, {
 		url: body.url || setting.webhookUrl,
-		secret: body.secret || setting.webhookSecret
+		secret: body.secret && !String(body.secret).includes('******') ? body.secret : ''
 	});
 	return c.json(result.ok(resultData));
 })

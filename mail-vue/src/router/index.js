@@ -42,6 +42,12 @@ const routes = [
                 meta: {title: 'analysis', name: 'analysis', menu: false}
             },
             {
+                path: '/unsubscribe',
+                name: 'unsubscribe',
+                component: () => import('@/views/unsubscribe/index.vue'),
+                meta: {title: 'unsubscribe', name: 'unsubscribe', menu: false}
+            },
+            {
                 path: '/reg-key',
                 name: 'regKey',
                 component: () => import('@/views/reg-key/index.vue'),

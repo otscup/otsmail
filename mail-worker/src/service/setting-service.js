@@ -10,6 +10,8 @@ import {t} from '../i18n/i18n'
 import verifyRecordService from './verify-record-service';
 import userContext from '../security/user-context';
 import {normalizeFilterRules} from '../utils/filter-rules';
+import {sanitizeEmailHtml} from '../utils/html-sanitize';
+import {getTableColumns} from 'drizzle-orm';
 
 const settingService = {
 
@@ -307,7 +309,20 @@ const settingService = {
 				}));
 		}
 
+		if (params.noticeContent !== undefined) {
+			params.noticeContent = sanitizeEmailHtml(String(params.noticeContent || ''));
+		}
+		if (params.noticeWidth !== undefined) {
+			const width = Number(params.noticeWidth);
+			params.noticeWidth = Number.isFinite(width) ? Math.min(800, Math.max(220, width)) : 300;
+		}
+
 		params.resendTokens = JSON.stringify(resendTokens);
+		// 只接受 setting 表真实存在的列，避免任意字段/未知列进入 UPDATE。
+		const columns = getTableColumns(setting);
+		Object.keys(params).forEach(key => {
+			if (!(key in columns)) delete params[key];
+		});
 		await orm(c).update(setting).set({ ...params }).returning().get();
 		await this.refresh(c);
 	},
@@ -392,12 +407,13 @@ const settingService = {
 			chatOpacity: settingRow.chatOpacity,
 			showAvatar: settingRow.showAvatar !== 0,
 			loginOpacity: settingRow.loginOpacity,
+			loginTheme: settingRow.loginTheme || 'paper',
 			domainList: settingRow.loginDomain === 1 && !token ? [] : settingRow.domainList,
 			regKey: settingRow.regKey,
 			regVerifyOpen: settingRow.regVerifyOpen,
 			addVerifyOpen: settingRow.addVerifyOpen,
 			noticeTitle: settingRow.noticeTitle,
-			noticeContent: settingRow.noticeContent,
+			noticeContent: sanitizeEmailHtml(settingRow.noticeContent),
 			noticeType: settingRow.noticeType,
 			noticeDuration: settingRow.noticeDuration,
 			noticePosition: settingRow.noticePosition,

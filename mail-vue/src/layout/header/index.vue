@@ -56,6 +56,11 @@
         </template>
       </el-dropdown>
     </div>
+    <Teleport to="body">
+      <button v-perm="'email:send'" type="button" class="mobile-compose-fab" :aria-label="$t('compose')" @click="openSend">
+        <Icon icon="material-symbols:edit-outline-sharp" width="22" height="22"/>
+      </button>
+    </Teleport>
   </div>
 </template>
 
@@ -640,5 +645,31 @@ function formatName(email) {
 
 .el-tooltip__trigger:first-child:focus-visible {
   outline: unset;
+}
+
+.mobile-compose-fab { display: none; }
+
+@media (max-width: 767px) {
+  .mobile-user-menu { display: none !important; }
+  .mobile-search-btn,
+  .mobile-search-close { width: 44px; height: 44px; border-radius: 12px; }
+  .writer-box { display: none !important; }
+  .mobile-compose-fab {
+    position: fixed;
+    right: 18px;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    z-index: 40;
+    width: 54px;
+    height: 54px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 18px;
+    background: var(--rd-accent, #2454d6);
+    color: #fff;
+    box-shadow: 0 12px 26px rgba(36, 84, 214, .28);
+    cursor: pointer;
+  }
+  .mobile-compose-fab:active { transform: scale(.94); }
 }
 </style>

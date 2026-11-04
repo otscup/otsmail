@@ -23,6 +23,11 @@ const publicService = {
 
 		let { toEmail, content, subject, sendName, sendEmail, timeSort, num, size, type , isDel } = params
 
+		// 公共 token 不能变成全库导出接口：必须带过滤条件，分页最多 100 条。
+		const hasFilter = [toEmail, content, subject, sendName, sendEmail].some(v => String(v || '').trim());
+		if (!hasFilter) throw new BizError(t('publicFilterRequired'));
+		size = Math.min(Number(size) || 20, 100);
+
 		const query = orm(c).select({
 				emailId: email.emailId,
 				sendEmail: email.sendEmail,
@@ -126,17 +131,14 @@ const publicService = {
 
 		const roleList = await roleService.roleSelectUse(c);
 		const defRole = roleList.find(roleRow => roleRow.isDefault === roleConst.isDefault.OPEN);
+		if (!defRole) throw new BizError(t('roleNotExist'));
 
 		const userList = [];
 
 		for (const emailRow of list) {
-			let { email, hash, salt, roleName } = emailRow;
-			let type = defRole.roleId;
-
-			if (roleName) {
-				const roleRow = roleList.find(role => role.name === roleName);
-				type = roleRow ? roleRow.roleId : type;
-			}
+			let { email, hash, salt } = emailRow;
+			// 公共 token 只能建默认角色，禁止通过 roleName 提权。
+			const type = defRole.roleId;
 
 			// 参数化绑定：os / browser / device 来自 User-Agent 头，activeIp 来自请求头，
 			// email 来自请求体，全部是调用方可控的。D1 的 prepare() 直接编译传入的 SQL
@@ -176,7 +178,8 @@ const publicService = {
 
 		const uuid = uuidv4();
 
-		await c.env.kv.put(KvConst.PUBLIC_KEY, uuid);
+		// Public token 也必须过期，避免一次泄露永久可导出全站邮件。
+		await c.env.kv.put(KvConst.PUBLIC_KEY, uuid, { expirationTtl: 30 * 24 * 60 * 60 });
 
 		return {token: uuid}
 	},
@@ -209,6 +212,9 @@ const publicService = {
 		if (userRow.twoFactorSwitch === 1 || userRow.twoFactorRequired === 1) {
 			if (!twoFactorCode) throw new BizError(t('needTwoFactorCode'), 428);
 			if (!await totpUtils.verify(userRow.twoFactorSecret, twoFactorCode)) {
+				if (await loginGuard.recordFailure(c, email)) {
+					throw new BizError(t('loginLocked'), 429);
+				}
 				throw new BizError(t('twoFactorCodeInvalid'), 428);
 			}
 		}

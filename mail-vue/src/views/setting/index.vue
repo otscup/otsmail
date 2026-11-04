@@ -147,8 +147,10 @@
     </div>
     <el-dialog v-model="pwdShow" :title="$t('changePassword')" width="340">
       <div class="update-pwd">
-        <el-input type="password" :placeholder="$t('newPassword')" v-model="form.password" autocomplete="off" @keyup.enter="submitPwd"/>
-        <el-input type="password" :placeholder="$t('confirmPassword')" v-model="form.newPwd" autocomplete="off" @keyup.enter="submitPwd"/>
+        <el-input type="password" :placeholder="$t('oldPassword')" v-model="form.oldPassword" autocomplete="current-password" @keyup.enter="submitPwd"/>
+        <el-input type="password" :placeholder="$t('newPassword')" v-model="form.password" autocomplete="new-password" @keyup.enter="submitPwd"/>
+        <el-input type="password" :placeholder="$t('confirmPassword')" v-model="form.newPwd" autocomplete="new-password" @keyup.enter="submitPwd"/>
+        <el-input v-if="twoFactorEnabled || twoFactorRequired" v-model="form.twoFactorCode" maxlength="6" :placeholder="$t('verifyCode')" @keyup.enter="submitPwd"/>
         <el-button type="primary" :loading="setPwdLoading" @click="submitPwd">{{$t('save')}}</el-button>
       </div>
     </el-dialog>
@@ -440,8 +442,10 @@ function changeLang(lang) {
 
 const pwdShow = ref(false)
 const form = reactive({
+  oldPassword: '',
   password: '',
   newPwd: '',
+  twoFactorCode: '',
 })
 
 const deleteConfirm = () => {
@@ -467,6 +471,15 @@ function submitPwd() {
 
   if (setPwdLoading.value) return
 
+  if (!form.oldPassword) {
+    ElMessage({
+      message: t('oldPassword'),
+      type: 'error',
+      plain: true,
+    })
+    return
+  }
+
   if (!form.password) {
     ElMessage({
       message: t('emptyPwdMsg'),
@@ -476,7 +489,7 @@ function submitPwd() {
     return
   }
 
-  if (form.password.length < 6) {
+  if (form.password.length < 6 || form.password.length > 30) {
     ElMessage({
       message: t('pwdLengthMsg'),
       type: 'error',
@@ -495,16 +508,14 @@ function submitPwd() {
   }
 
   setPwdLoading.value = true
-  resetPassword(form.password).then(() => {
+  resetPassword(form.oldPassword, form.password, form.twoFactorCode).then(() => {
     ElMessage({
       message: t('saveSuccessMsg'),
       type: 'success',
       plain: true,
     })
-    pwdShow.value = false
-    setPwdLoading.value = false
-    form.password = ''
-    form.newPwd = ''
+    clearToken()
+    router.replace('/login')
   }).catch(() => {
     setPwdLoading.value = false
   })

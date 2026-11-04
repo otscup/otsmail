@@ -57,6 +57,12 @@ const dbInit = {
 		await this.otsmail_21DB(c);
 		await this.otsmail_22DB(c);
 		await this.otsmail_23DB(c);
+		await this.otsmail_24DB(c);
+		await this.otsmail_25DB(c);
+		await this.otsmail_26DB(c);
+		await this.otsmail_27DB(c);
+		await this.otsmail_28DB(c);
+		await this.otsmail_29DB(c);
 		await this.otsmail_9DB(c);
 		await settingService.refresh(c);
 		await c.env.kv.put('init_done', '1');
@@ -1062,6 +1068,92 @@ async otsmail_5DB(c) {
 		}
 		try {
 			await c.env.db.prepare(`ALTER TABLE email ADD COLUMN otp_link TEXT NOT NULL DEFAULT '';`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+	async otsmail_24DB(c) {
+		try {
+			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN tg_digest INTEGER NOT NULL DEFAULT 1;`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+	async otsmail_25DB(c) {
+		for (const sql of [
+			`ALTER TABLE email ADD COLUMN list_unsubscribe TEXT NOT NULL DEFAULT '';`,
+			`ALTER TABLE email ADD COLUMN list_unsubscribe_post TEXT NOT NULL DEFAULT '';`
+		]) {
+			try {
+				await c.env.db.prepare(sql).run();
+			} catch (e) {
+				console.warn(`跳过字段：${e.message}`);
+			}
+		}
+	},
+
+	async otsmail_26DB(c) {
+		try {
+			await c.env.db.prepare(`
+				CREATE TABLE IF NOT EXISTS user_mail_rule (
+					user_id INTEGER NOT NULL,
+					sender TEXT NOT NULL,
+					category TEXT NOT NULL DEFAULT 'primary',
+					updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					PRIMARY KEY (user_id, sender)
+				);
+			`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+	async otsmail_27DB(c) {
+		try {
+			await c.env.db.prepare(`
+				CREATE TABLE IF NOT EXISTS user_mail_rule_kw (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					user_id INTEGER NOT NULL,
+					sender TEXT NOT NULL,
+					keyword TEXT NOT NULL,
+					category TEXT NOT NULL DEFAULT 'primary',
+					updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					UNIQUE (user_id, sender, keyword)
+				);
+			`).run();
+			await c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_mail_rule_kw_lookup ON user_mail_rule_kw(user_id, sender);`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+	async otsmail_28DB(c) {
+		try {
+			await c.env.db.batch([
+				c.env.db.prepare(`CREATE TABLE IF NOT EXISTS push_device (
+					push_device_id INTEGER PRIMARY KEY AUTOINCREMENT,
+					user_id INTEGER NOT NULL,
+					token TEXT NOT NULL,
+					platform TEXT NOT NULL DEFAULT 'android',
+					device_id TEXT NOT NULL DEFAULT '',
+					app_version TEXT NOT NULL DEFAULT '',
+					create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+					update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+					last_error_at DATETIME
+				)`),
+				c.env.db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_push_device_token ON push_device(token)'),
+				c.env.db.prepare('CREATE INDEX IF NOT EXISTS idx_push_device_user ON push_device(user_id, platform)')
+			]);
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
+	},
+
+	async otsmail_29DB(c) {
+		try {
+			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN login_theme TEXT NOT NULL DEFAULT 'paper';`).run();
 		} catch (e) {
 			console.warn(`跳过字段：${e.message}`);
 		}

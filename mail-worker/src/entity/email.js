@@ -11,6 +11,8 @@ export const email = sqliteTable('email', {
 	authSpf: text('auth_spf').default('').notNull(),
 	authDmarc: text('auth_dmarc').default('').notNull(),
 	otpLink: text('otp_link').default('').notNull(),
+	listUnsubscribe: text('list_unsubscribe').default('').notNull(),
+	listUnsubscribePost: text('list_unsubscribe_post').default('').notNull(),
 	text: text('text'),
 	content: text('content'),
 	cc: text('cc').default('[]'),

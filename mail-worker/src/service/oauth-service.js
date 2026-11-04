@@ -372,6 +372,18 @@ const oauthService = {
 			throw new BizError(t('oidcDiscoveryFailed') || 'OIDC discovery failed');
 		}
 
+		// discovery 文档不能把浏览器带到任意端点；issuer 和三个端点必须同为 https 且同源。
+		if (!/^https:\/\//i.test(issuer) || String(doc.issuer || '').replace(/\/+$/, '') !== issuer) {
+			throw new BizError(t('oidcDiscoveryFailed') || 'OIDC discovery failed');
+		}
+		const issuerOrigin = new URL(issuer).origin;
+		for (const endpoint of [doc.authorization_endpoint, doc.token_endpoint, doc.userinfo_endpoint]) {
+			const url = new URL(endpoint);
+			if (url.protocol !== 'https:' || url.origin !== issuerOrigin) {
+				throw new BizError(t('oidcDiscoveryFailed') || 'OIDC discovery failed');
+			}
+		}
+
 		await c.env.kv.put(cacheKey, JSON.stringify(doc), { expirationTtl: 3600 });
 		return doc;
 	},

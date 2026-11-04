@@ -22,6 +22,9 @@ import domainUtils from '../utils/domain-uitls';
 import account from "../entity/account";
 import { att } from '../entity/att';
 import telegramService from './telegram-service';
+import r2Service from './r2-service';
+import mailRuleService from './mail-rule-service';
+import fcmService from './fcm-service';
 
 const emailService = {
 
@@ -182,7 +185,8 @@ const emailService = {
 						...searchConditions
 					)
 				).get().then(async row => {
-					if (totalCacheKey) await c.env.kv?.put(totalCacheKey, String(row.total), { expirationTtl: 60 });
+					// 5 分钟内同一筛选的 total 只回源一次，控制 KV 写入量。
+					if (totalCacheKey) await c.env.kv?.put(totalCacheKey, String(row.total), { expirationTtl: 600 });
 					return row;
 				});
 
@@ -382,6 +386,10 @@ const emailService = {
 			messageId: emailRow.messageId
 		};
 
+		// 附件数量必须在任何外部投递/入库之前校验，否则会“已发出去才报错”。
+		if (imageDataList.length > 10) throw new BizError(t('imageAttLimit'));
+		if (attachments?.length > 10) throw new BizError(t('attLimit'));
+
 		if (!allInternal) {
 
 			if (useCloudflareEmail) {
@@ -455,17 +463,11 @@ const emailService = {
 
 		//保存内嵌附件
 		if (imageDataList.length > 0) {
-			if (imageDataList.length > 10) {
-				throw new BizError(t('imageAttLimit'));
-			}
 			await attService.saveArticleAtt(c, imageDataList, userId, accountId, emailResult.emailId);
 		}
 
 		//保存普通附件
 		if (attachments?.length > 0) {
-			if (attachments.length > 10) {
-				throw new BizError(t('attLimit'));
-			}
 			await attService.saveSendAtt(c, attachments, userId, accountId, emailResult.emailId);
 		}
 
@@ -710,7 +712,7 @@ const emailService = {
 				emailValues.type = emailConst.type.RECEIVE;
 				emailValues.status = emailConst.status.RECEIVE;
 
-				const roleRow = roleList.find(roleRow => roleRow.userId === accountRow.userId);
+				const roleRow = roleList.find(roleRow => roleRow.userId === accountRow.userId) || {};
 
 				let { banEmail, availDomain } = roleRow;
 
@@ -765,6 +767,17 @@ const emailService = {
 				attValues.attId = null;
 				await orm(c).insert(att).values(attValues).run();
 			}
+
+			// 站内自发同样是一次收信，插完收件副本后补发 FCM。
+			const push = fcmService.sendToUser({ env: c.env }, emailRow.userId, {
+				emailId: emailRow.emailId,
+				sender: sendEmailData.sendEmail,
+				name: sendEmailData.name,
+				subject: sendEmailData.subject,
+				snippet: String(sendEmailData.text || '').slice(0, 200)
+			});
+			if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(push);
+			else await push;
 
 		}
 
@@ -930,6 +943,44 @@ const emailService = {
 	async physicsDeleteUserIds(c, userIds) {
 		await attService.removeByUserIds(c, userIds);
 		await orm(c).delete(email).where(inArray(email.userId, userIds)).run();
+	},
+
+	async retry(c, emailId, userId) {
+		const emailRow = await orm(c).select().from(email).where(and(
+			eq(email.emailId, Number(emailId)),
+			eq(email.userId, userId),
+			eq(email.type, emailConst.type.SEND)
+		)).get();
+		if (!emailRow) throw new BizError(t('emailNotExist'), 404);
+		if (![emailConst.status.BOUNCED, emailConst.status.FAILED, emailConst.status.DELAYED].includes(emailRow.status)) {
+			throw new BizError(t('retryNotAllowed'), 400);
+		}
+		const attachments = [];
+		for (const item of await attService.selectByEmailIds(c, [emailRow.emailId])) {
+			const obj = await r2Service.getObj(c, item.key);
+			if (!obj) continue;
+			const bytes = new Uint8Array(await obj.arrayBuffer());
+			let binary = '';
+			for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+			attachments.push({...item, contentType: item.mimeType, content: btoa(binary)});
+		}
+		const addressList = (value) => {
+			try { return JSON.parse(value || '[]').map(item => item.address || item).filter(Boolean); } catch { return []; }
+		};
+		const receiveEmail = addressList(emailRow.recipient);
+		return this.send(c, {
+			accountId: emailRow.accountId,
+			name: emailRow.name,
+			sendType: 'send',
+			emailId: null,
+			receiveEmail: receiveEmail.length ? receiveEmail : [emailRow.toEmail].filter(Boolean),
+			text: emailRow.text,
+			content: emailRow.content,
+			subject: emailRow.subject,
+			attachments,
+			cc: addressList(emailRow.cc),
+			bcc: addressList(emailRow.bcc)
+		}, userId);
 	},
 
 	updateEmailStatus(c, params) {
@@ -1115,10 +1166,13 @@ const emailService = {
 
 			const attList = await attService.selectByEmailIds(c, emailIds);
 
-			list.forEach(emailRow => {
+			for (const emailRow of list) {
 				const atts = attList.filter(attRow => attRow.emailId === emailRow.emailId);
+				for (const attRow of atts) {
+					attRow.url = await attService.signKey(c, attRow.key, emailRow.userId);
+				}
 				emailRow.attList = atts;
-			});
+			}
 		}
 	},
 
@@ -1204,7 +1258,7 @@ const emailService = {
 
 	async moveCategory(c, params, userId) {
 			const { emailIds, category } = params;
-			const allowed = ['primary', 'social', 'promotion', 'updates', 'ads', 'spam'];
+			const allowed = ['primary', 'social', 'promotion', 'updates', 'important', 'ads', 'spam'];
 			if (!allowed.includes(category)) throw new BizError('无效的邮件分类');
 			if (!Array.isArray(emailIds) || emailIds.length === 0) return;
 			const ids = emailIds.map(Number).filter(Number.isInteger);
@@ -1213,8 +1267,18 @@ const emailService = {
 				.where(and(eq(email.userId, userId), inArray(email.emailId, ids))).run();
 		},
 
+	// 计数缓存版本：任何邮件变更/入站都递增版本，旧缓存自然过期。
+	async bumpCounts(c, userId) {
+		if (!c.env.kv || !userId) return;
+		const key = `email:counts:ver:${userId}`;
+		const version = Number(await c.env.kv.get(key) || 0) + 1;
+		await c.env.kv.put(key, String(version), { expirationTtl: 86400 });
+		await c.env.kv.delete(`email:counts:${userId}`);
+	},
+
 	// 一次扫描同时算菜单/分类计数；原先 6 条 COUNT 各扫一遍用户全部邮件
-	async counts(c, userId) {
+	async counts(c, userId, accountId = null, allReceive = false) {
+		const scoped = Boolean(accountId && !allReceive);
 		const row = await c.env.db.prepare(`
 			SELECT
 				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND unread = 0 THEN 1 ELSE 0 END), 0) AS inbox,
@@ -1225,13 +1289,14 @@ const emailService = {
 				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'social' THEN 1 ELSE 0 END), 0) AS social,
 				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'promotion' THEN 1 ELSE 0 END), 0) AS promotion,
 				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'updates' THEN 1 ELSE 0 END), 0) AS updates,
+				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'important' THEN 1 ELSE 0 END), 0) AS important,
 				COALESCE(SUM(CASE WHEN is_del = 0 AND type = 0 AND spam = 0 AND unread = 0 AND category = 'ads' THEN 1 ELSE 0 END), 0) AS ads
-			FROM email WHERE user_id = ?
-		`).bind(userId).first();
+			FROM email WHERE user_id = ?${scoped ? ' AND account_id = ?' : ''}
+		`).bind(...(scoped ? [userId, accountId] : [userId])).first();
 		const n = key => Number(row?.[key]) || 0;
 		return {
 			menu: { inbox: n('inbox'), sent: n('sent'), deleted: n('deleted'), spam: n('spam') },
-			category: { primary: n('primary_c'), social: n('social'), promotion: n('promotion'), updates: n('updates'), ads: n('ads'), spam: n('spam') }
+			category: { primary: n('primary_c'), social: n('social'), promotion: n('promotion'), updates: n('updates'), important: n('important'), ads: n('ads'), spam: n('spam') }
 		};
 	},
 
@@ -1292,7 +1357,78 @@ const emailService = {
 
 			const detail = { ...row, isStar: row.starId != null ? 1 : 0 };
 			await this.emailAddAtt(c, [detail]);
+			detail.content = await attService.signContent(c, detail.content, userId);
 			return detail;
+		},
+
+		// 退订管理：按发件人聚合带 List-Unsubscribe 的邮件，只返回当前用户的数据。
+		async unsubscribeList(c, userId) {
+			const { results } = await c.env.db.prepare(`
+				SELECT send_email AS sendEmail, name,
+					MAX(email_id) AS emailId, MAX(create_time) AS createTime,
+					COUNT(*) AS count, MAX(list_unsubscribe) AS listUnsubscribe,
+					MAX(list_unsubscribe_post) AS listUnsubscribePost
+				FROM email
+				WHERE user_id = ? AND is_del = 0 AND list_unsubscribe <> ''
+				GROUP BY send_email
+				ORDER BY createTime DESC
+				LIMIT 200
+			`).bind(userId).all();
+			return results || [];
+		},
+
+		// 定时发送：附件是 base64，放在 KV 里，cron 到点再复用 send() 发信。
+		async schedule(c, params, userId) {
+			if (!c.env.kv) throw new BizError(t('operationFailed'));
+			const at = new Date(params.scheduledAt);
+			const now = Date.now();
+			if (!Number.isFinite(at.getTime()) || at.getTime() < now + 30 * 1000) {
+				throw new BizError(t('scheduleTimeInvalid'));
+			}
+			if (at.getTime() > now + 30 * 24 * 60 * 60 * 1000) {
+				throw new BizError(t('scheduleTooFar'));
+			}
+			const id = crypto.randomUUID();
+			const key = `scheduled:${userId}:${id}`;
+			const payload = {...params, userId, scheduledAt: at.toISOString()};
+			await c.env.kv.put(key, JSON.stringify(payload), {
+				expirationTtl: Math.ceil((at.getTime() - now) / 1000) + 7 * 24 * 60 * 60
+			});
+			return {id, scheduledAt: payload.scheduledAt};
+		},
+
+		async sendScheduled(c) {
+			if (!c.env.kv) return;
+			const list = await c.env.kv.list({prefix: 'scheduled:', limit: 1000});
+			for (const item of list.keys) {
+				const raw = await c.env.kv.get(item.name);
+				if (!raw) continue;
+				let payload;
+				try {
+					payload = JSON.parse(raw);
+				} catch {
+					await c.env.kv.delete(item.name);
+					continue;
+				}
+				if (!payload.scheduledAt || new Date(payload.scheduledAt).getTime() > Date.now()) continue;
+				try {
+					await this.send(c, payload, payload.userId);
+					await c.env.kv.delete(item.name);
+				} catch (error) {
+					console.error('scheduled send failed', item.name, error);
+					// 失败保留，下一次 cron 重试；避免网络抖动直接丢信。
+				}
+			}
+		},
+
+		// 用户手动分类即训练一个按发件人的规则；只影响该用户后续收信。
+		async learn(c, emailId, userId, category, keyword = '') {
+			const row = await orm(c).select({ sendEmail: email.sendEmail, subject: email.subject })
+				.from(email)
+				.where(and(eq(email.emailId, Number(emailId)), eq(email.userId, userId), eq(email.isDel, isDel.NORMAL)))
+				.get();
+			if (!row) throw new BizError(t('emailNotExist'));
+			return mailRuleService.learn(c, userId, row.sendEmail, category, keyword || '');
 		}
 	};
 

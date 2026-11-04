@@ -133,6 +133,39 @@ const analysisService = {
 		return { range, categories, heatmap: heatRows.results || [] };
 	},
 
+	async usage(c) {
+		const row = await c.env.db.prepare(`SELECT
+			(SELECT COUNT(*) FROM user) AS users,
+			(SELECT COUNT(*) FROM account) AS accounts,
+			(SELECT COUNT(*) FROM email) AS emails,
+			(SELECT COUNT(*) FROM email WHERE type = 0) AS receivedTotal,
+			(SELECT COUNT(*) FROM email WHERE type = 1) AS sentTotal,
+			(SELECT COUNT(*) FROM attachments) AS attachments,
+			(SELECT COALESCE(SUM(size), 0) FROM attachments) AS attachmentBytes,
+			(SELECT COUNT(*) FROM email WHERE type = 0 AND status != 2 AND create_time >= datetime('now','-1 day')) AS received24h,
+			(SELECT COUNT(*) FROM email WHERE type = 1 AND status != 2 AND create_time >= datetime('now','-1 day')) AS sent24h,
+			(SELECT COUNT(*) FROM email WHERE type = 1 AND status IN (3,8)) AS failed
+		`).first();
+		const users = Number(row?.users || 0);
+		const accounts = Number(row?.accounts || 0);
+		const emails = Number(row?.emails || 0);
+		const attachments = Number(row?.attachments || 0);
+		return {
+			users,
+			accounts,
+			emails,
+			receivedTotal: Number(row?.receivedTotal || 0),
+			sentTotal: Number(row?.sentTotal || 0),
+			attachments,
+			attachmentBytes: Number(row?.attachmentBytes || 0),
+			received24h: Number(row?.received24h || 0),
+			sent24h: Number(row?.sent24h || 0),
+			failed: Number(row?.failed || 0),
+			d1Rows: users + accounts + emails + attachments,
+			doEnabled: !!c.env.EMAIL_HUB
+		};
+	},
+
 	filterEmptyDay(data, timeZone) {
 		const today = toUtc().tz(timeZone).subtract(1, 'day');
 		const previousDays = Array.from({ length: 15 }, (_, i) => {

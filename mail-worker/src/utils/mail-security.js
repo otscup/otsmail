@@ -24,7 +24,8 @@ function plainHtml(html) {
 
 export function extractOtp(email = {}) {
 	const raw = `${email.subject || ''}\n${email.text || ''}\n${plainHtml(email.html || '')}`.slice(0, 20000);
-	const codeMatch = raw.match(/(?:验证码|校验码|动态码|verification\s+code|security\s+code|one[-\s]?time\s+(?:password|code)|passcode|\botp\b|code\s*(?:is|:))\s*[^\d]{0,24}(\d{4,8})/i);
+	const codeMatch = raw.match(/(?:验证码|校验码|动态码|动态密码|一次性密码|verification\s+code|security\s+code|one[-\s]?time\s+(?:password|code)|passcode|\botp\b|code\s*(?:is|:))\s*[^\d]{0,24}(\d{4,8})/i)
+		|| raw.match(/(\d{4,8})[^\d]{0,24}(?:is|as)\s+(?:your|the)?\s*(?:verification|security|one[-\s]?time|login)?\s*(?:code|pin|passcode)/i);
 	const code = codeMatch ? codeMatch[1] : '';
 	const urls = raw.match(/https?:\/\/[^\s<>"']+/gi) || [];
 	const link = urls

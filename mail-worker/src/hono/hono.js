@@ -37,6 +37,22 @@ app.use('*', (c, next) => {
 	})(c, next);
 });
 
+// 公共 API 的 token 是全站只读能力，至少按 IP 做一层粗限流，避免 token 泄露后被无限导出。
+app.use('/public/*', async (c, next) => {
+	if (c.req.method !== 'POST') return next();
+	try {
+		const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+		const bucket = Math.floor(Date.now() / 60000);
+		const key = `public:rate:${ip}:${bucket}`;
+		const count = Number(await c.env.kv.get(key) || 0);
+		if (count >= 60) return c.json(result.fail('too many requests', 429), 429);
+		await c.env.kv.put(key, String(count + 1), { expirationTtl: 120 });
+	} catch (e) {
+		// KV 限流失败不能影响正常业务；真正的鉴权仍在 publicService。
+	}
+	return next();
+});
+
 app.onError(async (err, c) => {
 	if (err.name === 'BizError') {
 		console.log(err.message);

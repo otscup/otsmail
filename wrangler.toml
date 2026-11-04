@@ -43,6 +43,8 @@ crons = ["*/30 * * * *"]
 
 [vars]
 pwd_iterations = 8000
+# Account Analytics 需要 CF_ANALYTICS_TOKEN secret；账户 ID 填这里
+CF_ACCOUNT_ID = ""
 domain = ["example.com"]
 admin = "admin@example.com"
 mcp_switch = false

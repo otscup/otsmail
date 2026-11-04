@@ -21,7 +21,66 @@ function disposition(filename, inline) {
 	return `${inline ? 'inline' : 'attachment'}; filename="${name}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
+const encoder = new TextEncoder();
+const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))
+	.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+
+// 附件/正文图片用短时签名 URL，避免 /attachments 变成可枚举的公开桶。
+async function signKey(c, key, userId) {
+	const bare = String(key).replace(/^attachments\//, '');
+	const exp = Math.floor(Date.now() / 1000) + 60 * 60;
+	const data = `${bare}|${userId}|${exp}`;
+	const cryptoKey = await crypto.subtle.importKey('raw', encoder.encode(c.env.jwt_secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+	const sig = b64url(await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(data)));
+	return `/attachments/${bare}?uid=${userId}&exp=${exp}&sig=${sig}`;
+}
+
+async function verifyKey(c, key, userId, exp, sig) {
+	if (!key || !userId || !exp || !sig || Number(exp) < Math.floor(Date.now() / 1000)) return false;
+	const secret = c.env?.jwt_secret || c.jwt_secret;
+	if (!secret) return false;
+	const data = `${key}|${userId}|${exp}`;
+	const cryptoKey = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+	try {
+		let encoded = sig.replace(/-/g, '+').replace(/_/g, '/');
+		while (encoded.length % 4) encoded += '=';
+		const bytes = Uint8Array.from(atob(encoded), ch => ch.charCodeAt(0));
+		return await crypto.subtle.verify('HMAC', cryptoKey, bytes, encoder.encode(data));
+	} catch {
+		return false;
+	}
+}
+
 const attService = {
+
+	signKey,
+
+	verifyKey,
+
+	async signContent(c, content, userId) {
+		if (!content || !userId) return content;
+		let result = content;
+		const matches = content.match(/\{\{domain\}\}attachments\/[^"'\s<>]+/g) || [];
+		for (const match of matches) {
+			const key = match.replace('{{domain}}', '');
+			const signed = await this.signKey(c, key, userId);
+			result = result.split(match).join(signed);
+		}
+
+		// 旧邮件正文里可能已经存了 R2 公开域名，读取时一并换成签名 URL。
+		const { r2Domain } = await settingService.query(c);
+		const base = domainUtils.toOssDomain(r2Domain);
+		if (base) {
+			const re = new RegExp(`${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/attachments/([^"'\\s<>]+)`, 'g');
+			const keys = [...result.matchAll(re)].map(m => `attachments/${m[1]}`);
+			for (const key of keys) {
+				const signed = await this.signKey(c, key, userId);
+				const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+				result = result.replace(new RegExp(`${escaped}/${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g'), signed);
+			}
+		}
+		return result;
+	},
 
 	async addAtt(c, attachments) {
 
@@ -104,8 +163,10 @@ const attService = {
 			const attIdx = src ? src.indexOf('attachments/') : -1;
 			const isOssImage = attIdx > -1 && (
 				src.startsWith('attachments/') ||
+				src.startsWith('/attachments/') ||
 				(!!ossBase && src.startsWith(ossBase + '/')) ||
-				(!ossBase && !!selfBase && src.startsWith(selfBase + '/'))
+				(!ossBase && !!selfBase && src.startsWith(selfBase + '/')) ||
+				(!!selfBase && src.startsWith(selfBase + '/attachments/'))
 			);
 
 			if (src && isOssImage) {
@@ -115,7 +176,7 @@ const attService = {
 
 				const attData = {};
 
-				attData.key = src.slice(attIdx);
+				attData.key = src.slice(attIdx).split('?')[0];
 
 				attData.contentId = cid;
 				attData.type = attConst.type.EMBED;

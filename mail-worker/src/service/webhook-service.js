@@ -1,6 +1,7 @@
 // Webhook 通知服务：收到邮件后向配置的 URL 推送 JSON（移植自 maillab/cloud-mail v3.2.0）
 import { emailConst } from '../const/entity-const';
 import domainUtils from '../utils/domain-uitls';
+import {isPrivateUrl} from '../utils/url-safety';
 
 function isWxPush(url) { return /wxpush|wxsend/i.test(String(url || '')) }
 function testBody(secret) {
@@ -14,6 +15,9 @@ const webhookService = {
 		url = domainUtils.toOssDomain(String(url || '').trim());
 		if (!url) {
 			return { ok: false, status: 0, latencyMs: 0, message: 'Webhook URL 为空' };
+		}
+		if (isPrivateUrl(url)) {
+			return { ok: false, status: 0, latencyMs: 0, message: 'Webhook URL 不允许内网地址' };
 		}
 		const wx = isWxPush(url);
 		const headers = { 'Content-Type': wx ? 'application/x-www-form-urlencoded' : 'application/json' };

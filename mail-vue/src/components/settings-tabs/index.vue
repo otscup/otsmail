@@ -22,7 +22,7 @@ const tabs = computed(() => {
   if (userStore.user?.type === 0 || userStore.user?.role?.permKeys?.includes('*')) {
     list.push({path: '/sys-setting', label: t('systemSettings')}, {path: '/mcp-admin', label: t('mcpService')})
   }
-  list.push({path: '/user', label: t('accountPermissions')}, {path: '/role', label: t('role')}, {path: '/reg-key', label: t('regKey')}, {path: '/analysis', label: t('analysis')})
+  list.push({path: '/user', label: t('accountPermissions')}, {path: '/role', label: t('role')}, {path: '/unsubscribe', label: t('unsubscribeManage')}, {path: '/reg-key', label: t('regKey')}, {path: '/analysis', label: t('analysis')})
   return list
 })
 </script>

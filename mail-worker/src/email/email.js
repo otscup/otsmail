@@ -13,8 +13,10 @@ import telegramService from '../service/telegram-service';
 import aiService, { classifyByRules } from '../service/ai-service';
 import webhookService from '../service/webhook-service';
 import pushService from '../service/push-service';
+import fcmService from '../service/fcm-service';
 import emailRules from '../utils/emailRules';
 import {matchFilterRules} from '../utils/filter-rules';
+import mailRuleService from '../service/mail-rule-service';
 import { parseAuthResults, extractOtp } from '../utils/mail-security';
 
 export async function email(message, env, ctx) {
@@ -103,11 +105,15 @@ export async function email(message, env, ctx) {
 		const toName = email.to.find(item => item.address === message.to)?.name || '';
 		const auth = parseAuthResults(email.headers);
 		const otp = extractOtp(email);
+		const header = name => (email.headers || []).find(item => String(item.key).toLowerCase() === name)?.value || '';
 		const code = (await aiService.extractCode({ env }, email, { aiCode, aiCodeFilter })) || otp.code;
 		// 默认只跑本地规则；只有显式开启自动 AI 才在收信链路里调用模型
 		// 用户过滤器优先于 AI/本地分类；垃圾标记仍最高优先
 		const filterCategory = matchFilterRules(email, emailFilters);
-		const category = blockFlag ? 'spam' : filterCategory || (aiClassifyMode === 'auto'
+		const learnedCategory = account
+			? await mailRuleService.categoryFor(env, account.userId, email.from?.address, email.subject)
+			: '';
+		const category = blockFlag ? 'spam' : learnedCategory || filterCategory || (aiClassifyMode === 'auto'
 			? await aiService.classifyEmail({ env }, email)
 			: classifyByRules(email));
 
@@ -121,6 +127,8 @@ export async function email(message, env, ctx) {
 			authSpf: auth.spf,
 			authDmarc: auth.dmarc,
 			otpLink: otp.link,
+			listUnsubscribe: header('list-unsubscribe'),
+			listUnsubscribePost: header('list-unsubscribe-post'),
 			content: email.html,
 			text: email.text,
 			cc: email.cc ? JSON.stringify(email.cc) : '[]',
@@ -182,7 +190,7 @@ export async function email(message, env, ctx) {
 		}
 
 		let emailRow = await emailService.receive({ env }, params, cidAttachments, r2Domain);
-		await env.kv?.delete(`email:counts:${emailRow.userId}`);
+		await emailService.bumpCounts({ env }, emailRow.userId);
 
 		attachments.forEach(attachment => {
 			attachment.emailId = emailRow.emailId;
@@ -227,6 +235,17 @@ export async function email(message, env, ctx) {
 			body: `${params.name || ''}${params.name ? ' · ' : ''}${String(params.text || '').slice(0, 80)}`,
 			url: '/'
 		}).catch(e => console.error('Web Push 失败: ', e)));
+
+		// Android FCM：data-only 消息，失败不影响收信
+		if (emailRow.userId) {
+			ctx.waitUntil(fcmService.sendToUser({ env }, emailRow.userId, {
+				emailId: emailRow.emailId,
+				sender: params.sendEmail,
+				name: params.name,
+				subject: params.subject,
+				snippet: String(params.text || '').slice(0, 200)
+			}).catch(e => console.error('FCM 推送失败: ', e)));
+		}
 
 
 		if (ruleType === settingConst.ruleType.RULE) {

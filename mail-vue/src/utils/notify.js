@@ -107,16 +107,21 @@ export function disableNotify() {
 export function playNotifySound() {
 	try {
 		const ctx = new (window.AudioContext || window.webkitAudioContext)()
+		if (ctx.state === 'suspended') ctx.resume()
 		const gain = ctx.createGain()
-		gain.gain.value = 0.08
+		gain.gain.value = 0.3
 		gain.connect(ctx.destination)
-		const osc = ctx.createOscillator()
-		osc.type = 'sine'
-		osc.frequency.value = 880
-		osc.connect(gain)
-		osc.start()
-		osc.stop(ctx.currentTime + 0.12)
-		setTimeout(() => ctx.close(), 400)
+		const now = ctx.currentTime
+		// 两声上行的短音，像车锁；比单音更容易在环境噪声里听见
+		[[1046, 0], [1318, 0.11]].forEach(([freq, delay]) => {
+			const osc = ctx.createOscillator()
+			osc.type = 'triangle'
+			osc.frequency.value = freq
+			osc.connect(gain)
+			osc.start(now + delay)
+			osc.stop(now + delay + 0.09)
+		})
+		setTimeout(() => ctx.close(), 600)
 	} catch (e) {
 		// 没有用户手势或浏览器不支持时，通知仍会显示
 	}

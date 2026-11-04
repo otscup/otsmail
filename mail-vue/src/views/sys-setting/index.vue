@@ -134,6 +134,21 @@
                   </div>
                 </div>
               </div>
+              <div class="setting-item login-theme-item">
+                <div>
+                  <span>{{ $t('loginTheme') }}</span>
+                  <div class="setting-hint">保存后刷新登录页</div>
+                </div>
+                <div>
+                  <el-select :model-value="setting.loginTheme || 'paper'" style="width:190px"
+                             @change="value => changeField('loginTheme', value)">
+                    <el-option :label="$t('loginThemePaper')" value="paper"/>
+                    <el-option :label="$t('loginThemeCentered')" value="centered"/>
+                    <el-option :label="$t('loginThemeFresh')" value="fresh"/>
+                    <el-option :label="$t('loginThemeGala')" value="gala"/>
+                  </el-select>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -518,6 +533,18 @@
                   <el-button class="opt-button" size="small" type="primary" @click="openAiCodeFilter">
                     <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
                   </el-button>
+                </div>
+              </div>
+              <div class="setting-item">
+                <div>
+                  <span>{{ $t('telegramDigest') }}</span>
+                  <el-tooltip effect="dark" :content="$t('telegramDigestDesc')">
+                    <Icon class="warning" icon="fe:warning" width="18" height="18"/>
+                  </el-tooltip>
+                </div>
+                <div>
+                  <el-switch v-model="setting.tgDigest" :active-value="1" :inactive-value="0"
+                             @change="changeField('tgDigest', $event)"/>
                 </div>
               </div>
             </div>

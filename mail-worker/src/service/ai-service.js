@@ -10,6 +10,7 @@ import starService from './star-service';
 import settingService from './setting-service';
 import permService from './perm-service';
 import userService from './user-service';
+import {isPrivateUrl} from '../utils/url-safety';
 import BizError from '../error/biz-error';
 import { and, asc, count, desc, eq, like, or } from 'drizzle-orm';
 import { t } from '../i18n/i18n';
@@ -172,9 +173,14 @@ const aiService = {
 		let setting = null;
 		try { setting = await settingService.query(c); } catch (e) { /* 未初始化时仍允许用表单值测试 */ }
 
-		const base = String(baseUrl || setting?.aiBaseUrl || '').trim().replace(/\/+$/, '');
-		// 表单里可能是脱敏占位值，回退到库里的真实 Key
-		const key = /(?:\*{6})/.test(String(apiKey || '')) ? String(setting?.aiApiKey || '').trim() : String(apiKey || setting?.aiApiKey || '').trim();
+		const storedBase = String(setting?.aiBaseUrl || '').trim().replace(/\/+$/, '');
+		const base = String(baseUrl || storedBase).trim().replace(/\/+$/, '');
+		// 只有测试地址与已保存地址一致时，才允许回退库里的真实 Key；
+		// 否则 setting:set 持有者可以把 baseUrl 指向自己的服务器偷 Key。
+		const sameBase = !baseUrl || !storedBase || base === storedBase;
+		const key = sameBase
+			? (/(?:\*{6})/.test(String(apiKey || '')) ? String(setting?.aiApiKey || '').trim() : String(apiKey || setting?.aiApiKey || '').trim())
+			: String(apiKey || '').trim();
 
 		if (!base || !key) {
 			throw new BizError(t('aiProviderIncomplete'), 400);
@@ -182,6 +188,9 @@ const aiService = {
 
 		if (!/^https?:\/\//i.test(base)) {
 			throw new BizError(t('aiProviderIncomplete'), 400);
+		}
+		if (isPrivateUrl(base)) {
+			throw new BizError('AI 接口地址不允许内网地址', 400);
 		}
 
 		let response;

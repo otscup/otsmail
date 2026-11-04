@@ -156,7 +156,7 @@ const roleService = {
 
 	hasAvailDomainPerm(availDomain, email) {
 
-		availDomain = availDomain.split(',').filter(item => item !== '');
+		availDomain = String(availDomain || '').split(',').filter(item => item !== '');
 
 		if (availDomain.length === 0) {
 			return true

@@ -26,6 +26,7 @@ import r2Service from './r2-service';
 import totpUtils from '../utils/totp-utils';
 import fileUtils from '../utils/file-utils';
 import domainUtils from '../utils/domain-uitls';
+import attService from './att-service';
 
 const userService = {
 
@@ -67,15 +68,36 @@ const userService = {
 	},
 
 
-	async resetPassword(c, params, userId) {
+	// 自助改密：必须先验旧密码；开启 2FA 时还要验证码。改完删 KV，所有旧会话失效。
+	// 管理员 setPwd 走 skipVerify=true，但仍由 setPwd 再删一次 KV。
+	async resetPassword(c, params, userId, skipVerify = false) {
 
-		const { password } = params;
+		const { password, oldPassword, twoFactorCode } = params;
 
-		if (password.length < 6) {
+		if (!password || password.length < 6) {
 			throw new BizError(t('pwdMinLength'));
 		}
+		if (password.length > 30) {
+			throw new BizError(t('pwdLengthLimit'));
+		}
+
+		if (!skipVerify) {
+			const userRow = await this.selectById(c, userId);
+			if (!userRow || !oldPassword
+				|| !await cryptoUtils.verifyPassword(oldPassword, userRow.salt, userRow.password)) {
+				throw new BizError(t('IncorrectPwd'));
+			}
+			if (userRow.twoFactorSwitch === 1 || userRow.twoFactorRequired === 1) {
+				if (!twoFactorCode) throw new BizError(t('needTwoFactorCode'), 428);
+				if (!await totpUtils.verify(userRow.twoFactorSecret, twoFactorCode)) {
+					throw new BizError(t('twoFactorCodeInvalid'), 428);
+				}
+			}
+		}
+
 		const { salt, hash } = await cryptoUtils.hashPassword(password, c);
 		await orm(c).update(user).set({ password: hash, salt: salt }).where(eq(user.userId, userId)).run();
+		await c.env.kv.delete(KvConst.AUTH_INFO + userId);
 	},
 
 	/**
@@ -115,7 +137,20 @@ const userService = {
 			.get();
 	},
 
+	// 管理员账号不可被其他后台操作者改密、停用、删除或改角色，避免 user:* 权限越权接管。
+	async assertManageableUser(c, userId) {
+		const target = await this.selectByIdIncludeDel(c, userId);
+		if (!target) {
+			throw new BizError(t('userNotExist'));
+		}
+		if (Number(target.type) === 0 || target.email === c.env.admin) {
+			throw new BizError(t('notAllowed'));
+		}
+		return target;
+	},
+
 	async delete(c, userId) {
+		await this.assertManageableUser(c, userId);
 		const { syncDelete } = await settingService.query(c);
 		if (syncDelete === settingConst.syncDelete.OPEN) {
 			await this.physicsDelete(c, { userIds: String(userId) });
@@ -221,7 +256,9 @@ const userService = {
 
 		for (const user of list) {
 
-			// 列表响应里绝不能带两步验证密钥
+			// 列表响应绝不能带口令哈希、盐或两步验证密钥
+			delete user.password;
+			delete user.salt;
 			delete user.twoFactorSecret;
 
 			const userId = user.userId;
@@ -288,13 +325,14 @@ const userService = {
 	async setPwd(c, params) {
 
 		const { password, userId } = params;
-		await this.resetPassword(c, { password }, userId);
-		await c.env.kv.delete(KvConst.AUTH_INFO + userId);
+		await this.assertManageableUser(c, userId);
+		await this.resetPassword(c, { password }, userId, true);
 	},
 
 	async setStatus(c, params) {
 
 		const { status, userId } = params;
+		await this.assertManageableUser(c, userId);
 
 		await orm(c)
 			.update(user)
@@ -302,14 +340,14 @@ const userService = {
 			.where(eq(user.userId, userId))
 			.run();
 
-		if (status === userConst.status.BAN) {
-			await c.env.kv.delete(KvConst.AUTH_INFO + userId);
-		}
+		// 状态/角色变更后立即失效，避免旧 KV 快照继续放行。
+		await c.env.kv.delete(KvConst.AUTH_INFO + userId);
 	},
 
 	async setType(c, params) {
 
 		const { type, userId } = params;
+		await this.assertManageableUser(c, userId);
 
 		const roleRow = await roleService.selectById(c, type);
 
@@ -322,6 +360,9 @@ const userService = {
 			.set({ type })
 			.where(eq(user.userId, userId))
 			.run();
+
+		// 角色变了，旧会话里的 type 可能仍是大权限，必须重登。
+		await c.env.kv.delete(KvConst.AUTH_INFO + userId);
 
 	},
 
@@ -390,7 +431,11 @@ const userService = {
 			throw new BizError(t('isRegAccount'));
 		}
 
-		const role = roleService.selectById(c, type);
+		// type=0 是系统管理员，不能由普通 user:add 权限创建；必须 await 角色查询。
+		if (Number(type) === 0) {
+			throw new BizError(t('notAllowed'));
+		}
+		const role = await roleService.selectById(c, type);
 
 		if (!role) {
 			throw new BizError(t('roleNotExist'));
@@ -412,11 +457,13 @@ const userService = {
 	},
 
 	async resetSendCount(c, params) {
+		await this.assertManageableUser(c, params.userId);
 		await orm(c).update(user).set({ sendCount: 0 }).where(eq(user.userId, params.userId)).run();
 	},
 
 	async restore(c, params) {
 		const { userId, type } = params
+		await this.assertManageableUser(c, userId);
 		await orm(c)
 			.update(user)
 			.set({ isDel: isDel.NORMAL })
@@ -487,8 +534,7 @@ const userService = {
 			cacheControl: 'max-age=2592000',
 			contentDisposition: 'inline'
 		});
-		const { r2Domain } = await settingService.query(c);
-		const url = (domainUtils.toOssDomain(r2Domain) || new URL(c.req.url).origin) + '/' + key;
+		const url = await attService.signKey(c, key, c.get('userId'));
 		return { key, url };
 	},
 
@@ -554,16 +600,13 @@ const userService = {
 		await orm(c).update(user).set({ twoFactorSwitch: 1 }).where(eq(user.userId, userId)).run();
 	},
 
-	// 验证码或登录密码任一即可关闭：手机丢了还能用密码自救
+	// 关闭 2FA 只认验证码；登录密码不能替代，否则改密即可绕过 2FA。
 	async twoFactorDisable(c, params, userId) {
 		const userRow = await this.selectById(c, userId);
 		if (userRow.twoFactorSwitch !== 1) {
 			return;
 		}
-		const byCode = await totpUtils.verify(userRow.twoFactorSecret, params.code);
-		const byPwd = !!params.password
-			&& await cryptoUtils.verifyPassword(params.password, userRow.salt, userRow.password);
-		if (!byCode && !byPwd) {
+		if (!await totpUtils.verify(userRow.twoFactorSecret, params.code)) {
 			throw new BizError(t('twoFactorCodeInvalid'));
 		}
 		await orm(c).update(user).set({ twoFactorSwitch: 0, twoFactorSecret: '', twoFactorRequired: 0 })

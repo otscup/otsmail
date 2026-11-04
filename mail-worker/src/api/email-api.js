@@ -5,13 +5,18 @@ import result from '../model/result';
 import userContext from '../security/user-context';
 import attService from '../service/att-service';
 
-const countKey = userId => `email:counts:${userId}`;
+const countVersionKey = userId => `email:counts:ver:${userId}`;
+const countKey = (userId, version, accountId, allReceive) =>
+	`email:counts:${userId}:${version}:${accountId || 0}:${allReceive ? 1 : 0}`;
 
-async function getCounts(c, userId) {
-	const cached = await c.env.kv?.get(countKey(userId), 'json');
+async function getCounts(c, userId, accountId, allReceive) {
+	const version = await c.env.kv?.get(countVersionKey(userId)) || '0';
+	const key = countKey(userId, version, accountId, allReceive);
+	const cached = await c.env.kv?.get(key, 'json');
 	if (cached) return cached;
-	const data = await emailService.counts(c, userId);
-	await c.env.kv?.put(countKey(userId), JSON.stringify(data), { expirationTtl: 60 });
+	const data = await emailService.counts(c, userId, accountId, allReceive);
+	// 角标按账号缓存 10 分钟；任何邮件写入/入站都会递增版本，旧缓存立即失效。
+	await c.env.kv?.put(key, JSON.stringify(data), { expirationTtl: 600 });
 	return data;
 }
 
@@ -21,7 +26,7 @@ app.use('/email/*', async (c, next) => {
 	if (c.req.method !== 'GET') {
 		try {
 			const userId = userContext.getUserId(c);
-			if (userId) await c.env.kv?.delete(countKey(userId));
+			if (userId) await emailService.bumpCounts(c, userId);
 		} catch (e) { /* auth failure already handled by the route */ }
 	}
 });
@@ -73,6 +78,17 @@ app.get('/email/latest', async (c) => {
 	return c.json(result.ok(list));
 });
 
+app.get('/email/unsubscribeList', async (c) => {
+	const list = await emailService.unsubscribeList(c, userContext.getUserId(c));
+	return c.json(result.ok(list));
+});
+
+app.post('/email/learn', async (c) => {
+	const body = await c.req.json();
+	const category = await emailService.learn(c, body.emailId, userContext.getUserId(c), body.category, body.keyword);
+	return c.json(result.ok({category}));
+});
+
 app.delete('/email/delete', async (c) => {
 	await emailService.delete(c, c.req.query(), userContext.getUserId(c));
 	return c.json(result.ok());
@@ -85,6 +101,17 @@ app.get('/email/attList', async (c) => {
 
 app.post('/email/send', async (c) => {
 	const email = await emailService.send(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok(email));
+});
+
+app.post('/email/schedule', async (c) => {
+	const data = await emailService.schedule(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok(data));
+});
+
+app.post('/email/retry', async (c) => {
+	const { emailId } = await c.req.json();
+	const email = await emailService.retry(c, emailId, userContext.getUserId(c));
 	return c.json(result.ok(email));
 });
 
@@ -104,17 +131,20 @@ app.put('/email/category', async (c) => {
 })
 
 app.get('/email/counts', async (c) => {
-	const data = await getCounts(c, userContext.getUserId(c));
+	const q = c.req.query();
+	const data = await getCounts(c, userContext.getUserId(c), Number(q.accountId) || null, q.allReceive === '1');
 	return c.json(result.ok(data));
 })
 
 app.get('/email/category-counts', async (c) => {
-	const data = (await getCounts(c, userContext.getUserId(c))).category;
+	const q = c.req.query();
+	const data = (await getCounts(c, userContext.getUserId(c), Number(q.accountId) || null, q.allReceive === '1')).category;
 	return c.json(result.ok(data));
 })
 
 app.get('/email/menu-counts', async (c) => {
-	const data = (await getCounts(c, userContext.getUserId(c))).menu;
+	const q = c.req.query();
+	const data = (await getCounts(c, userContext.getUserId(c), Number(q.accountId) || null, q.allReceive === '1')).menu;
 	return c.json(result.ok(data));
 })
 

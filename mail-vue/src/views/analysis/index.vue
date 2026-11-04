@@ -83,6 +83,110 @@
           </div>
         </div>
       </div>
+      <div class="infra-panel">
+        <div class="infra-title">{{ $t('infra') }}</div>
+        <div class="infra-grid">
+          <div class="infra-item">
+            <span>{{ $t('usageEmails') }}</span>
+            <strong>{{ usage.emails }}</strong>
+            <small>{{ $t('receivedTotal') }} {{ usage.receivedTotal }} · {{ $t('totalSent') }} {{ usage.sentTotal }}</small>
+          </div>
+          <div class="infra-item">
+            <span>{{ $t('usageStorage') }}</span>
+            <strong>{{ formatBytes(usage.attachmentBytes) }}</strong>
+            <small>{{ usage.attachments }} 个附件</small>
+          </div>
+          <div class="infra-item">
+            <span>{{ $t('usageReceived24h') }} / {{ $t('usageSent24h') }}</span>
+            <strong>{{ usage.received24h }} / {{ usage.sent24h }}</strong>
+            <small>{{ $t('usageFailed') }} {{ usage.failed }}</small>
+          </div>
+          <div class="infra-item">
+            <span>{{ $t('d1Rows') }}</span>
+            <strong>{{ usage.d1Rows }}</strong>
+            <small>{{ $t('d1RowsDesc') }}</small>
+          </div>
+          <div class="infra-item">
+            <span>{{ $t('doRealtime') }}</span>
+            <strong>{{ usage.doEnabled ? $t('enabled') : $t('disabled') }}</strong>
+            <small>{{ $t('doRealtimeDesc') }}</small>
+          </div>
+        </div>
+      </div>
+      <div class="cf-panel">
+        <div class="cf-head">
+          <div class="cf-title">
+            <span class="cf-logo"><Icon icon="simple-icons:cloudflare" width="20" height="20"/></span>
+            {{ $t('cfAccountUsage') }}
+            <span class="cf-period" v-if="cloudflare.period">{{ cloudflare.period }}</span>
+            <span class="cf-plan" v-if="cloudflare.plan">{{ cloudflare.plan === 'paid' ? $t('cfPaid') : $t('cfFree') }}</span>
+          </div>
+          <span class="cf-status" v-if="cloudflare.configured === false">{{ $t('cfNotConfigured') }}</span>
+        </div>
+        <div v-if="cloudflare.configured === false" class="cf-empty">
+          {{ $t('cfNotConfiguredDesc') }}
+        </div>
+        <div v-else-if="cloudflare.error" class="cf-empty cf-error">
+          {{ $t('cfRequestFailed') }}: {{ cloudflare.error }}
+        </div>
+        <div v-else-if="cloudflare.configured" class="cf-body">
+          <div class="cf-totals">
+            <div class="cf-total">
+              <span class="cf-total-icon"><Icon icon="mdi:chart-line" width="18"/></span>
+              <div>
+                <small>{{ $t('cfRequests') }}</small>
+                <strong>{{ formatNumber(workersUsed) }}</strong>
+                <em>{{ quotaText(workersUsed, workersLimit) }}</em>
+              </div>
+            </div>
+            <div class="cf-total">
+              <span class="cf-total-icon"><Icon icon="mdi:alert-circle-outline" width="18"/></span>
+              <div><small>{{ $t('cfErrors') }}</small><strong>{{ formatNumber(cloudflare.totalErrors) }}</strong></div>
+            </div>
+            <div class="cf-total">
+              <span class="cf-total-icon"><Icon icon="mdi:database-outline" width="18"/></span>
+              <div>
+                <small>{{ $t('cfD1Rows') }}</small>
+                <strong>{{ d1TotalUsed }}</strong>
+                <em>{{ d1QuotaText }}</em>
+              </div>
+            </div>
+            <div class="cf-total">
+              <span class="cf-total-icon"><Icon icon="mdi:cloud-outline" width="18"/></span>
+              <div>
+                <small>{{ $t('cfR2Storage') }}</small>
+                <strong>{{ cloudflare.r2 ? formatBytes(cloudflare.r2.bytes) : '—' }}</strong>
+                <em>{{ r2QuotaText }}</em>
+              </div>
+            </div>
+            <div class="cf-total">
+              <span class="cf-total-icon"><Icon icon="mdi:memory" width="18"/></span>
+              <div>
+                <small>{{ $t('cfDoRequests') }}</small>
+                <strong>{{ cloudflare.do ? formatNumber(doUsed) : '—' }}</strong>
+                <em v-if="cloudflare.do">{{ doQuotaText }} · {{ $t('cfDoCpu') }} {{ formatDuration(cloudflare.do.cpuTime) }}</em>
+                <em v-else-if="cloudflare.doError" class="cf-quota-error">{{ cloudflare.doError }}</em>
+              </div>
+            </div>
+          </div>
+          <div class="cf-apps-title">{{ $t('cfApps') }}</div>
+          <div class="cf-apps" :class="{ scrollable: cloudflare.apps.length > 5 }">
+            <div v-for="app in cloudflare.apps" :key="app.name" class="cf-app">
+              <span class="cf-app-icon" :class="{primary: app.otsmail}">
+                <Icon :icon="app.otsmail ? 'hugeicons:mail-01' : 'mdi:application-outline'" width="18"/>
+              </span>
+              <div class="cf-app-name">
+                <strong>{{ app.name }}</strong>
+                <small>{{ app.otsmail ? $t('cfCurrentApp') : $t('cfOtherApp') }}</small>
+              </div>
+              <strong class="cf-app-value">{{ formatNumber(app.requests) }}</strong>
+              <span class="cf-share">{{ appShare(app) }}%</span>
+              <div class="cf-bar"><span :style="{ width: appShare(app) + '%' }"></span></div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="cf-empty">{{ $t('cfLoading') }}</div>
+      </div>
       <div class="picture">
         <div class="picture-item">
           <div class="title" style="display: flex;justify-content: space-between;">
@@ -126,7 +230,8 @@ import {useTransition} from "@vueuse/core";
 import {defineOptions, onActivated, onDeactivated, onMounted, reactive, ref, watch, computed} from "vue";
 import echarts from "@/echarts/index.js";
 import dayjs from "dayjs";
-import {analysisEcharts} from "@/request/analysis.js";
+import {analysisCloudflare, analysisEcharts, analysisUsage} from "@/request/analysis.js";
+import {formatBytes} from "@/utils/file-utils.js";
 import {useUiStore} from "@/store/ui.js";
 import {debounce} from "lodash-es";
 import loading from "@/components/loading/index.vue";
@@ -146,6 +251,91 @@ const sendTotal = ref(0)
 const accountTotal = ref(0)
 const userTotal = ref(0)
 const analysisLoading = ref(true)
+const usage = reactive({
+  emails: 0,
+  receivedTotal: 0,
+  sentTotal: 0,
+  attachments: 0,
+  attachmentBytes: 0,
+  received24h: 0,
+  sent24h: 0,
+  failed: 0,
+  d1Rows: 0,
+  doEnabled: false
+})
+
+const cloudflare = reactive({
+  configured: null,
+  period: '',
+  plan: 'free',
+  limits: {},
+  totalRequests: 0,
+  totalErrors: 0,
+  workersToday: 0,
+  apps: [],
+  d1: null,
+  d1Today: null,
+  do: null,
+  doToday: null,
+  doError: '',
+  r2: null,
+  error: ''
+})
+
+const workersUsed = computed(() =>
+  cloudflare.plan === 'paid' ? cloudflare.totalRequests : (cloudflare.workersToday || 0)
+)
+const workersLimit = computed(() =>
+  cloudflare.plan === 'paid'
+    ? cloudflare.limits?.workersMonthlyRequests
+    : cloudflare.limits?.workersDailyRequests
+)
+const d1TotalUsed = computed(() => {
+  const value = cloudflare.plan === 'paid' ? cloudflare.d1 : cloudflare.d1Today
+  return value ? `${formatNumber(value.rowsRead)} / ${formatNumber(value.rowsWritten)}` : '—'
+})
+const d1QuotaText = computed(() => {
+  const value = cloudflare.plan === 'paid' ? cloudflare.d1 : cloudflare.d1Today
+  const read = cloudflare.plan === 'paid'
+    ? cloudflare.limits?.d1MonthlyRowsRead
+    : cloudflare.limits?.d1DailyRowsRead
+  const write = cloudflare.plan === 'paid'
+    ? cloudflare.limits?.d1MonthlyRowsWritten
+    : cloudflare.limits?.d1DailyRowsWritten
+  if (!value || !read) return ''
+  return `${t('cfRead')} ${formatNumber(value.rowsRead)} / ${formatNumber(read)} · ${t('cfWrite')} ${formatNumber(value.rowsWritten)} / ${formatNumber(write)}`
+})
+const r2QuotaText = computed(() => cloudflare.r2
+  ? `${formatBytes(cloudflare.r2.bytes)} / ${formatBytes(cloudflare.limits?.r2StorageBytes || 0)}`
+  : '')
+const doUsed = computed(() =>
+  cloudflare.plan === 'paid' ? (cloudflare.do?.requests || 0) : (cloudflare.doToday?.requests || 0)
+)
+const doLimit = computed(() =>
+  cloudflare.plan === 'paid'
+    ? cloudflare.limits?.durableObjectMonthlyRequests
+    : cloudflare.limits?.durableObjectDailyRequests
+)
+const doQuotaText = computed(() => doLimit.value ? quotaText(doUsed.value, doLimit.value) : '')
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString('en-US')
+}
+
+function quotaText(used, limit) {
+  if (!limit) return ''
+  return `${formatNumber(used)} / ${formatNumber(limit)}`
+}
+
+function formatDuration(microseconds) {
+  const seconds = Number(microseconds || 0) / 1e6
+  return seconds < 60 ? `${seconds.toFixed(1)}s` : `${(seconds / 60).toFixed(1)}min`
+}
+
+function appShare(app) {
+  if (!cloudflare.totalRequests) return 0
+  return Math.max(1, Math.round((app.requests / cloudflare.totalRequests) * 100))
+}
 
 const numberCount = reactive({
   normalReceiveTotal: 0,
@@ -211,6 +401,15 @@ let analysisDark = uiStore.dark
 
 onMounted(() => {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  analysisUsage().then(data => Object.assign(usage, data)).catch(() => {})
+
+  analysisCloudflare()
+    .then(data => Object.assign(cloudflare, data))
+    .catch(error => {
+      cloudflare.configured = true
+      cloudflare.error = error?.message || t('cfRequestFailed')
+    })
 
   analysisEcharts(timeZone).then(data => {
     receiveTotal.value = data.numberCount.receiveTotal
@@ -851,6 +1050,71 @@ function createSendGauge() {
       }
 
     }
+  }
+
+  .infra-panel {
+    background: var(--el-bg-color);
+    border-radius: 8px;
+    border: 1px solid var(--el-border-color);
+    padding: 18px 20px;
+
+    .infra-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+    .infra-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 14px;
+      @media (max-width: 1366px) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      @media (max-width: 767px) { grid-template-columns: 1fr 1fr; gap: 10px; }
+    }
+    .infra-item {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      span { font-size: 12px; color: var(--el-text-color-secondary); }
+      strong { font-size: 22px; line-height: 1.2; font-weight: 650; }
+      small { font-size: 11px; color: var(--el-text-color-secondary); overflow-wrap: anywhere; }
+    }
+  }
+
+  .cf-panel {
+    background: var(--el-bg-color);
+    border-radius: 8px;
+    border: 1px solid var(--el-border-color);
+    padding: 18px 20px;
+
+    .cf-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .cf-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+    .cf-logo { display: inline-flex; color: #f48120; }
+    .cf-period { font-size: 11px; font-weight: 400; color: var(--el-text-color-secondary); }
+    .cf-status { font-size: 12px; color: var(--el-color-warning); }
+    .cf-plan { font-size: 11px; font-weight: 500; color: var(--el-color-primary); background: var(--el-color-primary-light-9); padding: 2px 7px; border-radius: 10px; }
+    .cf-empty { font-size: 13px; color: var(--el-text-color-secondary); line-height: 1.6; }
+    .cf-error { color: var(--el-color-danger); }
+    .cf-totals { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+    .cf-total { display: flex; gap: 10px; align-items: flex-start; min-width: 0; padding: 12px; border-radius: 8px; background: var(--el-fill-color-lighter); }
+    .cf-total-icon { display: inline-flex; color: var(--el-color-primary); margin-top: 2px; }
+    .cf-total div { display: grid; gap: 3px; min-width: 0; }
+    .cf-total small { font-size: 11px; color: var(--el-text-color-secondary); }
+    .cf-total strong { font-size: 19px; line-height: 1.2; overflow-wrap: anywhere; }
+    .cf-total em { font-style: normal; font-size: 10px; line-height: 1.35; color: var(--el-text-color-secondary); overflow-wrap: anywhere; }
+    .cf-quota-error { color: var(--el-color-danger) !important; }
+    .cf-apps-title { margin: 16px 0 8px; font-size: 12px; color: var(--el-text-color-secondary); }
+    .cf-apps { display: grid; gap: 6px; }
+    .cf-apps.scrollable { max-height: 238px; overflow-y: auto; padding-right: 4px; }
+    .cf-apps.scrollable::-webkit-scrollbar { width: 6px; }
+    .cf-apps.scrollable::-webkit-scrollbar-thumb { background: var(--el-border-color); border-radius: 6px; }
+    .cf-app { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto 42px; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--el-border-color-lighter); }
+    .cf-app-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 7px; color: var(--el-text-color-secondary); background: var(--el-fill-color-light); }
+    .cf-app-icon.primary { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+    .cf-app-name { display: grid; gap: 1px; min-width: 0; }
+    .cf-app-name strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cf-app-name small { font-size: 10px; color: var(--el-text-color-secondary); }
+    .cf-app-value { font-size: 13px; }
+    .cf-share { font-size: 11px; text-align: right; color: var(--el-text-color-secondary); }
+    .cf-bar { grid-column: 2 / -1; height: 3px; border-radius: 3px; background: var(--el-fill-color); overflow: hidden; }
+    .cf-bar span { display: block; height: 100%; border-radius: inherit; background: var(--el-color-primary); }
+    @media (max-width: 1100px) { .cf-totals { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 767px) { .cf-totals { grid-template-columns: 1fr; } .cf-app { grid-template-columns: 30px minmax(0, 1fr) auto; } .cf-share { display: none; } }
   }
 
   .picture {

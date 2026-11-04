@@ -1,5 +1,10 @@
 <template>
   <div class="email-container">
+    <div v-if="offline" class="offline-banner">
+      <Icon icon="mdi:wifi-off" width="16" height="16"/>
+      <span>{{ $t('offlineHint') }}</span>
+      <button type="button" @click="refresh">{{ $t('retry') }}</button>
+    </div>
     <div class="header-actions">
       <div class="mail-page-title"><b>{{ pageTitleEn }}</b><span>{{ pageTitle }}</span></div>
       <div class="header-left" :style="'padding-left:' + actionLeft">
@@ -128,6 +133,7 @@
                       </span>
                       <span class="row-markers">
                         <Icon v-if="item.isStar" class="row-star" icon="fluent-color:star-16" width="14" height="14"/>
+                        <span v-if="statusTag(item)" class="mail-status-tag" :class="'st-' + item.status">{{ statusTag(item) }}</span>
                         <span v-if="categoryLabel(item.spam ? 'spam' : item.category)" class="mail-category-tag" :class="'cat-' + (item.spam ? 'spam' : item.category)">{{ categoryLabel(item.spam ? 'spam' : item.category) }}</span>
                       </span>
                     </span>
@@ -174,7 +180,12 @@
                        :showUserInfo="showUserInfo"
                        :type="type"/>
       <div class="empty" v-if="noLoading && emailList.length === 0 && !loading">
-        <el-empty :image-size="isMobile ? 120 : null" :description="$t('noMessagesFound')"/>
+        <div class="list-empty">
+          <span class="list-empty-mark"><Icon icon="mdi:email-open-outline" width="24" height="24"/></span>
+          <b>{{ $t('noMessagesFound') }}</b>
+          <p>{{ $t('emptyListHint') }}</p>
+          <button v-perm="'email:send'" type="button" @click="uiStore.writerRef?.open?.()">{{ $t('compose') }}</button>
+        </div>
       </div>
     </div>
     <el-dropdown
@@ -321,6 +332,7 @@ import {Icon} from "@iconify/vue";
 import skeletonBlock from "@/components/email-scroll/skeleton/index.vue"
 import {computed, onActivated, onUpdated, reactive, ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import {useEmailStore} from "@/store/email.js";
+import {useAccountStore} from "@/store/account.js";
 import {emailSpam, emailSpamCancel, emailCounts, emailMoveCategory} from "@/request/email.js";
 import {contactAdd} from "@/request/contact.js";
 import {useUiStore} from "@/store/ui.js";
@@ -398,7 +410,9 @@ const settingStore = useSettingStore()
 const uiStore = useUiStore();
 const showAvatars = computed(() => settingStore.showAvatars !== false && settingStore.settings.showAvatar !== 0 && settingStore.settings.showAvatar !== false)
 const emailStore = useEmailStore();
+const accountStore = useAccountStore();
 const loading = ref(false);
+const offline = ref(typeof navigator !== 'undefined' && !navigator.onLine);
 const followLoading = ref(false);
 const noLoading = ref(false);
 const emailList = reactive([])
@@ -498,19 +512,20 @@ const pageTitle = computed(() => {
   return t(route.meta?.title || 'inbox')
 })
 const titleEn = { email: 'Inbox', unread: 'Unread', spam: 'Spam', deleted: 'Trash', send: 'Sent', draft: 'Drafts', star: 'Starred', allMail: 'All mail', 'all-email': 'All mail' }
-const categoryEn = { social: 'Social', promotion: 'Promotions', updates: 'Updates', ads: 'Ads', spam: 'Spam' }
-const categoryTabEn = { all: 'All', primary: 'Primary', social: 'Social', promotion: 'Promotions', updates: 'Updates' }
+const categoryEn = { social: 'Social', promotion: 'Promotions', updates: 'Updates', important: 'Important', ads: 'Ads', spam: 'Spam' }
+const categoryTabEn = { all: 'All', primary: 'Primary', social: 'Social', promotion: 'Promotions', updates: 'Updates', important: 'Important' }
 const pageTitleEn = computed(() => activeCategory.value && !['all', 'primary'].includes(activeCategory.value)
   ? (categoryEn[activeCategory.value] || '')
   : (titleEn[route.name] || ''))
 const activeCategory = ref(props.showCategories ? 'all' : '')
-const categoryCounts = reactive({all: 0, primary: 0, social: 0, promotion: 0, updates: 0, ads: 0, spam: 0})
+const categoryCounts = reactive({all: 0, primary: 0, social: 0, promotion: 0, updates: 0, important: 0, ads: 0, spam: 0})
 const categories = [
   {key: 'all', label: 'allMail', icon: 'mdi:email-multiple-outline'},
   {key: 'primary', label: 'categoryPrimary', icon: 'mdi:inbox-outline'},
   {key: 'social', label: 'categorySocial', icon: 'mdi:account-group-outline'},
   {key: 'promotion', label: 'categoryPromotion', icon: 'mdi:tag-outline'},
   {key: 'updates', label: 'categoryUpdates', icon: 'mdi:bell-outline'},
+  {key: 'important', label: 'categoryImportant', icon: 'mdi:star-outline'},
   {key: 'ads', label: 'categoryAds', icon: 'mdi:bullhorn-outline'},
   {key: 'spam', label: 'categorySpam', icon: 'mdi:alert-octagon-outline'}
 ]
@@ -543,12 +558,15 @@ function selectCategory(category) {
 
 function loadCategoryCounts() {
   if (!props.showCategories) return Promise.resolve()
-  return emailCounts(true).then(data => {
+  const accountId = accountStore.currentAccountId
+  const allReceive = accountStore.currentAccount?.allReceive !== 0
+  return emailCounts(true, accountId, allReceive).then(data => {
     Object.assign(categoryCounts, data.category)
     window.dispatchEvent(new CustomEvent('otsmail:counts'))
   }).catch(() => {})
 }
 let timer = null
+let offlineHandlers = null
 const position = ref(
     DOMRect.fromRect({
       x: 0,
@@ -607,6 +625,11 @@ function onRealtimeEmail() {
 
 onMounted(() => {
   nextTick(bindInertia)
+  const onOnline = () => { offline.value = false; refresh() }
+  const onOffline = () => { offline.value = true }
+  window.addEventListener('online', onOnline)
+  window.addEventListener('offline', onOffline)
+  offlineHandlers = { onOnline, onOffline }
   timer = setInterval(() => {
     emailList.forEach(email => {
       email.formatCreateTime = fromNow(email.createTime);
@@ -618,6 +641,10 @@ onMounted(() => {
 onUnmounted(() => {
   clearInterval(timer)
   window.removeEventListener('otsmail:email', onRealtimeEmail);
+  if (offlineHandlers) {
+    window.removeEventListener('online', offlineHandlers.onOnline)
+    window.removeEventListener('offline', offlineHandlers.onOffline)
+  }
   unbindInertia()
 })
 
@@ -643,7 +670,7 @@ const list = computed(() => {
 
 const itemHeight = computed(() => {
     // all-email rows carry the account line, so they need one more line
-    return props.type === 'all-email' ? 96 : 78
+    return props.type === 'all-email' ? 84 : 66
 })
 
 watch(() => emailList.length, () => {
@@ -1165,6 +1192,11 @@ function goPage(delta) {
   if (next < 1 || next > pageCount.value) return
   page.value = next
   refreshList()
+}
+
+function statusTag(email) {
+  if (email.type !== 1) return ''
+  return ({ 3: t('bounced'), 5: t('delayed'), 8: t('sendFailed') })[email.status] || ''
 }
 
 function handleList(list) {
@@ -1970,6 +2002,13 @@ ul {
 :deep(.email-row .email-content) { display: block !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; line-height: 17px; color: var(--rd-muted, var(--label-3)); margin-top: 1px; }
 :deep(.email-row .email-right) { display: none !important; }
 :deep(.email-row .mail-category-tag) { font-size: 9px; padding: 1px 5px; line-height: 14px; }
+:deep(.email-row .mail-status-tag) { flex: 0 0 auto; font-size: 9px; line-height: 14px; padding: 1px 6px; border-radius: 4px; font-weight: 700; white-space: nowrap; }
+:deep(.email-row .mail-status-tag.st-3) { color: #dc2626; background: #fef2f2; }
+:deep(.email-row .mail-status-tag.st-5) { color: #b45309; background: #fffbeb; }
+:deep(.email-row .mail-status-tag.st-8) { color: #b91c1c; background: #fee2e2; }
+:global(html[data-theme="dark"]) :deep(.email-row .mail-status-tag.st-3) { color: #fca5a5; background: rgba(239,68,68,.18); }
+:global(html[data-theme="dark"]) :deep(.email-row .mail-status-tag.st-5) { color: #fcd34d; background: rgba(245,158,11,.16); }
+:global(html[data-theme="dark"]) :deep(.email-row .mail-status-tag.st-8) { color: #fecaca; background: rgba(185,28,28,.3); }
 :deep(.email-row .email-status) { display: none !important; }
 .email-row .unread { display:none !important; }
 .email-container .header-right { display:flex; align-items:center; gap:10px; }
@@ -1993,12 +2032,95 @@ ul {
 :deep(.mail-category-tag.cat-social){ color:#087f5b!important; background:rgba(16,185,129,.12)!important; }
 :deep(.mail-category-tag.cat-promotion){ color:#b45309!important; background:rgba(245,158,11,.14)!important; }
 :deep(.mail-category-tag.cat-updates){ color:#1d4ed8!important; background:rgba(59,130,246,.12)!important; }
+:deep(.mail-category-tag.cat-important){ color:#a16207!important; background:rgba(234,179,8,.16)!important; }
 :deep(.mail-category-tag.cat-ads){ color:#b91c1c!important; background:rgba(239,68,68,.12)!important; }
 :deep(.mail-category-tag.cat-spam){ color:#9f1239!important; background:rgba(244,63,94,.12)!important; }
 
 .pager-ico{width:6px;height:6px;border-top:1.6px solid currentColor;border-right:1.6px solid currentColor;display:inline-block;}
 .pager-ico.left{transform:rotate(-135deg);margin-left:2px;}
 .pager-ico.right{transform:rotate(45deg);margin-right:2px;}
+
+/* 2026 紧凑行：66px 三段式，标签只占右侧固定位 */
+:deep(.email-row) {
+  height: 66px !important;
+  padding: 6px 12px !important;
+  gap: 8px !important;
+}
+:deep(.email-row.all-email) { height: 84px !important; }
+:deep(.email-row .mail-avatar) { width: 30px !important; height: 30px !important; flex: 0 0 30px !important; }
+:deep(.email-row .email-sender) { gap: 7px !important; min-height: 18px; }
+:deep(.email-row .email-sender .name) { font-size: 12.5px !important; line-height: 17px !important; font-weight: 620; }
+:deep(.email-row.is-unread .email-sender .name) { font-weight: 780; }
+:deep(.email-row .phone-time) { font-size: 10.5px !important; }
+:deep(.email-row .email-text) { margin-top: 1px !important; }
+:deep(.email-row .email-subject .subject-text) { font-size: 12.5px !important; line-height: 17px !important; }
+:deep(.email-row .email-content) { font-size: 11px !important; line-height: 15px !important; margin-top: 0 !important; }
+:deep(.email-row .mail-status-tag),
+:deep(.email-row .mail-category-tag) {
+  height: 17px;
+  line-height: 15px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  font-size: 9.5px;
+  font-weight: 720;
+  letter-spacing: .01em;
+}
+:deep(.email-row .mail-status-tag.st-3) { border-color: rgba(220,38,38,.16); }
+:deep(.email-row .mail-status-tag.st-5) { border-color: rgba(180,83,9,.18); }
+:deep(.email-row .mail-status-tag.st-8) { border-color: rgba(185,28,28,.18); }
+:deep(.email-row .row-markers) { flex: 0 0 auto; margin-left: auto; gap: 4px; }
+:deep(.email-sender .unread) { display: none !important; }
+:deep(.email-row .unread) {
+  display: inline-block !important;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--rd-accent, #2454d6);
+  flex: 0 0 auto;
+}
+:deep(.email-row.is-unread) { background: color-mix(in srgb, var(--rd-accent, #2454d6) 3%, var(--rd-panel, #fff)) !important; }
+
+@media (max-width: 767px) {
+  :deep(.email-row) { padding: 6px 10px !important; gap: 6px !important; }
+  :deep(.email-row .email-content) { font-size: 10.5px !important; }
+  :deep(.email-row .mail-status-tag), :deep(.email-row .mail-category-tag) { font-size: 9px; padding: 0 5px; }
+}
+
+.offline-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
+  background: #fff8e6; color: #8a5a00;
+  border-bottom: 1px solid #f1dfb8;
+  font-size: 11.5px;
+}
+.offline-banner span { flex: 1; min-width: 0; }
+.offline-banner button {
+  border: 1px solid #e5c77e; background: #fff; color: #8a5a00;
+  border-radius: 6px; padding: 3px 9px; font-size: 11px; cursor: pointer;
+}
+html[data-theme="dark"] .offline-banner { background: rgba(245,158,11,.12); color: #fcd34d; border-color: rgba(245,158,11,.2); }
+html[data-theme="dark"] .offline-banner button { background: transparent; color: #fcd34d; border-color: rgba(245,158,11,.3); }
+
+.list-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 280px; padding: 32px 20px; text-align: center;
+}
+.list-empty-mark {
+  width: 46px; height: 46px; border-radius: 14px;
+  display: grid; place-items: center;
+  background: var(--rd-accent-weak, rgba(36,84,214,.08));
+  color: var(--rd-accent, #2454d6);
+}
+.list-empty b { margin-top: 14px; font-size: 13px; color: var(--rd-text); }
+.list-empty p { margin: 6px 0 16px; max-width: 260px; font-size: 11.5px; line-height: 1.6; color: var(--rd-muted); }
+.list-empty button {
+  border: 1px solid var(--rd-line-strong, #dfe4ec);
+  background: var(--rd-panel, #fff); color: var(--rd-text);
+  border-radius: 8px; padding: 7px 14px; font-size: 11.5px; font-weight: 650; cursor: pointer;
+}
+.list-empty button:hover { border-color: var(--rd-accent); color: var(--rd-accent); }
 
 </style>
 

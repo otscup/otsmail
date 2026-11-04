@@ -26,11 +26,31 @@
   </emailScroll>
   <MailContent v-if="selectedEmailId" :key="selectedEmailId" embedded class="split-content" @close="closeContent"/>
   <div v-else class="split-empty">
-    <div class="empty-logo" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="4" stroke="currentColor" stroke-width="1.6"/><path d="M4.5 8l7.5 5.4L19.5 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div class="empty-inner">
+      <p class="empty-kicker"><span aria-hidden="true"></span>{{ $t('mailEmptyKicker') }}</p>
+      <h2>{{ $t('mailEmptyTitle') }}</h2>
+      <p class="empty-copy">{{ $t('mailEmptyBody') }}</p>
+      <div class="empty-actions">
+        <button type="button" class="empty-primary" @click="composeFromEmpty">
+          <Icon icon="material-symbols:edit-outline-sharp" width="18" height="18"/>
+          {{ $t('compose') }}<kbd>C</kbd>
+        </button>
+        <button type="button" class="empty-secondary" @click="focusSearch">
+          <Icon icon="mdi:magnify" width="18" height="18"/>
+          {{ $t('searchMail') }}<kbd>/</kbd>
+        </button>
+      </div>
+      <dl class="empty-meta">
+        <div>
+          <dt>{{ $t('mailEmptyAccount') }}</dt>
+          <dd>{{ accountStore.currentAccount.email || '—' }}</dd>
+        </div>
+        <div>
+          <dt>{{ $t('mailEmptyShortcuts') }}</dt>
+          <dd>Esc · C · /</dd>
+        </div>
+      </dl>
     </div>
-    <b>Select a message</b>
-    <span>选择一封邮件开始阅读</span>
   </div>
   </div>
 </template>
@@ -39,10 +59,11 @@
 import {useAccountStore} from "@/store/account.js";
 import {useEmailStore} from "@/store/email.js";
 import {useSettingStore} from "@/store/setting.js";
+import {useUiStore} from "@/store/ui.js";
 import emailScroll from "@/components/email-scroll/index.vue"
 import {emailList, emailDelete, emailLatest, emailRead, emailUnread} from "@/request/email.js";
 import {starAdd, starCancel} from "@/request/star.js";
-import {defineOptions, h, onMounted, reactive, ref, watch} from "vue";
+import {defineOptions, h, onMounted, onUnmounted, reactive, ref, watch} from "vue";
 import {sleep} from "@/utils/time-utils.js";
 import {notifyNewEmail} from "@/utils/notify.js";
 import router from "@/router/index.js";
@@ -56,6 +77,7 @@ const props = defineProps({ mailbox: { type: String, default: '' } })
 const route = useRoute();
 const emailStore = useEmailStore();
 const accountStore = useAccountStore();
+const uiStore = useUiStore();
 const settingStore = useSettingStore();
 const scroll = ref({})
 const selectedEmailId = ref(null)
@@ -65,8 +87,41 @@ const params = reactive({
 
 onMounted(() => {
   emailStore.emailScroll = scroll;
+  window.addEventListener('keydown', handleShortcut);
   latest()
 })
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleShortcut);
+})
+
+function isTypingTarget(el) {
+  if (!el) return false;
+  const tag = el.tagName?.toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+}
+
+function focusSearch() {
+  document.querySelector('.header-mail-search input')?.focus();
+}
+
+function composeFromEmpty() {
+  uiStore.writerRef?.value?.open?.() || uiStore.writerRef?.open?.();
+}
+
+function handleShortcut(event) {
+  if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+  if (isTypingTarget(document.activeElement)) return;
+  if (document.querySelector('.el-overlay, .el-message-box')) return;
+
+  if (event.key === '/') {
+    event.preventDefault();
+    focusSearch();
+  } else if (event.key.toLowerCase() === 'c') {
+    event.preventDefault();
+    composeFromEmpty();
+  }
+}
 
 
 watch(() => accountStore.currentAccountId, () => {
@@ -180,10 +235,90 @@ function getEmailList(emailId, size, category, page) {
 .icon {
   cursor: pointer;
 }
-.split-empty { flex:1 1 0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:var(--rd-muted,var(--label-3)); background:var(--rd-bg); }
-.split-empty .empty-logo { width:58px; height:58px; display:grid; place-items:center; border-radius:18px; color:#63e6ff; background:linear-gradient(145deg,rgba(99,230,255,.16),rgba(109,92,231,.16)); box-shadow:0 0 28px rgba(99,230,255,.14); margin-bottom:6px; }
-.split-empty .empty-logo svg { width:30px; height:30px; }
-.split-empty b { font-size:14px; color:var(--rd-text,var(--label)); font-weight:650; }
-.split-empty span { font-size:12px; }
+.split-empty {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: clamp(40px, 7vw, 96px) clamp(32px, 7vw, 104px);
+  overflow: auto;
+  border-left: 1px solid var(--rd-line);
+  background: var(--rd-panel);
+}
+.empty-inner { width: min(560px, 100%); }
+.empty-kicker {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 22px;
+  color: var(--rd-muted);
+  font-size: 12px;
+}
+.empty-kicker span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rd-accent);
+  box-shadow: 0 0 0 4px var(--rd-accent-weak);
+}
+.split-empty h2 {
+  margin: 0 0 16px;
+  color: var(--rd-text);
+  font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", Georgia, serif;
+  font-size: clamp(32px, 4.2vw, 52px);
+  font-weight: 600;
+  letter-spacing: -.03em;
+  line-height: 1.08;
+}
+.empty-copy {
+  max-width: 430px;
+  margin: 0 0 30px;
+  color: var(--rd-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.empty-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.empty-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 15px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease, transform .16s ease;
+}
+.empty-actions button:active { transform: translateY(1px); }
+.empty-actions button:focus-visible { outline: 2px solid var(--rd-accent); outline-offset: 2px; }
+.empty-primary { color: #fff; background: var(--rd-accent); border: 1px solid var(--rd-accent); box-shadow: 0 8px 20px rgba(36, 84, 214, .18); }
+.empty-primary:hover { background: #1e46b8; border-color: #1e46b8; }
+.empty-secondary { color: var(--rd-text); background: var(--rd-panel); border: 1px solid var(--rd-line-strong); }
+.empty-secondary:hover { background: var(--rd-panel-2); }
+.empty-actions kbd {
+  margin-left: 4px;
+  padding: 3px 5px;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1;
+  opacity: .55;
+}
+.empty-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  margin: 42px 0 0;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--rd-line);
+}
+.empty-meta div { min-width: 0; }
+.empty-meta dt { margin-bottom: 5px; color: var(--rd-faint); font-size: 11px; letter-spacing: .02em; }
+.empty-meta dd { max-width: 260px; margin: 0; overflow: hidden; color: var(--rd-text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+html[data-theme="dark"] .split-empty { background: var(--rd-panel); }
+html[data-theme="dark"] .empty-primary { color: #06111d; }
 @media (max-width:1024px){ .split-empty{display:none} }
 </style>

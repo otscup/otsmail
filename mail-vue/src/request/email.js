@@ -1,10 +1,14 @@
 import http from '@/axios/index.js';
 
-export function emailList(accountId, allReceive, emailId, timeSort, size, type, search = {}, mailbox, category, page) {
+export function emailList(accountId, allReceive, emailId, timeSort, size, type, search = {}, mailbox, category, page, status) {
     const {text, type: searchType, startDate, endDate} = search
     return http.get('/email/list', {
-        params: {accountId, allReceive, emailId, timeSort, size, type, text, searchType, startDate, endDate, mailbox, category, page}
+        params: {accountId, allReceive, emailId, timeSort, size, type, text, searchType, startDate, endDate, mailbox, category, page, status}
     })
+}
+
+export function emailRetry(emailId) {
+    return http.post('/email/retry', {emailId})
 }
 
 export function emailDelete(emailIds) {
@@ -36,19 +40,35 @@ export function emailMenuCounts() {
 }
 
 // 菜单 + 分类一次请求，短缓存合并侧边栏和列表的同时刷新
-let countsCache = null, countsAt = 0, countsTask = null;
-export function emailCounts(force = false) {
-    if (countsTask) return countsTask;
-    if (!force && countsCache && Date.now() - countsAt < 5000) return Promise.resolve(countsCache);
-    countsTask = http.get('/email/counts')
-        .then(data => { countsCache = data; countsAt = Date.now(); return data; })
-        .finally(() => { countsTask = null; });
-    return countsTask;
+const countsCache = new Map();
+const countsTask = new Map();
+export function emailCounts(force = false, accountId = null, allReceive = true) {
+    const key = `${accountId || 0}:${allReceive ? 1 : 0}`;
+    if (countsTask.has(key)) return countsTask.get(key);
+    const cached = countsCache.get(key);
+    if (!force && cached && Date.now() - cached.at < 5000) return Promise.resolve(cached.data);
+    const task = http.get('/email/counts', {params: {accountId, allReceive: allReceive ? 1 : 0}})
+        .then(data => { countsCache.set(key, {data, at: Date.now()}); return data; })
+        .finally(() => { countsTask.delete(key); });
+    countsTask.set(key, task);
+    return task;
 }
 
 // v1.0: GET /email/detail?emailId= —— 单封详情（含 attList），T-02 刷新兜底重取
 export function emailDetail(emailId) {
     return http.get('/email/detail', {params: {emailId}})
+}
+
+export function unsubscribeList() {
+    return http.get('/email/unsubscribeList')
+}
+
+export function emailLearn(emailId, category, keyword = '') {
+    return http.post('/email/learn', {emailId, category, keyword})
+}
+
+export function emailSchedule(form, scheduledAt) {
+    return http.post('/email/schedule', {...form, scheduledAt})
 }
 
 // 垃圾邮件标记 / 取消（POST body：{emailId}）
