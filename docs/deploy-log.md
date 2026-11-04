@@ -9,12 +9,12 @@
 
 ## 生产配置变更：开启注册邀请码门禁（2026-09-23）
 - **操作**：D1 `setting.reg_key` 1(CLOSE) → **0(OPEN)**（`UPDATE setting SET reg_key=0 WHERE reg_key=1`）
-- **原因**：豆豆要求「注册必须填邀请码」。根因诊断：非代码漏洞，是配置未开——OAuth 与普通注册共用同一门禁（`login-service.register` 在 reg_key===OPEN 时均校验 code），无绕过。
+- **原因**：维护者要求「注册必须填邀请码」。根因诊断：非代码漏洞，是配置未开——OAuth 与普通注册共用同一门禁（`login-service.register` 在 reg_key===OPEN 时均校验 code），无绕过。
 - **前提**：`reg_key` 表原本空，直接开启会锁死所有注册。已先插入救命邀请码：
   - `INVITE-CODE`（count=50，role_id=1 普通用户，expire 2026-12-31，user_id=0）
 - **验证**：`reg_key=0` ✅；reg_key 表 cnt=1 ✅
 - **⚠️ 单一事实来源纪律固化**：期望生产值为 `reg_key=0(OPEN)`。换环境/重新初始化后需手工恢复此值 + 维护有效邀请码，勿凭部署翻转回 1。
-- **⚠️ 存量知情**：此前已通过 OAuth 无邀请码注册的账号**不会被追溯移除**（门禁开启前行），豆豆已知情。
+- **⚠️ 存量知情**：此前已通过 OAuth 无邀请码注册的账号**不会被追溯移除**（门禁开启前行），维护者已知情。
 
 ---
 ## 部署 #8（当前线上）— MCP 邮件能力 + 安全加固（a61f369 + 3e15189）
@@ -36,7 +36,7 @@
   2. **`/mcp` 未接线**（`8ada18b`）：dev 注册了 `app.post/get('/mcp')` 但 index.js 入口无 `/mcp` 分发分支，请求全被 `webAssetService` 的 SPA fallback 抢成 HTML，**端点完全不可达**。已在 index.js `/api/` 分支后补 `if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) return app.fetch(...)`。
   - 两处修复前：GET/POST /mcp 均返回前端 HTML。修复后：GET 返回 `{"code":401,"message":"身份认证失效,请重新登录"}`（JWT 强制生效，不再被 fallback 抢）；POST 同被 JWT 拦。mail.example.com 健康 200。
   - **Version**：`5fa35bf6-5de1-490c-bdad-526f9a2d00f0`。回滚：`wrangler rollback`（无 D1 schema 变更）。
-  - **⚠️ 待补验证**：开关默认 OFF，RBAC/限速/审计的实际生效尚未端到端测（需豆豆先在 Cloudflare 把 `mcp_switch` 设为 `true`，再用 MCP 客户端带 JWT 调 5 个工具）。建议合并前或合并后紧跟一次端到端验证。
+  - **⚠️ 待补验证**：开关默认 OFF，RBAC/限速/审计的实际生效尚未端到端测（需维护者先在 Cloudflare 把 `mcp_switch` 设为 `true`，再用 MCP 客户端带 JWT 调 5 个工具）。建议合并前或合并后紧跟一次端到端验证。
 
 ---
 ## 部署 #7 — OAuth 注销级联删 + 存量残留清理（d686534）
@@ -68,7 +68,7 @@
   - `email-msg.js` 从「整封正文截断到 3500」改为摘要式 `buildSummary()`：
     - 先按行折叠超长行（>80 字符长 URL/base64/长域名 → 60 字符 + …）
     - 再取前 ~400 字符作为正文摘要 + 省略号；全文靠 View 按钮在 web_app 看
-  - **② TG 内直接看图（sendPhoto）为独立新功能，另行评估（架构/豆豆拍板），未混入**
+  - **② TG 内直接看图（sendPhoto）为独立新功能，另行评估（架构/维护者拍板），未混入**
 - **Version ID**：`6dd1ac84-c808-4d4c-9db2-360abc10416b`
 - **验证**：
   - ✅ 单测 92/92 绿（+email-msg 5，含短正文保留/长URL折叠/超长截断/hide/空正文）
@@ -78,7 +78,7 @@
 
 ---
 ## 部署 #4（已被 #5 覆盖，2026-09-20）
-- **时间**：2026-09-20（豆豆指令"直接部署，自行实测"）
+- **时间**：2026-09-20（维护者指令"直接部署，自行实测"）
 - **代码**：HEAD `e870134`（v1.4 全套：N-01 GitHub + Google OAuth + 登录态 bind + provider 列 + session-guard 修复）
 - **Version ID**：`70d8d26a-2afd-4730-a970-2e4b41526621`
 - **变更**：
@@ -91,7 +91,7 @@
   - ✅ 站点 200（mail.example.com / workers.dev）
   - ✅ 新路由挂载实测：`/api/oauth/github/login`→501 授权码无效、`/api/oauth/google/login`→501 令牌失败、`/api/oauth/bind`→401 未认证（均为路由存在且正确校验）
   - ⏳ 前端 R2 上传后台进行中（234 文件）
-- **⚠️ 未完成项（豆豆实际使用时注意）**：
+- **⚠️ 未完成项（维护者实际使用时注意）**：
   1. **google 凭据未配**（client_id/secret/callback_url 全缺）→ Google 按钮显示但授权会失败
   2. **github_callback_url 未配**（client_id/secret 已有）→ GitHub 登录回调可能不完整
   3. **D1 provider 列 migration 未跑**（`GET /api/init/{secret}`，需 init secret）→ oauth 表尚无 provider 列，google/github 落库会失败
@@ -113,7 +113,7 @@
   - ✅ **QA 离线回归：D1 真实 `to_email=gmail@example.com` 87 封历史样本 → 主信号命中 87/87，未命中 0**
   - ✅ dry-run（3048 KiB / gzip 629 KiB，vars 含 GMAIL_ROUTING_INBOX + SKIP_FORWARD_GMAIL_FORWARDED=true）
   - ✅ 部署成功；✅ 健康检查 mail.example.com / worker 均 HTTP 200
-- **已知代价（豆豆已接受）**：163 等非 Google 来源直发 `gmail@example.com` 也归 Google 通道只进 TG（419 样本：vincent_dam@163.com → gmail@example.com）
+- **已知代价（维护者已接受）**：163 等非 Google 来源直发 `gmail@example.com` 也归 Google 通道只进 TG（419 样本：sender@example.com → gmail@example.com）
 - **回滚方式**：`npx wrangler rollback`（回退到部署 #3 `9d17e09d`；本次无 D1 schema 变更）
 
 ---
@@ -159,10 +159,10 @@
 - **代码**：`cfe4637`（v1.0 之前，无 detail 端点，read() 无 .run()）
 - **验证**：现网 `GET /email/detail` 404；P0-01 read 依赖 .run() 修复
 
-## 部署事项备忘（待豆豆确认后执行）
+## 部署事项备忘（待维护者确认后执行）
 - [ ] `linuxdo_*` env 配置（登录入口可见）：`linuxdo_client_id`/`linuxdo_callback_url`/`linuxdo_switch=true`（vars）+ `linuxdo_client_secret`（secret）
 - [ ] `GET /api/init/{secret}` 跑 T-04 索引迁移（若未自动执行）
-- [ ] 测试完成提醒豆豆改回 admin 密码
+- [ ] 测试完成提醒维护者改回 admin 密码
 
 ## 待部署：v1.4 Google OAuth + 绑定重构（HEAD `e870134`，2026-09-20 代码验收通过暂缓）
 - **范围**：后端 `6b2c408`（`POST /oauth/google/login` OIDC、登录态 `PUT /oauth/bind`、signup gate 修正堵 P0 backdoor、`oauth` 表 `provider` 列 + D1 migration）+ 前端 `984e537`（Google 按钮、state 分流、设置页绑定卡）+ `e870134`（session-guard 修 OAuth 绑定接管）。
@@ -174,12 +174,12 @@
   4. ~~OAuth 绑定接管洞~~ ✅ 已由 `e870134` session-guard 修复并 QA 复核（BLOCK-3 解除）。
 - **⚠️ secret 勿写 `[vars]`**（进 git/Dashboard 明文）。
 - **回滚方式**：`npx wrangler rollback`（回退到部署 #3 `9d17e09d`；注：本次含 D1 migration，回滚 worker 版本不影响已落库的 provider 列）。
-- **状态**：⏸ 暂缓——代码全绿，仅剩豆豆提供 github/google 凭据 + D1 migration + 真实账号 E2E（BLOCK-1/2）。
+- **状态**：⏸ 暂缓——代码全绿，仅剩维护者提供 github/google 凭据 + D1 migration + 真实账号 E2E（BLOCK-1/2）。
 
 ## 待部署：N-01 GitHub OAuth（提交 `49755ce`，2026-09-19 验收通过，暂缓）
 - **代码验收**：✅ 单测 76/76 绿（oauth-github 4 新增）、前端 build 成功、契约对齐 architecture §3.1 N-01。详见 `docs/test-report.md`。
-- **部署阻塞（BLOCK-1）**：现网 wrangler[ vars]/secret 缺 `github_*` 配置 → 即便部署按钮也不显示（fallback 为验收标准③默认分支）。需豆豆提供 GitHub OAuth App client_id/secret。
+- **部署阻塞（BLOCK-1）**：现网 wrangler[ vars]/secret 缺 `github_*` 配置 → 即便部署按钮也不显示（fallback 为验收标准③默认分支）。需维护者提供 GitHub OAuth App client_id/secret。
 - **配置清单**（配好后方可部署）：`github_client_id` + `github_callback_url` + `github_switch=true`（`[vars]`/`--var`）+ `github_client_secret`（`wrangler secret put`）。
 - **⚠️ 禁止把 secret 写 `[vars]`**（会进 git / Dashboard 明文）。
 - **回滚方式**：`npx wrangler rollback`（回退到部署 #3 `9d17e09d`）。
-- **状态**：⏸ 暂缓——等豆豆提供凭据后部署并补真实账号 E2E。
+- **状态**：⏸ 暂缓——等维护者提供凭据后部署并补真实账号 E2E。

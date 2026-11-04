@@ -32,7 +32,7 @@ const emailRules = {
 		// 判定 0（架构 §4.11 v1.3 主信号）：收件地址命中 Gmail 定向通道地址
 		// GMAIL_ROUTING_INBOX（未配置时为 gmail@example.com）。该地址由部署者配置，整体视为
 		// "Google 转发通道"→ 只进 TG 不转发。即使 From 是 163 等非 Google 域也归此通道
-		// （419 现成代价样本，豆豆已接受）。
+		// （419 现成代价样本，维护者已接受）。
 		const routingInbox = (env && env.GMAIL_ROUTING_INBOX) || 'gmail@example.com';
 		if (typeof toEmail === 'string' && toEmail.toLowerCase() === routingInbox.toLowerCase()) {
 			return true;

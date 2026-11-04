@@ -29,16 +29,16 @@ describe('isGoogleSourcedEmail — 开关控制（零回归）', () => {
 describe('主信号 — GMAIL_ROUTING_INBOX 收件地址命中（§4.11 v1.3）', () => {
   const envRouting = { SKIP_FORWARD_GMAIL_FORWARDED: true, GMAIL_ROUTING_INBOX: 'gmail@example.com' };
   it('toEmail 命中路由收件地址 → true（即使 From 非 Google 域）', () => {
-    expect(emailRules.isGoogleSourcedEmail({ from: { address: 'vincent_dam@163.com' }, headers: [] }, envRouting, 'gmail@example.com')).toBe(true);
+    expect(emailRules.isGoogleSourcedEmail({ from: { address: 'sender@example.com' }, headers: [] }, envRouting, 'gmail@example.com')).toBe(true);
   });
   it('toEmail 大小写不敏感命中 → true', () => {
     expect(emailRules.isGoogleSourcedEmail({ from: { address: 'x@g.com' }, headers: [] }, envRouting, 'GMAIL@EXAMPLE.COM')).toBe(true);
   });
   it('未命中路由收件地址 → 不判主信号，走辅助判定', () => {
-    expect(emailRules.isGoogleSourcedEmail({ from: { address: 'vincent_dam@163.com' }, headers: [] }, envRouting, 'other@example.com')).toBe(false);
+    expect(emailRules.isGoogleSourcedEmail({ from: { address: 'sender@example.com' }, headers: [] }, envRouting, 'other@example.com')).toBe(false);
   });
   it('toEmail 缺失 → 主信号跳过，不误判（向后兼容）', () => {
-    expect(emailRules.isGoogleSourcedEmail({ from: { address: 'vincent_dam@163.com' }, headers: [] }, envRouting)).toBe(false);
+    expect(emailRules.isGoogleSourcedEmail({ from: { address: 'sender@example.com' }, headers: [] }, envRouting)).toBe(false);
   });
   it('env 未配 GMAIL_ROUTING_INBOX 时默认 gmail@example.com 生效', () => {
     expect(emailRules.isGoogleSourcedEmail({ from: { address: 'a@x.com' }, headers: [] }, envOn, 'gmail@example.com')).toBe(true);

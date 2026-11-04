@@ -1,6 +1,6 @@
 # cloudmail 架构文档（Architecture Spec，Web 端）
 
-> **文档状态**：定稿 v1.0（豆豆放权确认）
+> **文档状态**：定稿 v1.0（维护者放权确认）
 > **版本变更**：v0.9 → v1.0。v1.0 新增接口 `GET /email/detail`；Webhook 对齐方向定为「上游为准做兼容层」；§7 裁决项已全部定案。
 > **关联文档**：`docs/prd.md`、`docs/design.md`
 > **基线**：本地仓库 `E:/otsmail` main 分支，HEAD = `cfe4637`
@@ -468,11 +468,11 @@ Resend webhook POST /webhooks
 
 ## 7. 开放项裁决（v1.0 全部定案）
 
-**7-1 新增 `GET /email/detail`** → **采纳**（product-ui 支持、qa-deploy 支持、豆豆放权）。见 §5.2 与 §3.2 新增接口定义。
+**7-1 新增 `GET /email/detail`** → **采纳**（product-ui 支持、qa-deploy 支持、维护者放权）。见 §5.2 与 §3.2 新增接口定义。
 
 **7-2 接口版本策略** → **采纳**：凡碰契约的 P0 改动升版本号 + 群内通告。architecture.md 为单一事实来源，design.md 由 product-ui 同步版本。
 
-**7-3 Webhook 对齐方向（T-05）** → **定案：「上游为准做兼容层」**。本地保留内部事件模型，出站序列化时映射成上游 payload 格式；上游标准事件（event type/payload/重试策略）不破坏外部订阅方；本地自定义事件在兼容层额外暴露并文档化。纯技术取舍，豆豆放权确认。
+**7-3 Webhook 对齐方向（T-05）** → **定案：「上游为准做兼容层」**。本地保留内部事件模型，出站序列化时映射成上游 payload 格式；上游标准事件（event type/payload/重试策略）不破坏外部订阅方；本地自定义事件在兼容层额外暴露并文档化。纯技术取舍，维护者放权确认。
 
 ---
 
