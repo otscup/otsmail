@@ -2161,4 +2161,30 @@ function submitRegister() {
   }
   #login-box[data-login-theme="gala"] .form-title { font-size: 40px !important; }
 }
+
+/* 账号输入：整条保持和密码框一样的底色，域名选择放在框内右侧，不再单独做灰色 append。 */
+#login-box[data-login-theme] .container .email-input :deep(.el-input__wrapper) {
+  background: #fff !important;
+  border: 0 !important;
+  border-radius: 10px 0 0 10px !important;
+  box-shadow: inset 0 0 0 1px var(--rd-line) !important;
+}
+#login-box[data-login-theme] .container .email-input :deep(.el-input-group__append) {
+  padding: 0 12px !important;
+  background: #fff !important;
+  border: 0 !important;
+  border-radius: 0 10px 10px 0 !important;
+  box-shadow: none !important;
+}
+#login-box[data-login-theme] .container .email-input :deep(.el-input-group__append) .domain-picker {
+  background: transparent !important;
+  color: var(--rd-text) !important;
+  max-width: 150px;
+  overflow: hidden;
+}
+#login-box[data-login-theme] .container .domain-picker-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 </style>
