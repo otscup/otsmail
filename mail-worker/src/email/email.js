@@ -16,6 +16,7 @@ import pushService from '../service/push-service';
 import fcmService from '../service/fcm-service';
 import emailRules from '../utils/emailRules';
 import {matchFilterRules} from '../utils/filter-rules';
+import { classifyByBuiltinRules } from '../utils/builtin-rules';
 import mailRuleService from '../service/mail-rule-service';
 import { parseAuthResults, extractOtp } from '../utils/mail-security';
 
@@ -108,14 +109,23 @@ export async function email(message, env, ctx) {
 		const header = name => (email.headers || []).find(item => String(item.key).toLowerCase() === name)?.value || '';
 		const code = (await aiService.extractCode({ env }, email, { aiCode, aiCodeFilter })) || otp.code;
 		// 默认只跑本地规则；只有显式开启自动 AI 才在收信链路里调用模型
-		// 用户过滤器优先于 AI/本地分类；垃圾标记仍最高优先
+		// 用户过滤器优先于内置规则与 AI/本地分类；垃圾标记仍最高优先。
+		// 注意：AI/本地规则要的是扁平字段，不能直接传 PostalMime 原始对象，
+		// 否则 name/sendEmail 恒为 undefined，社交平台与 noreply 判断永远不会成立。
+		const classifyInput = {
+			name: email.from?.name || '',
+			sendEmail: email.from?.address || '',
+			subject: email.subject || '',
+			text: email.text || ''
+		};
 		const filterCategory = matchFilterRules(email, emailFilters);
 		const learnedCategory = account
 			? await mailRuleService.categoryFor(env, account.userId, email.from?.address, email.subject)
 			: '';
-		const category = blockFlag ? 'spam' : learnedCategory || filterCategory || (aiClassifyMode === 'auto'
-			? await aiService.classifyEmail({ env }, email)
-			: classifyByRules(email));
+		const builtinCategory = classifyByBuiltinRules(email);
+		const category = blockFlag ? 'spam' : learnedCategory || filterCategory || builtinCategory || (aiClassifyMode === 'auto'
+			? await aiService.classifyEmail({ env }, classifyInput)
+			: classifyByRules(classifyInput));
 
 		const params = {
 			toEmail: message.to,
