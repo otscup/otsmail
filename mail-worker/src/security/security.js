@@ -22,6 +22,7 @@ const exclude = [
 	'/test',
 	'/oauth',
 	'/push/key',
+	'/version',
 	'/.well-known'
 ];
 
@@ -38,6 +39,7 @@ const requirePerms = [
 	'/analysis/echarts',
 	'/analysis/usage',
 	'/analysis/cloudflare',
+	'/update/check',
 	'/role/add',
 	'/role/list',
 	'/role/delete',

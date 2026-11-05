@@ -67,12 +67,12 @@
         <div v-show="show === 'login'">
           <el-input :class="!hideLoginDomain ? 'email-input' : ''" v-model="form.email"
                     type="text" :placeholder="$t('emailAccount')" autocomplete="off" @keyup.enter="submit">
-            <template #append v-if="!hideLoginDomain">
-              <div class="domain-picker" :class="{ 'domain-picker-open': domainPickerOpen }" @click="domainPickerOpen = !domainPickerOpen" ref="domainPickerRef">
+            <template #suffix v-if="!hideLoginDomain">
+              <div class="domain-picker" :class="{ 'domain-picker-open': domainPickerOpen }" @click.stop="domainPickerOpen = !domainPickerOpen" ref="domainPickerRef">
                 <span class="domain-picker-label">{{ suffix || $t('select') }}</span>
                 <Icon icon="mingcute:down-line" width="14" height="14" class="domain-picker-arrow" />
                 <transition name="domain-picker-fade">
-                  <div v-if="domainPickerOpen" class="domain-picker-dropdown">
+                  <div v-if="domainPickerOpen && show === 'login'" class="domain-picker-dropdown">
                     <div
                       v-for="item in domainList"
                       :key="item"
@@ -120,12 +120,12 @@
         <div v-show="show !== 'login'">
           <el-input :class="!hideLoginDomain ? 'email-input' : ''" v-model="registerForm.email" type="text" :placeholder="$t('emailAccount')"
                     autocomplete="off" @keyup.enter="submitRegister">
-            <template #append v-if="!hideLoginDomain">
-              <div class="domain-picker" :class="{ 'domain-picker-open': domainPickerOpen }" @click="domainPickerOpen = !domainPickerOpen" ref="domainPickerRef">
+            <template #suffix v-if="!hideLoginDomain">
+              <div class="domain-picker" :class="{ 'domain-picker-open': domainPickerOpen }" @click.stop="domainPickerOpen = !domainPickerOpen" ref="domainPickerRef">
                 <span class="domain-picker-label">{{ suffix || $t('select') }}</span>
                 <Icon icon="mingcute:down-line" width="14" height="14" class="domain-picker-arrow" />
                 <transition name="domain-picker-fade">
-                  <div v-if="domainPickerOpen" class="domain-picker-dropdown">
+                  <div v-if="domainPickerOpen && show !== 'login'" class="domain-picker-dropdown">
                     <div
                       v-for="item in domainList"
                       :key="item"
@@ -182,11 +182,11 @@
     <el-dialog class="bind-dialog" v-model="showBindForm"  title="注册邮箱" >
       <div class="bind-container">
         <el-input :class="!hideLoginDomain ? 'email-input' : ''" v-model="bindForm.email" type="text" :placeholder="$t('emailAccount')" autocomplete="off" @keyup.enter="bind">
-          <template #append v-if="!hideLoginDomain">
-              <div class="domain-picker" @click="domainPickerOpen = !domainPickerOpen">
+          <template #suffix v-if="!hideLoginDomain">
+              <div class="domain-picker" @click.stop="domainPickerOpen = !domainPickerOpen">
                 <span class="domain-picker-label">{{ suffix || $t('select') }}</span>
                 <Icon icon="mingcute:down-line" width="14" height="14" class="domain-picker-arrow" />
-                <div v-if="domainPickerOpen" class="domain-picker-dropdown">
+                <div v-if="domainPickerOpen && showBindForm" class="domain-picker-dropdown">
                   <div
                     v-for="item in domainList"
                     :key="item"
@@ -2163,28 +2163,73 @@ function submitRegister() {
 }
 
 /* 账号输入：整条保持和密码框一样的底色，域名选择放在框内右侧，不再单独做灰色 append。 */
+#login-box[data-login-theme] .container .email-input {
+  position: relative;
+  z-index: 10;
+}
 #login-box[data-login-theme] .container .email-input :deep(.el-input__wrapper) {
   background: #fff !important;
   border: 0 !important;
-  border-radius: 10px 0 0 10px !important;
+  border-radius: 10px !important;
   box-shadow: inset 0 0 0 1px var(--rd-line) !important;
+  overflow: visible !important;
 }
-#login-box[data-login-theme] .container .email-input :deep(.el-input-group__append) {
-  padding: 0 12px !important;
-  background: #fff !important;
-  border: 0 !important;
-  border-radius: 0 10px 10px 0 !important;
-  box-shadow: none !important;
+#login-box[data-login-theme] .container .email-input :deep(.el-input__inner) {
+  padding-right: 116px !important;
 }
-#login-box[data-login-theme] .container .email-input :deep(.el-input-group__append) .domain-picker {
+#login-box[data-login-theme] .container .email-input :deep(.el-input__suffix) {
+  padding-right: 8px;
+  pointer-events: auto;
+}
+#login-box[data-login-theme] .container .email-input :deep(.domain-picker) {
+  height: auto !important;
+  min-width: 104px;
+  max-width: 108px;
+  padding: 0 2px !important;
   background: transparent !important;
+  border-radius: 0 !important;
   color: var(--rd-text) !important;
-  max-width: 150px;
-  overflow: hidden;
+  font-size: 11px !important;
+}
+#login-box[data-login-theme] .container .email-input :deep(.domain-picker:hover) {
+  background: transparent !important;
+  color: var(--rd-accent) !important;
 }
 #login-box[data-login-theme] .container .domain-picker-label {
+  flex: 1;
+  min-width: 0;
+  max-width: 90px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#login-box[data-login-theme] .container .email-input :deep(.domain-picker-arrow) {
+  flex: 0 0 14px;
+  color: var(--rd-muted) !important;
+  opacity: 1 !important;
+}
+@media (max-width: 767px) {
+  #login-box[data-login-theme] .container .email-input :deep(.el-input__inner) {
+    padding-right: 102px !important;
+  }
+  #login-box[data-login-theme] .container .domain-picker {
+    min-width: 94px;
+    max-width: 94px;
+  }
+  #login-box[data-login-theme] .container .domain-picker-label {
+    max-width: 72px;
+    font-size: 10px !important;
+  }
+  #login-box[data-login-theme] .container .email-input :deep(.domain-picker-arrow) {
+    flex: 0 0 12px;
+  }
+}
+#login-box[data-login-theme] .container .domain-picker-dropdown {
+  width: max-content;
+  min-width: 150px;
+  max-width: min(420px, calc(100vw - 48px));
+}
+#login-box[data-login-theme] .container .domain-picker-option {
   white-space: nowrap;
 }
 </style>

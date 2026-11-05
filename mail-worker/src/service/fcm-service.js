@@ -24,7 +24,10 @@ async function getAccessToken(env) {
 
 	const clientEmail = env.FIREBASE_CLIENT_EMAIL;
 	const privateKey = String(env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
-	if (!clientEmail || !privateKey) return '';
+	if (!clientEmail || !privateKey) {
+		console.error(`FCM_SKIP_NO_CREDENTIALS clientEmail=${Boolean(clientEmail)} privateKey=${Boolean(privateKey)}`);
+		return '';
+	}
 
 	const iat = Math.floor(now / 1000);
 	const unsigned = `${b64url(new TextEncoder().encode(JSON.stringify({ alg: 'RS256', typ: 'JWT' })))}.${b64url(
@@ -52,7 +55,10 @@ async function getAccessToken(env) {
 		}).toString(),
 		signal: AbortSignal.timeout(8000)
 	});
-	if (!res.ok) throw new Error(`google oauth ${res.status}`);
+	if (!res.ok) {
+		console.error(`FCM_OAUTH_FAILED status=${res.status}`);
+		throw new Error(`google oauth ${res.status}`);
+	}
 
 	const json = await res.json();
 	const ttl = Number(json.expires_in || 3600) - 300;
@@ -125,18 +131,36 @@ const fcmService = {
 	},
 
 	async sendToUser({ env }, userId, data) {
-		if (!userId) return [];
+		if (!userId) {
+			console.error('FCM_SKIP_NO_USER');
+			return [];
+		}
 		const rows = await env.db.prepare(
 			"SELECT token FROM push_device WHERE user_id = ? AND platform = 'android'"
 		).bind(Number(userId)).all();
 		const tokens = (rows.results || []).map(r => r.token).filter(Boolean);
-		if (tokens.length === 0) return [];
+		if (tokens.length === 0) {
+			console.error(`FCM_SKIP_NO_DEVICE userId=${userId}`);
+			return [];
+		}
 
-		const accessToken = await getAccessToken(env);
-		if (!accessToken) return [];
+		let accessToken = '';
+		try {
+			accessToken = await getAccessToken(env);
+		} catch (e) {
+			console.error(`FCM_SKIP_ACCESS_TOKEN ${e?.message || String(e)}`);
+			return [];
+		}
+		if (!accessToken) {
+			console.error(`FCM_SKIP_NO_ACCESS_TOKEN userId=${userId} devices=${tokens.length}`);
+			return [];
+		}
 
 		const projectId = env.FIREBASE_PROJECT_ID;
-		if (!projectId) return [];
+		if (!projectId) {
+			console.error(`FCM_SKIP_NO_PROJECT_ID userId=${userId} devices=${tokens.length}`);
+			return [];
+		}
 		const results = [];
 
 		for (const token of tokens) {

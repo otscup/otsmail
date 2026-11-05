@@ -8,7 +8,11 @@ import {VitePWA} from 'vite-plugin-pwa';
 
 export default defineConfig(({mode}) => {
     const env = loadEnv(mode, process.cwd(), 'VITE')
+    const webVersion = env.VITE_WEB_VERSION || process.env.npm_package_version || '0.0.0'
     return {
+        define: {
+            __WEB_VERSION__: JSON.stringify(webVersion)
+        },
         server: {
             host: true,
             port: 3001,

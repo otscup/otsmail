@@ -552,6 +552,31 @@
         </div>
       </div>
 
+      <div class="settings-card version-card">
+        <div class="title">{{ $t('aboutVersion') }}</div>
+        <div class="card-content">
+          <div class="setting-item">
+            <div><span>{{ $t('currentVersion') }}</span></div>
+            <div class="version-line">
+              <strong>{{ currentVersionInfo.version || '-' }}</strong>
+              <span v-if="currentVersionInfo.deployedAt">{{ $t('deployedAt') }} {{ formatVersionTime(currentVersionInfo.deployedAt) }}</span>
+              <el-button size="small" :loading="updateChecking" @click="checkForUpdate">{{ $t('checkUpdate') }}</el-button>
+            </div>
+          </div>
+          <div v-if="updateInfo" class="version-result">
+            <span v-if="updateInfo.status === 'channelMissing'" class="version-muted">{{ $t('updateChannelMissing') }}</span>
+            <span v-else-if="updateInfo.status === 'upstreamError'" class="version-error">{{ $t('updateUpstreamError') }}</span>
+            <span v-else-if="updateInfo.status === 'unknownCurrent'" class="version-muted">{{ $t('updateUnknownCurrent') }}</span>
+            <span v-else-if="updateInfo.hasUpdate">
+              {{ $t('updateAvailable') }} <b>{{ updateInfo.latest }}</b>
+              <a v-if="updateInfo.url" :href="updateInfo.url" target="_blank" rel="noopener">{{ $t('viewRelease') }}</a>
+            </span>
+            <span v-else class="version-ok">{{ $t('upToDate') }}</span>
+            <pre v-if="updateInfo.hasUpdate && updateInfo.notes" class="version-notes">{{ updateInfo.notes }}</pre>
+          </div>
+        </div>
+      </div>
+
       <!-- Dialogs remain the same -->
       <el-dialog v-model="resendTokenFormShow" :title="$t('resendToken')" width="340" @closed="cleanResendTokenForm">
         <form @submit.prevent>
@@ -1122,6 +1147,7 @@
 import {computed, defineOptions, nextTick, onMounted, onUnmounted, reactive, ref, watch} from "vue";
 import {aiModels, deleteBackground, setBackground, setBlackList, settingQuery, settingSet, tgWebhook, webhookTest} from "@/request/setting.js";
 import {aiClassify} from "@/request/ai.js";
+import {versionCheck, versionInfo} from "@/request/version.js";
 import {telegramBindTicket} from "@/request/my.js";
 import {useSettingStore} from "@/store/setting.js";
 import {useUiStore} from "@/store/ui.js";
@@ -1251,12 +1277,53 @@ const editTitle = ref('')
 const editSubtitle = ref('')
 const settingLoading = ref(false)
 const clearS3Loading = ref(false)
+const currentVersionInfo = ref({ version: '-', deployedAt: null })
+const updateInfo = ref(null)
+const versionLoading = ref(false)
+const updateChecking = ref(false)
 const r2DomainInput = ref('')
 const loginOpacity = ref(0)
 const chatOpacity = ref(0.88)
 const backgroundTarget = ref('background')
 const minEmailPrefix = ref(0)
 const emailPrefixFilter = ref([])
+
+async function loadVersionInfo() {
+  if (versionLoading.value) return
+  versionLoading.value = true
+  try {
+    const res = await versionInfo()
+    currentVersionInfo.value = res.data || {version: '-'}
+  } catch (e) {
+    currentVersionInfo.value = {version: 'unknown'}
+  } finally {
+    versionLoading.value = false
+  }
+}
+
+async function checkForUpdate() {
+  if (updateChecking.value) return
+  updateChecking.value = true
+  try {
+    const res = await versionCheck()
+    updateInfo.value = res.data
+  } catch (e) {
+    updateInfo.value = {status: 'upstreamError'}
+  } finally {
+    updateChecking.value = false
+  }
+}
+
+function formatVersionTime(value) {
+  if (!value) return '-'
+  try {
+    return new Date(value).toLocaleString()
+  } catch (e) {
+    return value
+  }
+}
+
+onMounted(loadVersionInfo)
 const backgroundUrl = ref('')
 let backgroundFile = {}
 const showSetBackground = ref(false)

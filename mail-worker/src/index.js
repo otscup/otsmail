@@ -47,6 +47,27 @@ export default {
 			 return await r2Service.publicObjResp({ env }, `attachments/${key}`);
 		 }
 
+		// App 第三方登录回调：IdP 只认网页回调，浏览器会先落登录页下载整包 Vue SPA
+		// (2.05 MB JS + 507 KB CSS) 才由 JS 发出 otsmail://。这里在边缘直接 302，省掉整段 SPA 启动。
+		// 只在 state 末段是「32 位 hex + app」时生效：只有 App 拼这个后缀，网页登录的 state 是纯 hex，
+		// 不会误伤；code/state 由 App 自己校验，服务端只做转发。
+		if (req.method === 'GET' && url.searchParams.has('code')) {
+			const state = url.searchParams.get('state') || '';
+			const nonce = state.split(':').pop();
+			if (/^[0-9a-f]{32}app$/.test(nonce)) {
+				const q = new URLSearchParams({ code: url.searchParams.get('code'), state });
+				const err = url.searchParams.get('error_description') || url.searchParams.get('error');
+				if (err) q.set('error_description', err);
+				return new Response(null, {
+					status: 302,
+					headers: {
+						Location: 'otsmail://oauth/callback?' + q.toString(),
+						'Cache-Control': 'no-store'
+					}
+				});
+			}
+		}
+
 		return webAssetService.fetch(req, env);
 	},
 	email: email,

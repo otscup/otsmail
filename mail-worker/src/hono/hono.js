@@ -53,6 +53,19 @@ app.use('/public/*', async (c, next) => {
 	return next();
 });
 
+app.use('/update/check', async (c, next) => {
+	try {
+		const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+		const key = `update:rate:${ip}:${Math.floor(Date.now() / 60000)}`;
+		const count = Number(await c.env.kv.get(key) || 0);
+		if (count >= 60) return c.json(result.fail('too many requests', 429), 429);
+		await c.env.kv.put(key, String(count + 1), { expirationTtl: 120 });
+	} catch (e) {
+		// 限流故障不阻断更新检查；真正的权限检查在 API 内。
+	}
+	return next();
+});
+
 app.onError(async (err, c) => {
 	if (err.name === 'BizError') {
 		console.log(err.message);

@@ -1840,3 +1840,277 @@ html[data-theme="dark"] .mail-detail .shadow-html {
   margin-left: auto !important;
   margin-right: auto !important;
 }
+
+/* v25: 系统设置/数据分析保持中性系统底色，不跟邮件皮肤染色 */
+:root {
+  --sys-bg: #f2f2f7;
+  --sys-panel: #ffffff;
+  --sys-panel-2: #f7f7fa;
+  --sys-line: #e4e5ea;
+}
+html[data-theme="dark"] {
+  --sys-bg: #15161a;
+  --sys-panel: #1f2127;
+  --sys-panel-2: #292c34;
+  --sys-line: #343741;
+}
+.settings-container,
+.settings-container .card-grid,
+.analysis {
+  --bg-grouped: var(--sys-bg) !important;
+  --bg-secondary: var(--sys-panel) !important;
+  --extra-light-fill: var(--sys-bg) !important;
+  --light-ill: var(--sys-panel-2) !important;
+  --el-bg-color: var(--sys-panel) !important;
+  --el-bg-color-page: var(--sys-bg) !important;
+  --el-fill-color-blank: var(--sys-panel) !important;
+  --el-fill-color-light: var(--sys-panel-2) !important;
+  --el-fill-color-lighter: var(--sys-panel-2) !important;
+  --el-border-color: var(--sys-line) !important;
+  --el-border-color-light: var(--sys-line) !important;
+  --el-border-color-lighter: var(--sys-line) !important;
+  background-color: var(--sys-bg) !important;
+}
+.settings-container .settings-card,
+.analysis .el-card {
+  background-color: var(--sys-panel) !important;
+  border-color: var(--sys-line) !important;
+}
+.settings-tabs {
+  background: var(--sys-panel) !important;
+  border-bottom-color: var(--sys-line) !important;
+}
+html[data-theme] .layout-v2 .main-view:has(.settings-container),
+html[data-theme] .layout-v2 .main-view:has(.analysis),
+html[data-theme] .layout-v2 .settings-container,
+html[data-theme] .layout-v2 .settings-container .card-grid,
+html[data-theme] .layout-v2 .analysis {
+  background: var(--sys-bg) !important;
+}
+html[data-theme] .layout-v2 .settings-container .settings-card,
+html[data-theme] .layout-v2 .settings-container .settings-card .card-content,
+html[data-theme] .layout-v2 .analysis .el-card {
+  background: var(--sys-panel) !important;
+  border-color: var(--sys-line) !important;
+}
+html[data-theme] .layout-v2 .settings-container .settings-card .card-header,
+html[data-theme] .layout-v2 .settings-container .settings-card .card-title,
+html[data-theme] .layout-v2 .settings-container .settings-tabs {
+  background: var(--sys-panel) !important;
+}
+/* 设置页实际根节点是 main-view 下的 .container，不是 .settings-container */
+html[data-theme] .layout-v2 .main-view > .container {
+  background: var(--sys-bg) !important;
+}
+html[data-theme] .layout-v2 .main-box-hide:has(.settings-tabs),
+html[data-theme] .layout-v2 .main-view:has(.settings-tabs) {
+  background: var(--sys-bg) !important;
+}
+html[data-theme] body:has(.settings-tabs),
+html[data-theme] body:has(.analysis),
+html[data-theme] #app:has(.settings-tabs),
+html[data-theme] #app:has(.analysis) {
+  background: var(--sys-bg) !important;
+}
+/* 个人设置（.box）恢复主题色；系统设置(.settings-container)/数据分析保持中性 */
+html[data-theme] body:has(.box > .container),
+html[data-theme] #app:has(.box > .container),
+html[data-theme] .layout-v2 .main-box-hide:has(.box > .container),
+html[data-theme] .layout-v2 .main-view:has(> .box),
+html[data-theme] .layout-v2 .main-view > .box,
+html[data-theme] .layout-v2 .main-view > .box > .container {
+  background: var(--rd-bg) !important;
+}
+html[data-theme] .layout-v2 .main-view > .box .settings-tabs {
+  background: var(--rd-panel) !important;
+  border-bottom-color: var(--rd-line) !important;
+}
+/* 个人设置根节点就是 .box.main-view，不是它的子元素 */
+html[data-theme] .layout-v2 .main-view.box,
+html[data-theme] .layout-v2 .main-view.box > .container {
+  background: var(--rd-bg) !important;
+}
+html[data-theme] .layout-v2 .main-view.box > .container .item,
+html[data-theme] .layout-v2 .main-view.box > .container .card {
+  background: var(--rd-panel) !important;
+  border-color: var(--rd-line) !important;
+}
+html[data-theme] .layout-v2 .main-view.box .settings-tabs {
+  background: var(--rd-panel) !important;
+  border-bottom-color: var(--rd-line) !important;
+}
+/* v26: 所有设置页统一跟随主题；个人设置的条目不再画成独立方框 */
+html[data-theme] body,
+html[data-theme] #app,
+html[data-theme] .layout-v2 .main-box-hide:has(.settings-tabs),
+html[data-theme] .layout-v2 .main-view:has(.settings-tabs),
+html[data-theme] .layout-v2 .main-view > .container,
+html[data-theme] .layout-v2 .settings-container,
+html[data-theme] .settings-container .card-grid,
+html[data-theme] .analysis,
+html[data-theme] .layout-v2 .main-view.box {
+  background: var(--rd-bg) !important;
+}
+html[data-theme] .settings-container .settings-card,
+html[data-theme] .analysis .el-card,
+html[data-theme] .layout-v2 .main-view > .container .card {
+  background: var(--rd-panel) !important;
+  border-color: var(--rd-line) !important;
+}
+html[data-theme] .settings-tabs,
+html[data-theme] .layout-v2 .main-view.box .settings-tabs {
+  background: var(--rd-panel) !important;
+  border-bottom-color: var(--rd-line) !important;
+}
+html[data-theme] .layout-v2 .main-view.box > .container .item,
+html[data-theme] .layout-v2 .main-view.box > .container .card {
+  background: transparent !important;
+  border: 0 !important;
+}
+html[data-theme] .layout-v2 .main-view.box > .container .item {
+  padding-top: 14px !important;
+  padding-bottom: 14px !important;
+}
+/* v27: 设置页统一主题色；个人设置重新排成舒展的平面分组，不再是一行一个盒子 */
+html[data-theme] .settings-container,
+html[data-theme] .analysis,
+html[data-theme] .layout-v2 .main-view > .container {
+  --sys-bg: var(--rd-bg);
+  --sys-panel: var(--rd-panel);
+  --sys-panel-2: var(--rd-panel-2);
+  --sys-line: var(--rd-line);
+  --bg-grouped: var(--rd-bg) !important;
+  --bg-secondary: var(--rd-panel) !important;
+  --extra-light-fill: var(--rd-bg) !important;
+  --light-ill: var(--rd-panel-2) !important;
+  --el-bg-color: var(--rd-panel) !important;
+  --el-bg-color-page: var(--rd-bg) !important;
+  --el-fill-color-blank: var(--rd-panel) !important;
+  --el-fill-color-light: var(--rd-panel-2) !important;
+  --el-fill-color-lighter: var(--rd-panel-2) !important;
+  --el-border-color: var(--rd-line) !important;
+  --el-border-color-light: var(--rd-line) !important;
+  --el-border-color-lighter: var(--rd-line) !important;
+  background: var(--rd-bg) !important;
+}
+html[data-theme] .settings-container .scroll,
+html[data-theme] .settings-container .scroll-body,
+html[data-theme] .settings-container .card-grid,
+html[data-theme] .settings-container .loading,
+html[data-theme] .analysis .scroll,
+html[data-theme] .analysis .scroll-body,
+html[data-theme] .analysis .card-grid {
+  background: var(--rd-bg) !important;
+}
+html[data-theme] .settings-container .settings-card,
+html[data-theme] .analysis .el-card {
+  background: var(--rd-panel) !important;
+  border-color: var(--rd-line) !important;
+}
+html[data-theme] .layout-v2 .main-view.box > .container {
+  border: 1px solid var(--rd-line);
+  border-radius: 16px;
+  padding: 0 24px !important;
+  margin: 12px 20px 16px !important;
+  background: var(--rd-panel) !important;
+}
+html[data-theme] .layout-v2 .main-view.box > .container .title {
+  padding: 20px 0 10px !important;
+  margin: 0 !important;
+  font-size: 15px !important;
+  color: var(--rd-text) !important;
+}
+html[data-theme] .layout-v2 .main-view.box > .container .item {
+  display: grid !important;
+  grid-template-columns: 160px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 18px !important;
+  min-height: 58px !important;
+  padding: 12px 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--rd-line) !important;
+}
+html[data-theme] .layout-v2 .main-view.box > .container .item:last-child {
+  border-bottom: 0 !important;
+}
+html[data-theme] .layout-v2 .main-view.box > .container .item.wide {
+  display: block !important;
+  padding: 16px 0 18px !important;
+}
+html[data-theme] .layout-v2 .main-view.box > .container .item > div:first-child {
+  color: var(--rd-muted) !important;
+  font-size: 13px !important;
+}
+html[data-theme] .layout-v2 .main-view.box .settings-tabs {
+  background: var(--rd-panel) !important;
+  border-bottom-color: var(--rd-line) !important;
+}
+html[data-theme] .layout-v2 .main-view > .container .item,
+html[data-theme] .layout-v2 .main-view > .container .card,
+html[data-theme] .layout-v2 .main-view > .container .settings-card {
+  background: var(--sys-panel) !important;
+  border-color: var(--sys-line) !important;
+}
+/* 注册码页单独收口：这个页面根节点不是 settings-container，仍会吃到旧的 extra-light-fill */
+html[data-theme] .reg-key {
+  --extra-light-fill: var(--rd-bg);
+  --el-bg-color: var(--rd-panel);
+  --el-border-color: var(--rd-line);
+  background: var(--rd-bg) !important;
+}
+html[data-theme] .reg-key .scrollbar,
+html[data-theme] .reg-key .el-scrollbar__view {
+  background: var(--rd-bg) !important;
+}
+html[data-theme] .reg-key .code-item {
+  background: var(--rd-panel) !important;
+  border-color: var(--rd-line) !important;
+}
+.version-card {
+  width: 100%;
+  max-width: none;
+  margin-top: 16px;
+}
+.version-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.version-line strong {
+  color: var(--rd-text);
+  font-size: 15px;
+}
+.version-line span,
+.version-muted {
+  color: var(--rd-muted);
+  font-size: 12px;
+}
+.version-result {
+  color: var(--rd-text);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.version-result a {
+  margin-left: 6px;
+  color: var(--rd-accent);
+}
+.version-error {
+  color: var(--el-color-danger);
+}
+.version-ok {
+  color: var(--rd-accent-2);
+}
+.version-notes {
+  max-height: 180px;
+  margin: 10px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--rd-line);
+  border-radius: 8px;
+  background: var(--rd-bg);
+  color: var(--rd-muted);
+  font: inherit;
+  white-space: pre-wrap;
+}
