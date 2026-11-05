@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.67-2454d6" alt="version" />
+  <img src="https://img.shields.io/badge/version-0.1.68-2454d6" alt="version" />
   <img src="https://img.shields.io/badge/license-MIT-green" alt="license" />
   <img src="https://img.shields.io/badge/platform-Cloudflare%20Workers-orange" alt="platform" />
   <img src="https://img.shields.io/badge/frontend-Vue%203-42b883" alt="Vue" />
