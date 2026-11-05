@@ -30,6 +30,7 @@ const requirePerms = [
 	'/email/schedule',
 	'/email/retry',
 	'/email/delete',
+	'/email/clearDeleted',
 	'/account/list',
 	'/account/delete',
 	'/account/add',
@@ -76,7 +77,7 @@ const requirePerms = [
 ];
 
 const premKey = {
-	'email:delete': ['/email/delete'],
+	'email:delete': ['/email/delete', '/email/clearDeleted'],
 	'email:send': ['/email/send', '/email/schedule', '/email/retry'],
 	'account:add': ['/account/add'],
 	'account:query': ['/account/list'],

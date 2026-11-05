@@ -1184,10 +1184,10 @@ body.compose-ai-open .write-box { width: min(700px, calc(100vw - 420px)) !import
 html[data-theme="dark"] .send .write-box,
 html[data-theme="dark"] .send .write-box .container,
 html[data-theme="dark"] .send .write-box .header,
-html[data-theme="dark"] .send .write-box .footer { background: #111a2e !important; color: var(--rd-text) !important; }
+html[data-theme="dark"] .send .write-box .footer { background: var(--rd-panel) !important; color: var(--rd-text) !important; }
 html[data-theme="dark"] .send .write-box .title,
 html[data-theme="dark"] .send .write-box .subject,
-html[data-theme="dark"] .send .write-box .editor-box { background: #111a2e !important; color: var(--rd-text) !important; }
+html[data-theme="dark"] .send .write-box .editor-box { background: var(--rd-panel-2) !important; color: var(--rd-text) !important; }
 @media (max-width: 1024px) {
   .mail-detail { height: 100%; min-height: 0; overflow: hidden; }
   .mail-detail .scrollbar { height: 100%; min-height: 0; }
@@ -1230,6 +1230,9 @@ html[data-theme="dark"] .mail-detail .email-text {
 
 html[data-theme="dark"] .mail-detail .shadow-html {
   color: var(--rd-text) !important;
+}
+html[data-theme="dark"] .layout-v2 .brand-logo {
+  color: var(--rd-bg) !important;
 }
 
 
@@ -1308,11 +1311,20 @@ html[data-theme="dark"] .send .tox .tox-toolbar__primary,
 html[data-theme="dark"] .send .tox .tox-menubar,
 html[data-theme="dark"] .send .tox .tox-statusbar,
 html[data-theme="dark"] .send .tox .tox-edit-area {
-  background: #111a2e !important;
-  color: #e5e7eb !important;
+  background: var(--rd-panel-2) !important;
+  color: var(--rd-text) !important;
 }
 html[data-theme="dark"] .send .tox .tox-tbtn {
-  color: #cbd5e1 !important;
+  color: var(--rd-text) !important;
+  background: transparent !important;
+}
+html[data-theme="dark"] .send .tox .tox-tbtn:hover {
+  background: var(--rd-panel) !important;
+}
+html[data-theme="dark"] .send .tox .tox-tbtn--select,
+html[data-theme="dark"] .send .tox .tox-tbtn--enabled,
+html[data-theme="dark"] .send .tox .tox-tbtn[aria-pressed="true"] {
+  background: var(--rd-panel-2) !important;
 }
 
 
@@ -1323,7 +1335,7 @@ html[data-theme="dark"] .send .compose-account .el-select__wrapper {
   color: var(--rd-text) !important;
 }
 html[data-theme="dark"] .send .tox .tox-tbtn svg {
-  fill: #cbd5e1 !important;
+  fill: var(--rd-text) !important;
 }
 
 
@@ -1530,4 +1542,301 @@ html[data-theme="dark"] .layout-v2 .compose-btn { color: #06111d !important; }
 .layout-v2 .email-container .email-row.is-unread .email-sender .name::before { content: none !important; display: none !important; }
 @media (max-width: 767px) {
   .header .header-ai { display: none !important; }
+}
+
+/* v18: keep badges from squeezing menu labels; align mail rows from one left edge */
+.layout-v2 .aside,
+.layout-v2 .aside .el-menu,
+.layout-v2 .aside .el-menu--vertical {
+  background: var(--rd-bg) !important;
+}
+.layout-v2 .aside .el-menu-item {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+.layout-v2 .aside .el-menu-item .menu-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 21px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.layout-v2 .aside .el-menu-item .menu-badge {
+  flex: 0 0 auto;
+  max-width: none !important;
+  white-space: nowrap;
+}
+.layout-v2 .email-container .email-row,
+.layout-v2 .email-container .email-row.deleted,
+.layout-v2 .email-container .email-row.inbox,
+.layout-v2 .email-container .email-row.unread,
+.layout-v2 .email-container .email-row.spam {
+  background: var(--rd-panel) !important;
+  text-align: left !important;
+}
+.layout-v2 .email-container .email-row .title {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: center !important;
+  min-width: 0 !important;
+  text-align: left !important;
+}
+.layout-v2 .email-container .email-row .email-sender,
+.layout-v2 .email-container .email-row .email-text {
+  width: 100% !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  text-align: left !important;
+}
+.layout-v2 .email-container .email-row .email-subject,
+.layout-v2 .email-container .email-row .subject-text,
+.layout-v2 .email-container .email-row .email-content {
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  text-align: left !important;
+}
+.layout-v2 .email-container .email-row .email-status {
+  display: none !important;
+}
+
+/* v17: one search chrome, skin-aware hover, and non-black settings/detail surfaces */
+html[data-theme="dark"][data-skin] {
+  --bg-grouped: var(--rd-bg);
+  --bg-secondary: var(--rd-panel);
+  --fill-tertiary: var(--rd-panel-2);
+  --separator: var(--rd-line);
+  --separator-opaque: var(--rd-line-strong);
+  --label: var(--rd-text);
+  --label-2: var(--rd-muted);
+  /* 旧页面用的是 style.css 的浅色变量，暗色下会变成 #191919/黑块。 */
+  --extra-light-fill: var(--rd-bg);
+  --light-ill: var(--rd-panel-2);
+  --loadding-background: color-mix(in srgb, var(--rd-bg) 82%, transparent);
+  --el-bg-color: var(--rd-panel);
+  --el-bg-color-page: var(--rd-bg);
+  --el-fill-color-blank: var(--rd-panel);
+  --el-fill-color-light: var(--rd-panel-2);
+  --el-fill-color-lighter: var(--rd-panel-2);
+  --el-border-color: var(--rd-line);
+  --el-border-color-light: var(--rd-line);
+  --el-border-color-lighter: var(--rd-line);
+  --el-text-color-primary: var(--rd-text);
+  --el-text-color-regular: var(--rd-text);
+}
+html[data-theme="dark"] .settings-container,
+html[data-theme="dark"] .settings-container .card-grid {
+  background-color: var(--rd-bg) !important;
+}
+html[data-theme="dark"] .settings-container .settings-card {
+  background-color: var(--rd-panel) !important;
+}
+.layout-v2 .header .email-search.header-mail-search,
+.layout-v2 .header .email-search.header-mail-search:focus-within {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  height: 38px !important;
+}
+.layout-v2 .header .header-mail-search .search-input-wrap {
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  overflow: hidden;
+}
+.layout-v2 .header .header-mail-search .search-input {
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+.layout-v2 .header .writer-box,
+.layout-v2 .compose-btn {
+  background: var(--rd-accent) !important;
+  background-image: none !important;
+}
+.layout-v2 .header .writer-box:hover,
+.layout-v2 .compose-btn:hover {
+  background: color-mix(in srgb, var(--rd-accent) 82%, #000) !important;
+  filter: none !important;
+}
+.empty-primary:hover {
+  background: color-mix(in srgb, var(--rd-accent) 82%, #000) !important;
+  border-color: color-mix(in srgb, var(--rd-accent) 82%, #000) !important;
+}
+html[data-theme="dark"] .mail-detail .content-box {
+  background: var(--rd-panel) !important;
+}
+html[data-theme="dark"] .mail-detail .email-text {
+  background: var(--rd-panel-2) !important;
+  color: var(--rd-text) !important;
+}
+html[data-theme="dark"] .mail-detail .shadow-html {
+  color: var(--rd-text) !important;
+}
+html[data-theme="dark"] .layout-v2 .brand-logo {
+  color: var(--rd-bg) !important;
+}
+
+/* v18: round the detail canvas so it meets the rounded toolbar cleanly */
+.layout-v2 .mail-detail .content-box {
+  border-radius: 16px !important;
+  margin-top: 10px;
+  overflow: hidden;
+}
+.layout-v2 .mail-detail .content {
+  padding-top: 8px;
+}
+
+/* v19: list and reader sit flush to the top/left edge */
+.layout-v2 .main-box-hide:has(> .main-view > .mail-split),
+.layout-v2 .main-box-hide:has(> .main-view > .mailbox-page),
+.layout-v2 .main-box-hide:has(> .mail-split),
+.layout-v2 .main-box-hide:has(> .mailbox-page) {
+  padding: 0 !important;
+  overflow: hidden;
+}
+.layout-v2 .mail-split,
+.layout-v2 .mailbox-page {
+  margin: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+}
+.layout-v2 .mailbox-list {
+  border-left: 0 !important;
+  border-radius: 0 !important;
+}
+.layout-v2 .mail-split .mail-detail,
+.layout-v2 .mailbox-reader {
+  height: 100% !important;
+  border-radius: 0 !important;
+}
+.layout-v2 .mail-split .mail-detail .container,
+.layout-v2 .mailbox-reader .container {
+  max-width: none !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 20px 30px 44px !important;
+}
+.layout-v2 .mail-split .split-empty {
+  padding: 42px clamp(24px, 4vw, 64px) !important;
+}
+
+/* v20: the skin must reach the chrome, not just the page background */
+.layout-v2 .aside,
+.layout-v2 .aside .el-menu,
+.layout-v2 .aside .side-footer {
+  background: var(--rd-bg) !important;
+}
+.layout-v2 .aside .el-menu-item:hover {
+  background: var(--rd-panel-2) !important;
+}
+.layout-v2 .aside .el-menu-item.choose-item {
+  background: color-mix(in srgb, var(--rd-accent) 12%, var(--rd-bg)) !important;
+}
+/* v21: the scroll view below Starred must use the same skin surface as the menu. */
+.layout-v2 .aside .el-scrollbar,
+.layout-v2 .aside .el-scrollbar__wrap,
+.layout-v2 .aside .el-scrollbar__view,
+.layout-v2 .aside .el-menu,
+.layout-v2 .aside .el-menu--vertical {
+  background: var(--rd-bg) !important;
+}
+.layout-v2 .aside .el-menu {
+  padding-bottom: 0 !important;
+}
+.layout-v2 .email-container,
+.layout-v2 .email-container .scroll,
+.layout-v2 .email-container .mail-categories,
+.layout-v2 .email-container .header-actions {
+  background: var(--rd-bg) !important;
+}
+.layout-v2 .email-container .email-row {
+  background: transparent !important;
+}
+.layout-v2 .email-container .email-row:hover {
+  background: var(--rd-panel-2) !important;
+}
+.layout-v2 .email-container .email-row.is-unread {
+  background: color-mix(in srgb, var(--rd-accent) 6%, var(--rd-bg)) !important;
+}
+.mailbox-page .mailbox-list {
+  background: var(--rd-bg) !important;
+}
+
+/* v22: same read/unread language in every folder + no white flash while switching */
+.layout-v2 .email-container,
+.layout-v2 .email-container .scroll,
+.layout-v2 .email-container .virtual,
+.layout-v2 .email-container .virtual > div,
+.layout-v2 .mailbox-page,
+.layout-v2 .mailbox-page .mailbox-list {
+  background: var(--rd-bg) !important;
+}
+.layout-v2 .email-container .email-row,
+.layout-v2 .email-container .email-row.unread,
+.layout-v2 .email-container .email-row.spam,
+.layout-v2 .email-container .email-row.deleted {
+  background: color-mix(in srgb, var(--rd-accent) 2%, var(--rd-bg)) !important;
+}
+.layout-v2 .email-container .email-row:hover {
+  background: var(--rd-panel-2) !important;
+}
+.layout-v2 .email-container .email-row.is-unread {
+  background: color-mix(in srgb, var(--rd-accent) 10%, var(--rd-bg)) !important;
+}
+/* v23: unread is communicated by the dot only; keep the row surface stable. */
+.layout-v2 .email-container .email-row:not(.is-checked),
+.layout-v2 .email-container .email-row.unread:not(.is-checked),
+.layout-v2 .email-container .email-row.spam:not(.is-checked),
+.layout-v2 .email-container .email-row.deleted:not(.is-checked),
+.layout-v2 .email-container .email-row.is-unread:not(.is-checked) {
+  background: var(--rd-bg) !important;
+}
+.layout-v2 .email-container .email-row:hover:not(.is-checked) {
+  background: var(--rd-panel-2) !important;
+}
+@keyframes otsmail-unread-breathe {
+  0%, 100% { opacity: .45; transform: scale(.82); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+.layout-v2 .email-container .email-row .unread {
+  animation: otsmail-unread-breathe 3.2s ease-in-out infinite;
+  transform-origin: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .layout-v2 .email-container .email-row .unread { animation: none; opacity: 1; transform: none; }
+}
+
+/* v24: the reader is one surface; mail body has no white inner card. */
+.layout-v2 .mail-detail .shadow-html,
+.layout-v2 .mail-detail .email-text,
+html[data-theme="dark"] .mail-detail .email-text,
+html[data-theme="dark"] .mail-detail .shadow-html {
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.layout-v2 .mail-detail .shadow-html * {
+  background-color: transparent !important;
+}
+
+/* v25: center the reading column inside a wide reader pane. */
+.layout-v2 .mail-split .mail-detail .container,
+.layout-v2 .mailbox-reader .container {
+  width: 100% !important;
+  max-width: 880px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+.layout-v2 .mail-detail .shadow-html,
+.layout-v2 .mail-detail .email-text {
+  max-width: 760px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
 }

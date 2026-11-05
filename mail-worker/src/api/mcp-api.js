@@ -67,6 +67,16 @@ app.post('/mcp/token/create', async (c) => {
 	return c.json(result.ok(data));
 });
 
+app.post('/mcp/token/rotate', async (c) => {
+	const data = await mcpService.rotateToken(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok(data));
+});
+
+app.post('/mcp/token/delete', async (c) => {
+	await mcpService.deleteToken(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok(null));
+});
+
 app.post('/mcp/token/revoke', async (c) => {
 	await mcpService.revokeToken(c, await c.req.json(), userContext.getUserId(c));
 	return c.json(result.ok(null));
@@ -80,6 +90,11 @@ app.get('/mcp/client/list', async (c) => {
 app.post('/mcp/client/create', async (c) => {
 	const data = await mcpService.createClient(c, await c.req.json(), userContext.getUserId(c));
 	return c.json(result.ok(data));
+});
+
+app.post('/mcp/client/delete', async (c) => {
+	await mcpService.deleteClient(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok(null));
 });
 
 app.post('/mcp/client/revoke', async (c) => {

@@ -151,3 +151,8 @@ app.delete('/email/physicsDelete', async (c) => {
 	return c.json(result.ok());
 })
 
+app.delete('/email/clearDeleted', async (c) => {
+	const total = await emailService.clearDeleted(c, userContext.getUserId(c));
+	return c.json(result.ok({ total }));
+})
+

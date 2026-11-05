@@ -36,6 +36,16 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
     node.setAttribute('target', '_blank')
     node.setAttribute('rel', 'noopener noreferrer')
   }
+  // 邮件里的 style/color 经常把白色文字写死；主题色必须优先。
+  if (node.hasAttribute('style')) {
+    const cleaned = node.getAttribute('style')
+      .replace(/(?:^|;)\s*(?:color|background(?:-color|-image)?)\s*:[^;]*/gi, '')
+      .trim()
+    if (cleaned) node.setAttribute('style', cleaned)
+    else node.removeAttribute('style')
+  }
+  node.removeAttribute('bgcolor')
+  if (node.tagName === 'FONT') node.removeAttribute('color')
 })
 
 const PURIFY_CONFIG = {
@@ -54,6 +64,7 @@ function sanitizeInlineStyle(style) {
   if (!style) return ''
   return style
     .replace(/[<>{}@;]/g, ' ')
+    .replace(/(?:^|\s)(?:color|background(?:-color|-image)?)\s*:[^;]*/gi, '')
     .replace(/url\s*\(/gi, 'none(')
     .replace(/expression\s*\(/gi, 'none(')
     .slice(0, 500)
@@ -107,27 +118,42 @@ function updateContent() {
       }
 
       :host(.is-dark) .shadow-content {
-        background: #111A2E !important;
-        color: #E5E7EB !important;
+        background: transparent !important;
+        color: var(--rd-text, #E5E7EB) !important;
       }
 
       :host(.is-dark) .shadow-content * {
-        color: #E5E7EB !important;
+        color: var(--rd-text, #E5E7EB) !important;
         background-color: transparent !important;
         border-color: rgba(148, 163, 184, .28) !important;
       }
 
       :host(.is-dark) a {
-        color: #67E8F9 !important;
+        color: var(--rd-accent, #67E8F9) !important;
       }
 
       .shadow-content {
-        background: #FFFFFF !important;
-        color: #13181D !important;
+        background: transparent !important;
+        color: var(--rd-text, #13181D) !important;
         width: fit-content;
         height: fit-content;
         min-width: 100%;
         ${bodyStyle ? bodyStyle : ''} /* 注入 body 的 style */
+      }
+
+      /* 邮件自带的白色/浅色文字在白底或皮肤深色底上都要服从当前主题。 */
+      .shadow-content *:not(a) {
+        color: var(--rd-text, #13181D) !important;
+        background-color: transparent !important;
+      }
+
+      .shadow-content a {
+        color: var(--rd-accent, #2454d6) !important;
+      }
+
+      :host(.is-dark) .shadow-content {
+        background: transparent !important;
+        color: var(--rd-text, #E5E7EB) !important;
       }
 
       img:not(table img) {

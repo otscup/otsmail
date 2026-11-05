@@ -65,14 +65,31 @@ const mcpService = {
 		return rows.map(publicToken);
 	},
 
-	async revokeToken(c, params, userId) {
+	async deleteToken(c, params, userId) {
 		const tokenId = Number(params?.tokenId);
 		if (!tokenId) throw new BizError('令牌不存在');
 		const row = await orm(c).select().from(mcpToken)
 			.where(and(eq(mcpToken.tokenId, tokenId), eq(mcpToken.userId, userId)))
 			.get();
 		if (!row) throw new BizError('令牌不存在');
-		await orm(c).update(mcpToken).set({ revoked: 1 }).where(eq(mcpToken.tokenId, tokenId)).run();
+		await orm(c).delete(mcpToken).where(eq(mcpToken.tokenId, tokenId)).run();
+	},
+
+	/** 轮换：删掉旧令牌并生成同名的全新令牌；旧令牌立即失效，新明文只返回一次。 */
+	async rotateToken(c, params, userId) {
+		const tokenId = Number(params?.tokenId);
+		if (!tokenId) throw new BizError('令牌不存在');
+		const row = await orm(c).select().from(mcpToken)
+			.where(and(eq(mcpToken.tokenId, tokenId), eq(mcpToken.userId, userId)))
+			.get();
+		if (!row) throw new BizError('令牌不存在');
+		await orm(c).delete(mcpToken).where(eq(mcpToken.tokenId, tokenId)).run();
+		return this.createToken(c, { name: row.name }, userId);
+	},
+
+	/** 兼容旧接口：吊销即删除，不再留下无法使用的 revoked 行。 */
+	async revokeToken(c, params, userId) {
+		return this.deleteToken(c, params, userId);
 	},
 
 	/** security.js 用：Bearer 是 mcp_ 令牌则校验并刷新 lastUsedAt，返回 { userId } 或 null */
@@ -136,18 +153,22 @@ const mcpService = {
 		}));
 	},
 
-	async revokeClient(c, params, userId) {
+	async deleteClient(c, params, userId) {
 		const clientId = String(params?.clientId || '');
 		if (!clientId) throw new BizError('客户端不存在');
 		const row = await orm(c).select().from(mcpClient)
 			.where(and(eq(mcpClient.clientId, clientId), eq(mcpClient.userId, userId)))
 			.get();
 		if (!row) throw new BizError('客户端不存在');
-		await orm(c).update(mcpClient).set({ revoked: 1 }).where(eq(mcpClient.clientId, clientId)).run();
-		// 同步吊销该客户端已签发的令牌，否则旧 token 仍可用
-		await orm(c).update(mcpToken).set({ revoked: 1 })
+		// 先删该客户端的令牌，客户端本身删掉后旧 token 也无法再换发。
+		await orm(c).delete(mcpToken)
 			.where(and(eq(mcpToken.clientId, clientId), eq(mcpToken.userId, userId)))
 			.run();
+		await orm(c).delete(mcpClient).where(eq(mcpClient.clientId, clientId)).run();
+	},
+
+	async revokeClient(c, params, userId) {
+		return this.deleteClient(c, params, userId);
 	},
 
 	/** OAuth client_credentials：凭据对则签发 mcp 令牌，不对返回 null（由 api 层回 RFC 错误） */
@@ -163,8 +184,8 @@ const mcpService = {
 		const hash = await sha256Hex(clientSecret);
 		if (!cryptoUtils.timingSafeEqual(hash, row.clientSecretHash)) return null;
 
-		// 同一 client 只保留最新 token，避免每小时换发后旧 token 继续有效、无限累积。
-		await orm(c).update(mcpToken).set({ revoked: 1 })
+		// 同一 client 只保留最新 token，旧 token 直接删掉而不是留 revoked 行。
+		await orm(c).delete(mcpToken)
 			.where(and(eq(mcpToken.clientId, clientId), eq(mcpToken.userId, row.userId)))
 			.run();
 		const secret = randomHex(24);

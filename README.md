@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.41-2454d6" alt="version" />
+  <img src="https://img.shields.io/badge/version-0.1.67-2454d6" alt="version" />
   <img src="https://img.shields.io/badge/license-MIT-green" alt="license" />
   <img src="https://img.shields.io/badge/platform-Cloudflare%20Workers-orange" alt="platform" />
   <img src="https://img.shields.io/badge/frontend-Vue%203-42b883" alt="Vue" />
@@ -45,6 +45,23 @@
   <tr>
     <td align="center"><b>Fresh</b> · 清晨薄荷</td>
     <td align="center"><b>Gala</b> · 午夜歌剧</td>
+  </tr>
+</table>
+
+## 个人外观主题
+
+登录后可在 **个人设置 → 个人外观** 切换 Paper / Fresh / Gala；选择会同步到账号，并同时应用到收件箱、阅读器和登录页。浏览器不支持 `color-mix()` 时回退到 Paper。
+
+<table>
+  <tr>
+    <td width="33.33%"><img src="doc/demo/theme-paper-2026-11.png" alt="Paper 主题" /></td>
+    <td width="33.33%"><img src="doc/demo/theme-fresh-2026-11.png" alt="Fresh 主题" /></td>
+    <td width="33.33%"><img src="doc/demo/theme-gala-2026-11.png" alt="Gala 主题" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Paper</b> · 冷纸与靛蓝</td>
+    <td align="center"><b>Fresh</b> · 薄荷与松绿</td>
+    <td align="center"><b>Gala</b> · 酒红与香槟</td>
   </tr>
 </table>
 

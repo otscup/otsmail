@@ -1161,8 +1161,8 @@ const handleDelete = () => {
 
 .email-info { display:flex !important; gap:13px; align-items:flex-start; flex-wrap:wrap; }
 .email-info-main { flex:1 1 280px; min-width:0; }
-.reader-avatar { flex:0 0 48px; width:48px; height:48px; padding:2px; border-radius:50%; background:conic-gradient(from 210deg,#6ee7ff,#7c7bff,#d56bff,#6ee7ff); box-shadow:0 0 0 1px var(--rd-panel),0 0 18px rgba(124,123,255,.20); }
-.reader-avatar > span { width:100%; height:100%; display:grid; place-items:center; border-radius:50%; background:var(--rd-panel); color:var(--rd-text); font-size:13px; font-weight:750; }
+.reader-avatar { flex:0 0 48px; width:48px; height:48px; padding:2px; border-radius:50%; background:var(--rd-accent-weak); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--rd-accent) 38%,transparent); }
+.reader-avatar > span { width:100%; height:100%; display:grid; place-items:center; border-radius:50%; background:var(--rd-panel); color:var(--rd-accent); font-size:13px; font-weight:750; }
 .reader-summary-btn { height:30px; padding:0 11px; border:1px solid var(--rd-line); border-radius:9px; background:var(--rd-panel); color:var(--rd-text); display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:650; cursor:pointer; }
 .reader-summary-btn:hover,.reader-summary-btn.active { background:var(--rd-accent-weak); border-color:var(--rd-accent); color:var(--rd-accent); }
 .ai-summary-card { margin: 0 0 18px; padding: 14px 16px; border:1px solid color-mix(in srgb, var(--rd-accent) 28%, var(--rd-line)); border-radius:13px; background:linear-gradient(135deg, color-mix(in srgb, var(--rd-accent) 8%, var(--rd-panel)), var(--rd-panel)); }

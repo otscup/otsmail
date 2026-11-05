@@ -16,6 +16,7 @@
                  :email-unread="emailUnread"
                  :show-search="true"
                  :show-unread="true"
+                 :type="mailbox"
                  actionLeft="4px"
                  @jump="jumpContent">
       <template #subject="row">
@@ -219,14 +220,38 @@ async function deleteForever(email) {
   white-space: nowrap;
 }
 
-.row-actions {
-  flex: 0 0 auto;
+/* 行内恢复/删除不参与主题行排版，悬停时浮在右侧，避免把标题挤歪。 */
+.mailbox-page :deep(.row-actions) {
+  position: absolute;
+  top: 7px;
+  right: 12px;
+  z-index: 3;
   display: inline-flex;
   gap: 6px;
-  margin-left: auto;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s ease;
 }
 
-.row-btn {
+.mailbox-page :deep(.email-row) {
+  position: relative;
+}
+
+.mailbox-page :deep(.email-row:hover .row-actions) {
+  opacity: 1;
+  pointer-events: auto;
+}
+.mailbox-page :deep(.email-row.deleted:hover .phone-time),
+.mailbox-page :deep(.email-row.deleted:hover .row-markers) {
+  opacity: 0;
+}
+
+.mailbox-page :deep(.email-row.deleted .email-actions) {
+  display: none !important;
+}
+
+.mailbox-page :deep(.row-btn) {
   height: 26px;
   padding: 0 var(--space-2, 8px);
   border: 0.5px solid var(--separator, rgba(60, 60, 67, 0.29));
@@ -238,11 +263,11 @@ async function deleteForever(email) {
   cursor: pointer;
 }
 
-.row-btn:hover {
+.mailbox-page :deep(.row-btn:hover) {
   background: var(--fill-quaternary, rgba(116, 116, 128, 0.08));
 }
 
-.row-btn.danger {
+.mailbox-page :deep(.row-btn.danger) {
   color: #ff3b30;
 }
 </style>

@@ -16,6 +16,14 @@ export function tokenRevoke(tokenId) {
     return http.post('/mcp/token/revoke', {tokenId})
 }
 
+export function tokenRotate(tokenId) {
+    return http.post('/mcp/token/rotate', {tokenId})
+}
+
+export function tokenDelete(tokenId) {
+    return http.post('/mcp/token/delete', {tokenId})
+}
+
 export function clientList() {
     return http.get('/mcp/client/list')
 }
@@ -26,4 +34,8 @@ export function clientCreate(form) {
 
 export function clientRevoke(clientId) {
     return http.post('/mcp/client/revoke', {clientId})
+}
+
+export function clientDelete(clientId) {
+    return http.post('/mcp/client/delete', {clientId})
 }

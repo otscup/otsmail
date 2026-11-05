@@ -24,5 +24,7 @@ export function applySkin(skin = getStoredSkin(), persist = true) {
   const id = HOME_SKINS.some(item => item.id === skin) ? skin : DEFAULT_HOME_SKIN
   if (persist) localStorage.setItem(STORAGE_KEY, id)
   document.documentElement.dataset.skin = id
+  // 弹层里的 TinyMCE iframe 不会跟随 CSS 变量重绘，需要这个事件同步刷新。
+  window.dispatchEvent(new CustomEvent('otsmail:skin', { detail: { skin: id } }))
   return id
 }

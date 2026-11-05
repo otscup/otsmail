@@ -294,7 +294,7 @@ function getEmailList(emailId, size, category, page) {
 .empty-actions button:active { transform: translateY(1px); }
 .empty-actions button:focus-visible { outline: 2px solid var(--rd-accent); outline-offset: 2px; }
 .empty-primary { color: #fff; background: var(--rd-accent); border: 1px solid var(--rd-accent); box-shadow: 0 8px 20px rgba(36, 84, 214, .18); }
-.empty-primary:hover { background: #1e46b8; border-color: #1e46b8; }
+.empty-primary:hover { background: color-mix(in srgb, var(--rd-accent) 82%, #000); border-color: color-mix(in srgb, var(--rd-accent) 82%, #000); }
 .empty-secondary { color: var(--rd-text); background: var(--rd-panel); border: 1px solid var(--rd-line-strong); }
 .empty-secondary:hover { background: var(--rd-panel-2); }
 .empty-actions kbd {

@@ -90,6 +90,10 @@ export function emailPhysicsDelete(emailId) {
     return http.delete('/email/physicsDelete?emailId=' + emailId)
 }
 
+export function emailClearDeleted() {
+    return http.delete('/email/clearDeleted')
+}
+
 export function emailSend(form,progress) {
     return http.post('/email/send', form,{
         onUploadProgress: (e) => {

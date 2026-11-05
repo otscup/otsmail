@@ -41,7 +41,7 @@
                       :class="route.meta.name === 'unread' ? 'choose-item' : ''">
           <Icon icon="mdi:email-open-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 21px">{{ $t('unreadList') }}</span>
-          <span class="menu-badge" v-if="counts.inbox">{{ counts.inbox }}</span>
+          <span class="menu-badge" v-if="counts.unread">{{ counts.unread }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'spam'})" index="spam"
                       :class="route.meta.name === 'spam' ? 'choose-item' : ''">
@@ -59,6 +59,7 @@
                       :class="route.meta.name === 'send' ? 'choose-item' : ''">
           <Icon icon="cil:send" width="20" height="20" />
           <span class="menu-name" style="margin-left: 21px">{{ $t('sent') }}</span>
+          <span class="menu-badge" v-if="counts.sent">{{ counts.sent }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'draft'})" index="draft" v-perm="'email:send'"
                       :class="route.meta.name === 'draft' ? 'choose-item' : ''">
@@ -74,6 +75,7 @@
                       :class="route.meta.name === 'star' ? 'choose-item' : ''">
           <Icon icon="solar:star-line-duotone" width="20" height="20" />
           <span class="menu-name" style="margin-left: 21px">{{ $t('starred') }}</span>
+          <span class="menu-badge" v-if="counts.starred">{{ counts.starred }}</span>
         </el-menu-item>
       </el-menu>
     </div>
@@ -124,10 +126,12 @@ import {logout} from "@/request/login.js";
 import {clearToken} from "@/utils/token-store.js";
 import {startEmailEvents, stopEmailEvents} from "@/utils/email-events.js";
 import {notifyNewEmail} from "@/utils/notify.js";
+import {useAccountStore} from "@/store/account.js";
 
 const settingStore = useSettingStore();
 const uiStore = useUiStore();
 const userStore = useUserStore();
+const accountStore = useAccountStore();
 const userInitial = computed(() => String(userStore.user.name || userStore.user.email || 'O').trim().charAt(0).toUpperCase());
 const loggingOut = ref(false)
 async function sideUserCommand(command) {
@@ -140,7 +144,7 @@ async function sideUserCommand(command) {
 function openCompose(){ uiStore.writerRef?.open?.() }
 function openHelp(){ window.open('https://github.com/otscup/otsmail','_blank','noopener,noreferrer') }
 const route = useRoute();
-const counts = reactive({inbox: 0, sent: 0, deleted: 0, spam: 0, drafts: 0});
+const counts = reactive({inbox: 0, unread: 0, sent: 0, deleted: 0, spam: 0, starred: 0, drafts: 0});
 let countTimer = null;
 const countRefreshMs = computed(() => Math.max(1, Number(settingStore.settings.countRefreshMinutes) || 10) * 60000);
 let lastCountsAt = 0; // local throttle: route changes within 30s reuse the last badge snapshot
@@ -155,7 +159,7 @@ async function loadCounts(force = false) {
   if (!force && Date.now() - lastCountsAt < 30000) return;
   lastCountsAt = Date.now();
   try {
-    const data = await emailCounts(force);
+    const data = await emailCounts(force, accountStore.currentAccountId, Boolean(accountStore.currentAccount?.allReceive));
     Object.assign(counts, data.menu);
   } catch {}
   try {
@@ -182,6 +186,8 @@ onUnmounted(() => {
 });
 
 watch(() => route.name, () => loadCounts());
+watch(() => accountStore.currentAccountId, () => loadCounts(true));
+watch(() => accountStore.currentAccount?.allReceive, () => loadCounts(true));
 watch(countRefreshMs, value => {
   clearInterval(countTimer);
   countTimer = setInterval(loadCounts, value);

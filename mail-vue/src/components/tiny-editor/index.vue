@@ -44,9 +44,11 @@ const settingStore = useSettingStore();
 
 onMounted(() => {
   initTinyMCE();
+  window.addEventListener('otsmail:skin', applyEditorTheme);
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener('otsmail:skin', applyEditorTheme);
   destroyEditor();
 });
 
@@ -88,7 +90,38 @@ function initTinyMCE() {
   }
 }
 
+function editorTheme() {
+  // iframe 里读不到父页面的 CSS 变量，按当前皮肤算一次固定色。
+  const style = getComputedStyle(document.documentElement);
+  const pick = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
+  return {
+    panel: pick('--rd-panel-2', uiStore.dark ? '#111a2e' : '#ffffff'),
+    quote: pick('--rd-panel', uiStore.dark ? '#0b111d' : '#f5f6f7'),
+    text: pick('--rd-text', uiStore.dark ? '#e5e7eb' : '#13181d'),
+    border: pick('--rd-line', uiStore.dark ? '#334155' : '#cccccc')
+  };
+}
+
+function applyEditorTheme() {
+  const ed = editor.value;
+  const body = ed?.getBody?.();
+  const doc = ed?.getDoc?.();
+  if (!body || !doc) return;
+  const theme = editorTheme();
+  body.style.setProperty('background', theme.panel, 'important');
+  body.style.setProperty('color', theme.text, 'important');
+  let tag = doc.getElementById('rd-skin-theme');
+  if (!tag) {
+    tag = doc.createElement('style');
+    tag.id = 'rd-skin-theme';
+    doc.head.appendChild(tag);
+  }
+  tag.textContent = `html,body,.mce-content-body{background:${theme.panel}!important;color:${theme.text}!important}
+    blockquote,blockquote *{background:${theme.quote}!important;color:${theme.text}!important;border-color:${theme.border}!important}`;
+}
+
 function initEditor() {
+  const theme = editorTheme();
   window.tinymce.init({
     selector: `#${props.editorId}`,
     statusbar: false,
@@ -100,17 +133,17 @@ function initEditor() {
     skin: `${uiStore.dark ? 'oxide-dark' : 'oxide'}`,
     content_css: `/tinymce/css/index.css,${uiStore.dark ? 'dark' : 'default'}`,
     content_style: `:root {
-         --scrollbar-track-color: ${uiStore.dark ? '#141414' : '#FFFFFF'};
+         --scrollbar-track-color: ${theme.quote};
          --scrollbar-thumb-color: ${uiStore.dark ? '#8D9095' : '#A8ABB2'};
     }
     html, body, .mce-content-body {
-      background: ${uiStore.dark ? '#0b111d' : '#ffffff'} !important;
-      color: ${uiStore.dark ? '#e5e7eb' : '#13181d'} !important;
+      background: ${theme.panel} !important;
+      color: ${theme.text} !important;
     }
     blockquote, blockquote * {
-      background: ${uiStore.dark ? '#111a2e' : 'transparent'} !important;
-      color: ${uiStore.dark ? '#e5e7eb' : '#13181d'} !important;
-      border-color: ${uiStore.dark ? '#334155' : '#cccccc'} !important;
+      background: ${theme.quote} !important;
+      color: ${theme.text} !important;
+      border-color: ${theme.border} !important;
     }`,
     plugins: 'link image advlist lists  emoticons fullscreen  table preview code',
     toolbar: 'bold emoticons forecolor backcolor italic fontsize | alignleft aligncenter alignright alignjustify | outdent indent |  bullist numlist | link image  | table code preview fullscreen',
@@ -126,6 +159,7 @@ function initEditor() {
       editor.value = ed;
       ed.on('init', () => {
         ed.setContent(props.defValue);
+        applyEditorTheme();
         isInitialized.value = true;
       });
       ed.on('input change', () => {

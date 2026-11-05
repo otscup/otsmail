@@ -64,10 +64,13 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column width="90" align="right">
+            <el-table-column width="150" align="right">
               <template #default="{ row }">
-                <el-button v-if="!row.revoked" link type="danger" @click="revokeToken(row)">
-                  {{ $t('mcpRevoke') }}
+                <el-button link type="primary" @click="rotateToken(row)">
+                  {{ $t('mcpRotate') }}
+                </el-button>
+                <el-button link type="danger" @click="deleteToken(row)">
+                  {{ $t('mcpDelete') }}
                 </el-button>
               </template>
             </el-table-column>
@@ -96,8 +99,8 @@
             </el-table-column>
             <el-table-column width="90" align="right">
               <template #default="{ row }">
-                <el-button v-if="!row.revoked" link type="danger" @click="revokeClient(row)">
-                  {{ $t('mcpRevoke') }}
+                <el-button link type="danger" @click="deleteClient(row)">
+                  {{ $t('mcpDelete') }}
                 </el-button>
               </template>
             </el-table-column>
@@ -161,7 +164,7 @@
 <script setup>
 import {defineOptions, reactive, ref} from "vue"
 import {useI18n} from "vue-i18n"
-import {clientCreate, clientList, clientRevoke, mcpStatus, tokenCreate, tokenList, tokenRevoke} from "@/request/mcp.js"
+import {clientCreate, clientDelete, clientList, mcpStatus, tokenCreate, tokenDelete, tokenList, tokenRotate} from "@/request/mcp.js"
 import {tzDayjs} from "@/utils/day.js"
 
 defineOptions({
@@ -250,27 +253,42 @@ function submitClient() {
   })
 }
 
-function revokeToken(row) {
-  ElMessageBox.confirm(t('mcpRevokeConfirm', {name: row.name}), {
-    confirmButtonText: t('confirm'),
+function rotateToken(row) {
+  ElMessageBox.confirm(t('mcpRotateConfirm', {name: row.name}), {
+    confirmButtonText: t('mcpRotate'),
     cancelButtonText: t('cancel'),
     type: 'warning'
   }).then(() => {
-    tokenRevoke(row.tokenId).then(() => {
-      ElMessage({message: t('mcpRevokeSuccess'), type: 'success', plain: true})
+    tokenRotate(row.tokenId).then(data => {
+      createdToken.value = data.token
+      tokenOnceVisible.value = true
+      ElMessage({message: t('mcpRotateSuccess'), type: 'success', plain: true})
       loadAll()
     })
   })
 }
 
-function revokeClient(row) {
-  ElMessageBox.confirm(t('mcpRevokeConfirm', {name: row.name}), {
-    confirmButtonText: t('confirm'),
+function deleteToken(row) {
+  ElMessageBox.confirm(t('mcpDeleteConfirm', {name: row.name}), {
+    confirmButtonText: t('mcpDelete'),
     cancelButtonText: t('cancel'),
     type: 'warning'
   }).then(() => {
-    clientRevoke(row.clientId).then(() => {
-      ElMessage({message: t('mcpRevokeSuccess'), type: 'success', plain: true})
+    tokenDelete(row.tokenId).then(() => {
+      ElMessage({message: t('mcpDeleteSuccess'), type: 'success', plain: true})
+      loadAll()
+    })
+  })
+}
+
+function deleteClient(row) {
+  ElMessageBox.confirm(t('mcpDeleteConfirm', {name: row.name}), {
+    confirmButtonText: t('mcpDelete'),
+    cancelButtonText: t('cancel'),
+    type: 'warning'
+  }).then(() => {
+    clientDelete(row.clientId).then(() => {
+      ElMessage({message: t('mcpDeleteSuccess'), type: 'success', plain: true})
       loadAll()
     })
   })

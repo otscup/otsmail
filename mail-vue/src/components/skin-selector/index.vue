@@ -44,7 +44,6 @@ async function choose(id) {
   try {
     await updateMySetting({skin: id})
     userStore.user.skin = id
-    window.dispatchEvent(new CustomEvent('otsmail:skin', {detail: selected.value}))
   } catch (e) {
     selected.value = applySkin(previous)
     ElMessage({message: e?.message || t('skinSyncFailed'), type: 'error', plain: true})

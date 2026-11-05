@@ -111,7 +111,7 @@ const selectedSearchOption = computed(() =>
 )
 const searchPlaceholder = computed(() =>
   searchType.value === 'all'
-    ? 'Search mail 搜索邮件'
+    ? t('searchMail')
     : t('searchMailBy', {field: selectedSearchOption.value?.label || t('titleDesc')})
 )
 const filterActive = computed(() =>

@@ -162,10 +162,10 @@ const emailService = {
 		const listQuery = page > 0 ? query.limit(size).offset((page - 1) * size).all() : query.limit(size).all();
 
 		// 同一筛选的 total 跨分页复用 30 分钟；不发邮件通知、不改计数快照。
-		const totalCacheKey = searchConditions.length === 0
-			? `email:total:${userId}:${allReceive ? 1 : 0}:${accountId || 0}:${type ?? ''}:${mailbox || 'inbox'}:${category || 'all'}:${status || 0}:${timeSort ? 1 : 0}`
-			: null;
-		const cachedTotal = totalCacheKey ? await c.env.kv?.get(totalCacheKey) : null;
+		const totalVersion = await this.totalCacheVersion(c, userId);
+		const searchKey = `${encodeURIComponent(String(text || '').slice(0, 120))}:${searchType || ''}:${startDate || ''}:${endDate || ''}`;
+		const totalCacheKey = `email:total:${userId}:${allReceive ? 1 : 0}:${accountId || 0}:${type ?? ''}:${mailbox || 'inbox'}:${category || 'all'}:${status || 0}:${timeSort ? 1 : 0}:${totalVersion}:${searchKey}`;
+		const cachedTotal = await c.env.kv?.get(totalCacheKey);
 		const totalQuery = cachedTotal !== null && cachedTotal !== undefined
 			? Promise.resolve({ total: Number(cachedTotal) })
 			: orm(c).select({ total: count() }).from(email)
@@ -185,8 +185,8 @@ const emailService = {
 						...searchConditions
 					)
 				).get().then(async row => {
-					// 30 分钟内同一筛选的 total 只回源一次，控制 KV 写入量与 D1 扫描。
-					if (totalCacheKey) await c.env.kv?.put(totalCacheKey, String(row.total), { expirationTtl: 1800 });
+					// 2–4 小时缓存 + 写事件版本失效；读/星标不会让总数回源。
+					if (totalCacheKey) await c.env.kv?.put(totalCacheKey, String(row.total), { expirationTtl: 14400 });
 					return row;
 				});
 
@@ -246,11 +246,14 @@ const emailService = {
 				eq(email.userId, userId),
 				inArray(email.emailId, emailIdList)))
 			.run();
+		await this.bumpTotalCache(c, userId);
 	},
 
 	async receive(c, params, cidAttList, r2domain) {
 		params.content = this.imgReplace(params.content, cidAttList, r2domain)
-		return await orm(c).insert(email).values({ ...params }).returning().get();
+		const row = await orm(c).insert(email).values({ ...params }).returning().get();
+		await this.bumpTotalCache(c, params.userId);
+		return row;
 	},
 
 	//邮件发送
@@ -460,6 +463,7 @@ const emailService = {
 
 		//保存到数据库并返回结果
 		const emailResult = await orm(c).insert(email).values(emailData).returning().get();
+		await this.bumpTotalCache(c, userId);
 
 		//保存内嵌附件
 		if (imageDataList.length > 0) {
@@ -1265,9 +1269,20 @@ const emailService = {
 			if (ids.length === 0) return;
 			await orm(c).update(email).set({ category, spam: category === 'spam' ? 1 : 0 })
 				.where(and(eq(email.userId, userId), inArray(email.emailId, ids))).run();
+			await this.bumpTotalCache(c, userId);
 		},
 
 	// 计数由 email 表触发器增量维护，读路径只取一行，不再扫描整表。
+	async totalCacheVersion(c, userId) {
+		return (await c.env.kv?.get(`email:total:v:${userId}`)) || '0';
+	},
+
+	// 只在新邮件/删除/移动/垃圾标记时递增版本；读、星标不改变总数，不失效。
+	async bumpTotalCache(c, userId) {
+		if (!c.env.kv || !userId) return;
+		await c.env.kv.put(`email:total:v:${userId}`, String(Date.now()), { expirationTtl: 7 * 24 * 60 * 60 });
+	},
+
 	async counts(c, userId, accountId = null, allReceive = false) {
 		const scoped = Boolean(accountId && !allReceive);
 		const row = await c.env.db.prepare(`
@@ -1285,8 +1300,30 @@ const emailService = {
 			FROM email_count WHERE user_id = ?${scoped ? ' AND account_id = ?' : ''}
 		`).bind(...(scoped ? [userId, accountId] : [userId])).first();
 		const n = key => Number(row?.[key]) || 0;
+		const scopeSql = scoped ? ' AND account_id = ?' : '';
+		const scopeBind = scoped ? [userId, accountId] : [userId];
+		const totals = await c.env.db.prepare(`
+			SELECT
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 THEN 1 ELSE 0 END),0) AS inbox_total,
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=1 THEN 1 ELSE 0 END),0) AS spam_total,
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=1 AND spam=0 THEN 1 ELSE 0 END),0) AS sent_total,
+				COALESCE(SUM(CASE WHEN is_del=1 THEN 1 ELSE 0 END),0) AS deleted_total
+			FROM email WHERE user_id = ?${scopeSql}
+		`).bind(...scopeBind).first();
+		const t = key => Number(totals?.[key]) || 0;
+		const starJoin = scoped ? ' JOIN email e ON e.email_id = s.email_id AND e.account_id = ?' : '';
+		const star = await c.env.db.prepare(`
+			SELECT COUNT(*) AS total FROM star s${starJoin} WHERE s.user_id = ?
+		`).bind(...(scoped ? [accountId, userId] : [userId])).first();
 		return {
-			menu: { inbox: n('inbox'), sent: n('sent'), deleted: n('deleted'), spam: n('spam') },
+			menu: {
+				inbox: t('inbox_total'),
+				unread: n('inbox'),
+				sent: t('sent_total') || n('sent'),
+				deleted: t('deleted_total'),
+				spam: t('spam_total'),
+				starred: Number(star?.total) || 0
+			},
 			category: { primary: n('primary_c'), social: n('social'), promotion: n('promotion'), updates: n('updates'), important: n('important'), ads: n('ads'), spam: n('spam') }
 		};
 	},
@@ -1324,14 +1361,17 @@ const emailService = {
 
 		async spam(c, params, userId) {
 			await this.updateOwn(c, params.emailId, userId, { spam: 1 });
+			await this.bumpTotalCache(c, userId);
 		},
 
 		async spamCancel(c, params, userId) {
 			await this.updateOwn(c, params.emailId, userId, { spam: 0 });
+			await this.bumpTotalCache(c, userId);
 		},
 
 		async restore(c, params, userId) {
 			await this.updateOwn(c, params.emailId, userId, { isDel: isDel.NORMAL });
+			await this.bumpTotalCache(c, userId);
 		},
 
 		// 回收站里彻底删除：只删自己的邮件（/email/delete 在 syncDelete 关闭时只是重复打删除标记）
@@ -1340,7 +1380,23 @@ const emailService = {
 				.where(and(eq(email.userId, userId), eq(email.emailId, Number(params.emailId)))).get();
 			if (row) {
 				await this.physicsDelete(c, { emailIds: String(row.emailId) });
+				await this.bumpTotalCache(c, userId);
 			}
+		},
+
+		async clearDeleted(c, userId) {
+			let total = 0;
+			while (true) {
+				const rows = await orm(c).select({ emailId: email.emailId }).from(email)
+					.where(and(eq(email.userId, userId), eq(email.isDel, isDel.DELETE)))
+					.limit(95).all();
+				if (!rows.length) break;
+				await this.physicsDelete(c, { emailIds: rows.map(row => row.emailId).join(',') });
+				total += rows.length;
+				if (rows.length < 95) break;
+			}
+			await this.bumpTotalCache(c, userId);
+			return total;
 		},
 
 		// 只改当前用户自己的邮件，避免越权改他人分类
@@ -1359,14 +1415,13 @@ const emailService = {
 				.leftJoin(star, and(eq(star.emailId, email.emailId), eq(star.userId, userId)))
 				.where(and(
 					eq(email.emailId, emailId),
-					eq(email.userId, userId),
-					eq(email.isDel, isDel.NORMAL)
+					eq(email.userId, userId)
 				))
 				.get();
 
 			if (!row) {
-				// 记录不存在或非当前用户 → 不可读
-				throw new BizError(t('authExpired'));
+				// 已删除邮件也允许本人阅读，不能把“不存在”误报成认证失效。
+				throw new BizError(t('emailNotExist'));
 			}
 
 			const detail = { ...row, isStar: row.starId != null ? 1 : 0 };

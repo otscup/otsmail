@@ -377,16 +377,20 @@ const emailColumnData = {
   daysData: []
 }
 
+function skinToken(name, fallback) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+}
+
 const topic = computed(() => ({
-  color: uiStore.dark ? '#E5EAF3' : '#303133',
-  background: uiStore.dark ? '#141414' : '#FFFFFF',
-  borderColor: uiStore.dark ? '#141414' : '#FFFFFF',
-  scaleLineColor: uiStore.dark ? '#636466' : '#CDD0D6',
-  crossColor: uiStore.dark ? '#8D9095' : '#A8ABB2',
-  axisColor: uiStore.dark ? '#A3A6AD' : '#909399',
-  splitLineColor: uiStore.dark ? '#58585B' : '#D4D7DE',
-  gaugeSplitLine: uiStore.dark ? '#CFD3DC' : '#606266',
-  containerBackground: uiStore.dark ? '#6C6E72' : '#E6EBF8'
+  color: uiStore.dark ? skinToken('--rd-text', '#E5EAF3') : '#303133',
+  background: uiStore.dark ? skinToken('--rd-panel', '#1E0E13') : '#FFFFFF',
+  borderColor: uiStore.dark ? skinToken('--rd-panel', '#1E0E13') : '#FFFFFF',
+  scaleLineColor: uiStore.dark ? skinToken('--rd-line-strong', '#636466') : '#CDD0D6',
+  crossColor: uiStore.dark ? skinToken('--rd-muted', '#8D9095') : '#A8ABB2',
+  axisColor: uiStore.dark ? skinToken('--rd-muted', '#A3A6AD') : '#909399',
+  splitLineColor: uiStore.dark ? skinToken('--rd-line', '#58585B') : '#D4D7DE',
+  gaugeSplitLine: uiStore.dark ? skinToken('--rd-line-strong', '#CFD3DC') : '#606266',
+  containerBackground: uiStore.dark ? skinToken('--rd-panel-2', '#6C6E72') : '#E6EBF8'
 }))
 let daySendTotal = 0
 let leaveWidth = 0

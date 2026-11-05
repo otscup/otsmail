@@ -5,8 +5,8 @@
       <span>{{ $t('offlineHint') }}</span>
       <button type="button" @click="refresh">{{ $t('retry') }}</button>
     </div>
-    <div class="header-actions">
-      <div class="mail-page-title"><b>{{ pageTitleEn }}</b><span>{{ pageTitle }}</span></div>
+    <div class="header-actions" :class="{ 'has-selection': checkedEmailCount > 0 }">
+      <div class="mail-page-title"><span>{{ pageTitle }}</span></div>
       <div class="header-left" :style="'padding-left:' + actionLeft">
         <div v-if="checkedEmailCount" class="selection-bar">
           <button type="button" class="selection-clear" :title="t('clearSelection')" @click="clearSelection">
@@ -41,6 +41,7 @@
       </div>
 
       <div class="header-right">
+        <button v-if="props.type === 'deleted'" type="button" class="icon clear-trash" :title="t('clearDeleted')" @click="clearDeleted"><Icon icon="mdi:delete-sweep-outline" width="17" height="17"/></button>
         <button type="button" class="icon reload" :class="{ spinning: loading }" :title="t('refresh')" @click="refresh"><Icon icon="ion:reload" width="15" height="15"/></button>
         <div class="mail-pager" v-if="total > pageSize">
           <button type="button" class="pager-btn" :disabled="page <= 1" :title="t('prevPage')" @click="goPage(-1)">‹</button>
@@ -74,7 +75,7 @@
           <template #default="{ data: item, index }" >
             <div :class="['email-row', props.type, { 'is-unread': item.unread === EmailUnreadEnum.UNREAD && showUnread, 'is-open': emailStore.contentData?.email?.emailId === item.emailId, 'is-checked': item.checked, 'ctx-open': dropdownShow && rightClickEmail.emailId === item.emailId }]"
                  :data-checked="item.checked"
-                 @click="jumpDetails(item)"
+                 @click="handleRowClick(item, $event)"
                  v-if="!item.expand"
                  :key="item.emailId"
                  @contextmenu="handleContextmenu($event, item)"
@@ -330,7 +331,7 @@ import skeletonBlock from "@/components/email-scroll/skeleton/index.vue"
 import {computed, onActivated, onUpdated, reactive, ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import {useEmailStore} from "@/store/email.js";
 import {useAccountStore} from "@/store/account.js";
-import {emailSpam, emailSpamCancel, emailCounts, emailMoveCategory} from "@/request/email.js";
+import {emailSpam, emailSpamCancel, emailCounts, emailMoveCategory, emailClearDeleted} from "@/request/email.js";
 import {contactAdd} from "@/request/contact.js";
 import {useUiStore} from "@/store/ui.js";
 import {useSettingStore} from "@/store/setting.js";
@@ -502,18 +503,13 @@ const dropdownShow = ref(false);
 const rightClickEmail = ref({});
 const MAX_SELECT_COUNT = 95;
 const checkedEmailCount = ref(0);
+const lastSelectionIndex = ref(-1);
 const isSelectMax = computed(() => checkedEmailCount.value >= MAX_SELECT_COUNT);
 const route = useRoute()
 const pageTitle = computed(() => {
   if (activeCategory.value && activeCategory.value !== 'all' && activeCategory.value !== 'primary') return categoryLabel(activeCategory.value)
   return t(route.meta?.title || 'inbox')
 })
-const titleEn = { email: 'Inbox', unread: 'Unread', spam: 'Spam', deleted: 'Trash', send: 'Sent', draft: 'Drafts', star: 'Starred', allMail: 'All mail', 'all-email': 'All mail' }
-const categoryEn = { social: 'Social', promotion: 'Promotions', updates: 'Updates', important: 'Important', ads: 'Ads', spam: 'Spam' }
-const categoryTabEn = { all: 'All', primary: 'Primary', social: 'Social', promotion: 'Promotions', updates: 'Updates', important: 'Important' }
-const pageTitleEn = computed(() => activeCategory.value && !['all', 'primary'].includes(activeCategory.value)
-  ? (categoryEn[activeCategory.value] || '')
-  : (titleEn[route.name] || ''))
 const activeCategory = ref(props.showCategories ? 'all' : '')
 const categoryCounts = reactive({all: 0, primary: 0, social: 0, promotion: 0, updates: 0, important: 0, ads: 0, spam: 0})
 const categories = [
@@ -796,6 +792,7 @@ const handleContextmenu = (event, email) => {
 
   rightClickEmail.value = email;
   rightClickEmail.value.rightChecked = true
+  lastSelectionIndex.value = emailList.findIndex(item => item.emailId === email.emailId)
 }
 
 function updateHasScrollbar() {
@@ -905,6 +902,7 @@ const handleUnread = async () => {
 function clearSelection() {
   emailList.forEach(item => { item.checked = false })
   checkedEmailCount.value = 0
+  lastSelectionIndex.value = -1
 }
 
 function emailRead(emailId) {
@@ -1130,8 +1128,38 @@ function updateCheckStatus() {
 
 function startSelection(email) {
   email.checked = !email.checked
+  lastSelectionIndex.value = emailList.findIndex(item => item.emailId === email.emailId)
   updateCheckStatus()
   dropdownRef.value?.handleClose()
+}
+
+function handleRowClick(email, event) {
+  const index = emailList.findIndex(item => item.emailId === email.emailId)
+  if (index < 0) return
+
+  if (event.shiftKey && lastSelectionIndex.value >= 0) {
+    const start = Math.min(lastSelectionIndex.value, index)
+    const end = Math.max(lastSelectionIndex.value, index)
+    let selected = checkedEmailCount.value
+    for (let i = start; i <= end && selected < MAX_SELECT_COUNT; i++) {
+      if (!emailList[i].checked) {
+        emailList[i].checked = true
+        selected++
+      }
+    }
+    updateCheckStatus()
+    return
+  }
+
+  if (event.ctrlKey || event.metaKey) {
+    email.checked = !email.checked
+    lastSelectionIndex.value = index
+    updateCheckStatus()
+    return
+  }
+
+  jumpDetails(email)
+  lastSelectionIndex.value = index
 }
 
 function jumpDetails(email) {
@@ -1285,6 +1313,20 @@ function refreshList() {
   checkAll.value = false;
   isIndeterminate.value = false;
   getEmailList(true);
+}
+
+async function clearDeleted() {
+  try {
+    await ElMessageBox.confirm(t('clearDeletedConfirm'), t('clearDeleted'), {
+      confirmButtonText: t('confirm'), cancelButtonText: t('cancel'), type: 'warning'
+    })
+  } catch { return }
+  try {
+    await emailClearDeleted()
+    ElMessage({ message: t('clearDeletedSuccess'), type: 'success', plain: true })
+    refresh()
+    window.dispatchEvent(new CustomEvent('otsmail:counts'))
+  } catch {}
 }
 
 function loadData() {
@@ -1762,7 +1804,8 @@ function loadData() {
   padding-left: 14px;
 }
 
-.unread {
+.email-sender .unread,
+.email-subject .unread {
   height: 6px;
   width: 6px;
   min-width: 6px;
@@ -2020,8 +2063,28 @@ ul {
 :deep(.email-sender .email-actions) { display:none; align-items:center; gap:1px; position:absolute; right:54px; top:7px; z-index:2; background:var(--rd-panel,transparent); border-radius:5px; }
 :deep(.email-sender:hover .email-actions), :deep(.email-row:hover .email-actions) { display:flex; }
 :deep(.email-row.ctx-open .email-actions) { display:none !important; }
-:deep(.email-row.is-checked) { background: color-mix(in srgb, var(--rd-accent, #0a84ff) 7%, transparent) !important; }
-.selection-bar { display:flex; align-items:center; gap:6px; min-width:0; }
+:deep(.email-row.is-checked),
+:deep(.email-row.is-checked:hover) {
+  background: var(--rd-accent-weak, rgba(10, 132, 255, .12)) !important;
+  background-image: linear-gradient(var(--rd-accent-weak, rgba(10,132,255,.12)), var(--rd-accent-weak, rgba(10,132,255,.12))) !important;
+  box-shadow: inset 3px 0 0 var(--rd-accent) !important;
+  outline: 2px solid var(--rd-accent) !important;
+  outline-offset: -2px;
+}
+:deep(.email-row.ctx-open) {
+  background: color-mix(in srgb, var(--rd-accent, #0a84ff) 10%, var(--rd-panel)) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rd-accent) 55%, transparent) !important;
+}
+.selection-bar { display:flex; align-items:center; gap:6px; min-width:0; max-width:100%; overflow-x:auto; scrollbar-width:none; }
+.selection-bar::-webkit-scrollbar { display:none; }
+.header-actions.has-selection { grid-template-columns: minmax(0,1fr) auto; }
+.header-actions.has-selection .mail-page-title { display:none; }
+.header-actions.has-selection .header-left { grid-column:1; min-width:0; flex-wrap:nowrap; overflow:hidden; }
+.header-actions.has-selection .header-right { grid-column:2; }
+.header-actions.has-selection .header-right .email-count,
+.header-actions.has-selection .header-right .mail-pager { display:none !important; }
+:deep(.header-right .clear-trash) { color: var(--rd-muted); }
+:deep(.header-right .clear-trash:hover) { color: #dc2626; background: rgba(239,68,68,.08); }
 .selection-clear, .selection-action { width:28px; height:28px; border:0; border-radius:8px; background:transparent; color:var(--rd-muted); display:grid; place-items:center; padding:0; cursor:pointer; }
 .selection-clear:hover, .selection-action:hover { background:var(--rd-panel-2); color:var(--rd-text); }
 .selection-action.danger:hover { background:rgba(239,68,68,.1); color:#dc2626; }
