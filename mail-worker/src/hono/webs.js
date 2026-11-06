@@ -24,5 +24,7 @@ import '../api/translation-api'
 import '../api/contact-api'
 import '../api/ai-api'
 import '../api/push-api'
+import '../api/ext-api'
 import '../api/version-api'
+import '../api/proxy-api'
 export default app;
