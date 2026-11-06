@@ -1,7 +1,7 @@
-{
+﻿{
     "name": "mail-vue",
     "private": true,
-    "version": "0.1.94",
+    "version": "0.1.97",
     "type": "module",
     "scripts": {
         "dev": "vite --mode dev",
@@ -44,3 +44,4 @@
         "vite-plugin-pwa": "^1.0.3"
     }
 }
+

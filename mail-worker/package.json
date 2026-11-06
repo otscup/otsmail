@@ -1,6 +1,6 @@
-{
+﻿{
 	"name": "otsmail-worker",
-	"version": "0.1.94",
+	"version": "0.1.97",
 	"private": true,
 	"scripts": {
 		"dev": "wrangler dev --config wrangler-dev.toml",
@@ -32,3 +32,4 @@
 		"zod": "^3.23.8"
 	}
 }
+
