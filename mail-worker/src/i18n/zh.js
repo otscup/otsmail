@@ -31,6 +31,7 @@ const zh = {
 	scheduleTooFar: '定时发送最多只能提前 30 天',
 	imageAttLimit: '图片不能超过10个',
 	attLimit: '附件不能超过10个',
+	contentTooLarge: '邮件正文过大，请压缩后再发送',
 	pwdLengthLimit: '密码长度超出限制',
 	emailLengthLimit: '邮箱长度超出限制',
 	minEmailPrefix: '邮箱名至少{{msg}}位',

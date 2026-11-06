@@ -27,8 +27,36 @@ const tabs = computed(() => {
 })
 </script>
 <style scoped>
-.settings-tabs { display:flex; gap:6px; align-items:center; padding:14px 24px 0; border-bottom:1px solid var(--rd-line); background:var(--rd-bg); }
-.settings-tabs button { border:0; background:transparent; color:var(--rd-muted); font-size:13px; font-weight:600; padding:8px 12px 10px; border-bottom:2px solid transparent; cursor:pointer; }
-.settings-tabs button:hover { color:var(--rd-text); }
-.settings-tabs button.active { color:var(--rd-text); border-bottom-color:var(--rd-accent); }
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  width: calc(100% - 44px);
+  margin: 14px 22px 0;
+  padding: 5px;
+  overflow-x: auto;
+  border: 1px solid var(--rd-line);
+  border-radius: 12px;
+  background: var(--rd-panel);
+  scrollbar-width: none;
+}
+.settings-tabs::-webkit-scrollbar { display: none; }
+.settings-tabs button {
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--rd-muted);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.settings-tabs button:hover { color: var(--rd-text); background: var(--rd-panel-2); }
+.settings-tabs button.active { color: var(--rd-accent); background: var(--rd-accent-weak); border-color: color-mix(in srgb, var(--rd-accent) 24%, transparent); }
+@media (max-width: 767px) {
+  .settings-tabs { width: calc(100% - 24px); margin: 10px 12px 0; padding: 4px; }
+  .settings-tabs button { padding: 7px 10px; font-size: 12px; }
+}
 </style>

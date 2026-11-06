@@ -26,6 +26,30 @@ import r2Service from './r2-service';
 import mailRuleService from './mail-rule-service';
 import fcmService from './fcm-service';
 
+const BULK_CHUNK = 50;
+const MAX_HTML_BYTES = 1_200_000;
+const MAX_TEXT_BYTES = 200_000;
+const MAX_SEND_HTML_BYTES = 1_500_000;
+
+function chunks(list, size = BULK_CHUNK) {
+	const result = [];
+	for (let i = 0; i < list.length; i += size) result.push(list.slice(i, i + size));
+	return result;
+}
+
+function utf8Size(value) {
+	return new TextEncoder().encode(String(value || '')).length;
+}
+
+function truncateUtf8(value, max, note) {
+	const text = String(value || '');
+	const bytes = new TextEncoder().encode(text);
+	if (bytes.length <= max) return text;
+	let end = max;
+	while (end > 0 && (bytes[end] & 0xC0) === 0x80) end--;
+	return new TextDecoder().decode(bytes.slice(0, end)) + note;
+}
+
 const emailService = {
 
 	async list(c, params, userId) {
@@ -231,26 +255,36 @@ const emailService = {
 		const { syncDelete } = await settingService.query(c);
 
 		if (syncDelete === settingConst.syncDelete.OPEN) {
-			const owned = await orm(c).select({ emailId: email.emailId }).from(email)
-				.where(and(eq(email.userId, userId), inArray(email.emailId, emailIdList)))
-				.all();
-			const ownedIds = owned.map(row => row.emailId);
+			const ownedIds = [];
+			for (const chunk of chunks([...new Set(emailIdList)])) {
+				const owned = await orm(c).select({ emailId: email.emailId }).from(email)
+					.where(and(eq(email.userId, userId), inArray(email.emailId, chunk)))
+					.all();
+				ownedIds.push(...owned.map(row => row.emailId));
+			}
 			if (ownedIds.length) {
 				await this.physicsDelete(c, { emailIds: ownedIds.join(',') });
 			}
 			return;
 		}
 
-		await orm(c).update(email).set({ isDel: isDel.DELETE }).where(
-			and(
-				eq(email.userId, userId),
-				inArray(email.emailId, emailIdList)))
-			.run();
+		for (const chunk of chunks([...new Set(emailIdList)])) {
+			await orm(c).update(email).set({ isDel: isDel.DELETE }).where(
+				and(
+					eq(email.userId, userId),
+					inArray(email.emailId, chunk)))
+				.run();
+		}
 		await this.bumpTotalCache(c, userId);
 	},
 
 	async receive(c, params, cidAttList, r2domain) {
 		params.content = this.imgReplace(params.content, cidAttList, r2domain)
+		// D1 单行上限约 2MB；内联 base64 邮件超限时会导致整封邮件入库失败。
+		params.content = truncateUtf8(params.content, MAX_HTML_BYTES,
+			'<p style="margin:16px 0;color:#667085;font-size:12px">[正文过长，已截断；原始邮件超过系统存储上限]</p>');
+		params.text = truncateUtf8(params.text, MAX_TEXT_BYTES,
+			'\n\n[正文过长，已截断；原始邮件超过系统存储上限]');
 		const row = await orm(c).insert(email).values({ ...params }).returning().get();
 		await this.bumpTotalCache(c, params.userId);
 		return row;
@@ -392,6 +426,7 @@ const emailService = {
 		// 附件数量必须在任何外部投递/入库之前校验，否则会“已发出去才报错”。
 		if (imageDataList.length > 10) throw new BizError(t('imageAttLimit'));
 		if (attachments?.length > 10) throw new BizError(t('attLimit'));
+		if (utf8Size(html) > MAX_SEND_HTML_BYTES) throw new BizError(t('contentTooLarge'));
 
 		if (!allInternal) {
 
@@ -886,9 +921,12 @@ const emailService = {
 	async physicsDelete(c, params) {
 		let { emailIds } = params;
 		emailIds = emailIds.split(',').map(Number);
-		await attService.removeByEmailIds(c, emailIds);
-		await starService.removeByEmailIds(c, emailIds);
-		await orm(c).delete(email).where(inArray(email.emailId, emailIds)).run();
+		const ids = [...new Set(emailIds)];
+		await attService.removeByEmailIds(c, ids);
+		await starService.removeByEmailIds(c, ids);
+		for (const chunk of chunks(ids)) {
+			await orm(c).delete(email).where(inArray(email.emailId, chunk)).run();
+		}
 	},
 
 	// 自动清理：删除早于 autoCleanDays 天的邮件，排除 autoCleanExclude 中的用户邮箱（移植自 cloud-mail v3.2.0）
@@ -1130,6 +1168,10 @@ const emailService = {
 		let [list, totalRow, latestEmail] = await Promise.all([listQuery, totalQuery, latestEmailQuery]);
 
 		await this.emailAddAtt(c, list);
+		// 全部邮件页同样需要签名远程图片/样式；按收件人签名，不按当前管理员。
+		for (const row of list) {
+			if (row.content) row.content = await attService.signContent(c, row.content, row.userId);
+		}
 
 		if (!latestEmail) {
 			latestEmail = {
@@ -1158,6 +1200,9 @@ const emailService = {
 			.limit(20);
 
 		await this.emailAddAtt(c, list);
+		for (const row of list) {
+			if (row.content) row.content = await attService.signContent(c, row.content, row.userId);
+		}
 
 		return list;
 	},
@@ -1251,13 +1296,17 @@ const emailService = {
 			const { emailIds } = params;
 			// 入参不是数组时 inArray 会拿到 undefined，D1 直接 500；空列表本来也没什么可标的
 			if (!Array.isArray(emailIds) || emailIds.length === 0) return;
-			await orm(c).update(email).set({ unread: emailConst.unread.READ }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds))).run();
+			for (const chunk of chunks([...new Set(emailIds)])) {
+				await orm(c).update(email).set({ unread: emailConst.unread.READ }).where(and(eq(email.userId, userId), inArray(email.emailId, chunk))).run();
+			}
 		},
 
 	async unread(c, params, userId) {
 			const { emailIds } = params;
 			if (!Array.isArray(emailIds) || emailIds.length === 0) return;
-			await orm(c).update(email).set({ unread: emailConst.unread.UNREAD }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds))).run();
+			for (const chunk of chunks([...new Set(emailIds)])) {
+				await orm(c).update(email).set({ unread: emailConst.unread.UNREAD }).where(and(eq(email.userId, userId), inArray(email.emailId, chunk))).run();
+			}
 		},
 
 	async moveCategory(c, params, userId) {
@@ -1265,10 +1314,12 @@ const emailService = {
 			const allowed = ['primary', 'social', 'promotion', 'updates', 'important', 'ads', 'spam'];
 			if (!allowed.includes(category)) throw new BizError('无效的邮件分类');
 			if (!Array.isArray(emailIds) || emailIds.length === 0) return;
-			const ids = emailIds.map(Number).filter(Number.isInteger);
+			const ids = [...new Set(emailIds.map(Number).filter(Number.isInteger))];
 			if (ids.length === 0) return;
-			await orm(c).update(email).set({ category, spam: category === 'spam' ? 1 : 0 })
-				.where(and(eq(email.userId, userId), inArray(email.emailId, ids))).run();
+			for (const chunk of chunks(ids)) {
+				await orm(c).update(email).set({ category, spam: category === 'spam' ? 1 : 0 })
+					.where(and(eq(email.userId, userId), inArray(email.emailId, chunk))).run();
+			}
 			await this.bumpTotalCache(c, userId);
 		},
 

@@ -9,6 +9,7 @@ import { parseHTML } from 'linkedom';
 import { v4 as uuidv4 } from 'uuid';
 import domainUtils from '../utils/domain-uitls';
 import settingService from "./setting-service";
+import proxyService from './proxy-service';
 
 function unsafeInline(filename, mime) {
 	const ext = String(filename || '').split('.').pop().toLowerCase();
@@ -24,6 +25,40 @@ function disposition(filename, inline) {
 const encoder = new TextEncoder();
 const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))
 	.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+
+// D1 单条语句最多 100 个绑定参数；附件表列多，6 行一批留足余量。
+const ATT_INSERT_CHUNK = 6;
+const ATT_DELETE_CHUNK = 50;
+
+async function insertAttRows(c, rows) {
+	for (let i = 0; i < rows.length; i += ATT_INSERT_CHUNK) {
+		await orm(c).insert(att).values(rows.slice(i, i + ATT_INSERT_CHUNK)).run();
+	}
+}
+
+// 插入失败时只清理没有任何附件行引用的 R2 对象，避免误删其他邮件的同 key 附件。
+async function cleanupOrphanObjects(c, keys) {
+	const unique = [...new Set(keys.filter(Boolean))];
+	if (!unique.length) return;
+	const referenced = new Set();
+	for (let i = 0; i < unique.length; i += ATT_DELETE_CHUNK) {
+		const chunk = unique.slice(i, i + ATT_DELETE_CHUNK);
+		const placeholders = chunk.map(() => '?').join(',');
+		const { results } = await c.env.db
+			.prepare(`SELECT key FROM attachments WHERE key IN (${placeholders})`)
+			.bind(...chunk)
+			.all();
+		for (const row of results || []) referenced.add(row.key);
+	}
+	for (const key of unique) {
+		if (referenced.has(key)) continue;
+		try {
+			await r2Service.delete(c, key);
+		} catch (e) {
+			console.error('清理孤儿附件失败:', key, e);
+		}
+	}
+}
 
 // 附件/正文图片用短时签名 URL，避免 /attachments 变成可枚举的公开桶。
 async function signKey(c, key, userId) {
@@ -58,12 +93,14 @@ const attService = {
 	verifyKey,
 
 	async signContent(c, content, userId) {
-		if (!content || !userId) return content;
+		// 全部邮件里可能有 userId=0 的无人收件；用当前登录者签名，代理限流也记在发起者头上。
+		const signUserId = Number(userId) || Number(c.get('user')?.userId) || 0;
+		if (!content || !signUserId) return content;
 		let result = content;
 		const matches = content.match(/\{\{domain\}\}attachments\/[^"'\s<>]+/g) || [];
 		for (const match of matches) {
 			const key = match.replace('{{domain}}', '');
-			const signed = await this.signKey(c, key, userId);
+			const signed = await this.signKey(c, key, signUserId);
 			result = result.split(match).join(signed);
 		}
 
@@ -74,33 +111,43 @@ const attService = {
 			const re = new RegExp(`${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/attachments/([^"'\\s<>]+)`, 'g');
 			const keys = [...result.matchAll(re)].map(m => `attachments/${m[1]}`);
 			for (const key of keys) {
-				const signed = await this.signKey(c, key, userId);
+				const signed = await this.signKey(c, key, signUserId);
 				const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 				result = result.replace(new RegExp(`${escaped}/${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g'), signed);
 			}
 		}
+		// 远程图片改走签名代理，避免收件人 IP/UA 直接暴露给发件人。
+		result = await proxyService.signRemoteImages(c, result, signUserId);
 		return result;
 	},
 
 	async addAtt(c, attachments) {
+		if (!attachments?.length) return;
 
-		for (let attachment of attachments) {
+		const written = [];
+		try {
+			for (let attachment of attachments) {
 
-			const inline = Boolean(attachment.contentId) && !unsafeInline(attachment.filename, attachment.mimeType);
-			let metadate = {
-				contentType: unsafeInline(attachment.filename, attachment.mimeType) ? 'application/octet-stream' : attachment.mimeType,
-				contentDisposition: disposition(attachment.filename, inline)
+				const inline = Boolean(attachment.contentId) && !unsafeInline(attachment.filename, attachment.mimeType);
+				let metadate = {
+					contentType: unsafeInline(attachment.filename, attachment.mimeType) ? 'application/octet-stream' : attachment.mimeType,
+					contentDisposition: disposition(attachment.filename, inline)
+				}
+
+				if (inline) {
+					metadate.cacheControl = `max-age=259200`
+				}
+
+				await r2Service.putObj(c, attachment.key, attachment.content, metadate);
+				written.push(attachment.key);
 			}
 
-			if (inline) {
-				metadate.cacheControl = `max-age=259200`
-			}
-
-			await r2Service.putObj(c, attachment.key, attachment.content, metadate);
-
+			await insertAttRows(c, attachments);
+		} catch (e) {
+			// 行插入/对象写入失败时，已写入 R2 的附件不能留下孤儿对象；只删没人引用的 key。
+			await cleanupOrphanObjects(c, written);
+			throw e;
 		}
-
-		await orm(c).insert(att).values(attachments).run();
 	},
 
 	list(c, params, userId) {
@@ -250,7 +297,7 @@ const attService = {
 			attDataList.push(attData);
 		}
 
-		await orm(c).insert(att).values(attDataList).run();
+		await insertAttRows(c, attDataList);
 
 		for (let att of attList) {
 			await r2Service.putObj(c, att.key, att.buff, {
@@ -283,7 +330,7 @@ const attService = {
 			}
 		}
 
-		await orm(c).insert(att).values(attDataList).run();
+		await insertAttRows(c, attDataList);
 
 	},
 
@@ -310,31 +357,24 @@ const attService = {
 			throw new Error(`unsupported attachment field: ${fieldName}`);
 		}
 
-		const sqlList = [];
+		const values = [...new Set(fieldValues)];
+		const delKeyList = [];
 
-		fieldValues.forEach(value => {
-
-			sqlList.push(
-
-				c.env.db.prepare(
-					`SELECT a.key, a.att_id
-						FROM attachments a
-							   JOIN (SELECT key
-									 FROM attachments
-									 GROUP BY key
-									 HAVING COUNT (*) = 1) t
-									ON a.key = t.key
-						WHERE a.${fieldName} = ?;`
-					).bind(value)
-			)
-
-			sqlList.push(c.env.db.prepare(`DELETE FROM attachments WHERE ${fieldName} = ?`).bind(value))
-
-		});
-
-		const attListResult = await c.env.db.batch(sqlList);
-
-		const delKeyList = attListResult.flatMap(r => r.results ? r.results.map(row => row.key) : []);
+		for (let i = 0; i < values.length; i += ATT_DELETE_CHUNK) {
+			const chunk = values.slice(i, i + ATT_DELETE_CHUNK);
+			const placeholders = chunk.map(() => '?').join(',');
+			// 共享 key 的附件不能删 R2 对象；GROUP BY 只对当前 50 个 id 聚合，避免逐 id 全表扫描。
+			const selectSql = `SELECT a.key
+				FROM attachments a
+				JOIN (SELECT key FROM attachments GROUP BY key HAVING COUNT(*) = 1) t ON a.key = t.key
+				WHERE a.${fieldName} IN (${placeholders})`;
+			const deleteSql = `DELETE FROM attachments WHERE ${fieldName} IN (${placeholders})`;
+			const [selected] = await c.env.db.batch([
+				c.env.db.prepare(selectSql).bind(...chunk),
+				c.env.db.prepare(deleteSql).bind(...chunk)
+			]);
+			delKeyList.push(...(selected?.results || []).map(row => row.key).filter(Boolean));
+		}
 
 		if (delKeyList.length > 0) {
 			try {

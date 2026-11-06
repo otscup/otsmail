@@ -1293,7 +1293,7 @@ async function loadVersionInfo() {
   versionLoading.value = true
   try {
     const res = await versionInfo()
-    currentVersionInfo.value = res.data || {version: '-'}
+    currentVersionInfo.value = res || {version: '-'}
   } catch (e) {
     currentVersionInfo.value = {version: 'unknown'}
   } finally {
@@ -1306,7 +1306,7 @@ async function checkForUpdate() {
   updateChecking.value = true
   try {
     const res = await versionCheck()
-    updateInfo.value = res.data
+    updateInfo.value = res
   } catch (e) {
     updateInfo.value = {status: 'upstreamError'}
   } finally {

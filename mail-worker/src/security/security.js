@@ -23,6 +23,8 @@ const exclude = [
 	'/oauth',
 	'/push/key',
 	'/version',
+	'/proxy/image',
+	'/proxy/css',
 	'/.well-known'
 ];
 
@@ -110,6 +112,11 @@ const premKey = {
 app.use('*', async (c, next) => {
 
 	const path = c.req.path;
+
+	// Streamable HTTP 无状态模式不提供 GET SSE / DELETE 会话；先于鉴权返回 405。
+	if (path === '/mcp' && (c.req.method === 'GET' || c.req.method === 'DELETE')) {
+		return c.text('', 405, { Allow: 'POST' });
+	}
 
 	const index = exclude.findIndex(item => {
 		return path.startsWith(item);

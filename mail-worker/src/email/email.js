@@ -103,6 +103,32 @@ export async function email(message, env, ctx) {
 			email.to = [{ address: message.to, name: emailUtils.getName(message.to)}]
 		}
 
+		// 去重放在 AI/规则/附件之前：重复投递不再浪费模型调用和分类扫描。
+		// 空 Message-Id 不去重；SAVING 说明上次已入库但未收尾，直接收尾旧行。
+		if (email.messageId) {
+			const dup = await env.db.prepare(
+				'SELECT email_id, status FROM email WHERE message_id = ? AND to_email = ? AND type = 0 AND status IN (?, ?, ?) LIMIT 1'
+			).bind(
+				email.messageId,
+				message.to,
+				emailConst.status.RECEIVE,
+				emailConst.status.NOONE,
+				emailConst.status.SAVING
+			).first();
+			if (dup) {
+				if (dup.status === emailConst.status.SAVING) {
+					await emailService.completeReceive(
+						{ env },
+						account ? emailConst.status.RECEIVE : emailConst.status.NOONE,
+						dup.email_id
+					);
+					console.log(`[dedup] completed stale saving row: messageId=${email.messageId} existingEmailId=${dup.email_id}`);
+				}
+				console.log(`[dedup] duplicate inbound dropped: messageId=${email.messageId} to=${message.to} existingEmailId=${dup.email_id}`);
+				return;
+			}
+		}
+
 		const toName = email.to.find(item => item.address === message.to)?.name || '';
 		const auth = parseAuthResults(email.headers);
 		const otp = extractOtp(email);
@@ -154,37 +180,6 @@ export async function email(message, env, ctx) {
 			category,
 			status: emailConst.status.SAVING
 		};
-
-		// 去重：同一 Message-Id + 同一收件地址只收一次。
-		// 上游（SMTP）重投时 Message-Id 不变，照单全收会把同一封信入库、
-		// TG、转发、webhook 各发 N 遍（2026-10-30 实测：GNAME 原信 10 秒一封重投 18 次）。
-		// RECEIVE / NOONE 直接丢弃；SAVING 说明上次已插入但没走到 completeReceive，
-		// 收尾旧行而不是再插一条。空 Message-Id 不去重（无法区分）。
-		// 正常返回（不抛错、不拒收）是关键：让上游认为投递成功，停止重投。
-		if (params.messageId) {
-			const dup = await env.db.prepare(
-				'SELECT email_id, status FROM email WHERE message_id = ? AND to_email = ? AND type = 0 AND status IN (?, ?, ?) LIMIT 1'
-			).bind(
-				params.messageId,
-				params.toEmail,
-				emailConst.status.RECEIVE,
-				emailConst.status.NOONE,
-				emailConst.status.SAVING
-			).first();
-			if (dup) {
-				// 上次已完成 receive() 但没走到 completeReceive()，收尾旧行，避免重投再插一条。
-				if (dup.status === emailConst.status.SAVING) {
-					await emailService.completeReceive(
-						{ env },
-						account ? emailConst.status.RECEIVE : emailConst.status.NOONE,
-						dup.email_id
-					);
-					console.log(`[dedup] completed stale saving row: messageId=${params.messageId} existingEmailId=${dup.email_id}`);
-				}
-				console.log(`[dedup] duplicate inbound dropped: messageId=${params.messageId} to=${params.toEmail} existingEmailId=${dup.email_id}`);
-				return;
-			}
-		}
 
 		const attachments = [];
 		const cidAttachments = [];
@@ -268,9 +263,10 @@ export async function email(message, env, ctx) {
 
 		}
 
-		//转发到TG
+		//转发到TG（异步，失败不影响收信）
 		if (tgBotStatus === settingConst.tgBotStatus.OPEN && tgChatId) {
-			await telegramService.sendEmailToBot({ env }, emailRow)
+			ctx.waitUntil(telegramService.sendEmailToBot({ env }, emailRow)
+				.catch(e => console.error('TG 转发失败:', e)));
 		}
 
 		//转发到其他邮箱
@@ -291,7 +287,7 @@ export async function email(message, env, ctx) {
 
 					const emails = forwardEmail.split(',');
 
-					await Promise.all(emails.map(async email => {
+					ctx.waitUntil(Promise.all(emails.map(async email => {
 
 						try {
 							await message.forward(email);
@@ -299,13 +295,14 @@ export async function email(message, env, ctx) {
 							console.error(`转发邮箱 ${email} 失败：`, e);
 						}
 
-					}));
+					})));
 
 				}
 
-		//转发到 Webhook
+		//转发到 Webhook（异步，失败不影响收信）
 		if (webhookStatus === settingConst.webhookStatus.OPEN && webhookUrl) {
-			await webhookService.sendEmail({ env }, emailRow, webhookUrl, webhookRetry, webhookSecret);
+			ctx.waitUntil(webhookService.sendEmail({ env }, emailRow, webhookUrl, webhookRetry, webhookSecret)
+				.catch(e => console.error('Webhook 转发失败:', e)));
 		}
 
 	} catch (e) {

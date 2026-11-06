@@ -218,6 +218,8 @@ import router from "@/router";
 import {computed, nextTick, onBeforeUnmount, onMounted, reactive, ref} from "vue";
 import {login} from "@/request/login.js";
 import {register} from "@/request/login.js";
+import {versionLatest} from "@/request/version.js";
+import {ElNotification} from "element-plus";
 import {websiteConfig} from "@/request/setting.js";
 import {isEmail} from "@/utils/verify-utils.js";
 import {useSettingStore} from "@/store/setting.js";
@@ -302,8 +304,27 @@ const handleClickOutside = (e) => {
   }
 }
 
+async function checkLatestVersion() {
+  try {
+    const data = await versionLatest()
+    if (!data?.hasUpdate || !data.latest) return
+    ElNotification({
+      title: t('loginUpdateTitle'),
+      message: t('loginUpdateMessage', { latest: data.latest }),
+      type: 'info',
+      duration: 8000,
+      onClick: () => {
+        if (data.url) window.open(data.url, '_blank', 'noopener')
+      }
+    })
+  } catch {
+    // 更新检查失败不能影响登录。
+  }
+}
+
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  checkLatestVersion()
 })
 
 onBeforeUnmount(() => {

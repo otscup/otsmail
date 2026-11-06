@@ -31,6 +31,7 @@ const en = {
 	scheduleTooFar: 'Scheduled send can be at most 30 days ahead',
 	imageAttLimit: 'The maximum number of image attachments is 10',
 	attLimit: 'The maximum number of attachments is 10.',
+	contentTooLarge: 'The email body is too large. Please compress it before sending.',
 	pwdLengthLimit: 'Password length exceeds the limit',
 	emailLengthLimit: 'Email length exceeds the limit',
 	minEmailPrefix: 'Email must be at least {{msg}} characters',

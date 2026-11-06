@@ -68,7 +68,8 @@ const telegramService = {
 			await fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ chat_id: chatId, text })
+				body: JSON.stringify({ chat_id: chatId, text }),
+				signal: AbortSignal.timeout(8000)
 			}).catch(() => {})
 		}
 	},
@@ -160,7 +161,8 @@ const telegramService = {
 						reply_markup: {
 							inline_keyboard: inlineKeyboard
 						}
-					})
+					}),
+					signal: AbortSignal.timeout(8000)
 				});
 				if (!res.ok) {
 					console.error(`转发 Telegram 失败 status: ${res.status} response: ${await res.text()}`);

@@ -2114,3 +2114,48 @@ html[data-theme] .reg-key .code-item {
   font: inherit;
   white-space: pre-wrap;
 }
+
+/* v28: settings tabs become a contained segmented bar, not a full-width separator */
+html[data-theme] .settings-tabs {
+  width: calc(100% - 44px) !important;
+  margin: 14px 22px 0 !important;
+  padding: 5px !important;
+  gap: 4px !important;
+  border: 1px solid var(--rd-line) !important;
+  border-bottom: 1px solid var(--rd-line) !important;
+  border-radius: 12px !important;
+  background: var(--rd-panel) !important;
+  box-sizing: border-box;
+  overflow-x: auto;
+}
+html[data-theme] .settings-tabs button {
+  border: 1px solid transparent !important;
+  border-bottom: 1px solid transparent !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: var(--rd-muted) !important;
+  padding: 8px 14px !important;
+  font-size: 13px !important;
+  font-weight: 600;
+  white-space: nowrap;
+}
+html[data-theme] .settings-tabs button:hover {
+  color: var(--rd-text) !important;
+  background: var(--rd-panel-2) !important;
+}
+html[data-theme] .settings-tabs button.active {
+  color: var(--rd-accent) !important;
+  background: var(--rd-accent-weak) !important;
+  border-color: color-mix(in srgb, var(--rd-accent) 24%, transparent) !important;
+}
+@media (max-width: 767px) {
+  html[data-theme] .settings-tabs {
+    width: calc(100% - 24px) !important;
+    margin: 10px 12px 0 !important;
+    padding: 4px !important;
+  }
+  html[data-theme] .settings-tabs button {
+    padding: 7px 10px !important;
+    font-size: 12px !important;
+  }
+}

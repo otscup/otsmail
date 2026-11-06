@@ -88,11 +88,17 @@ const starService = {
 		return { list, total: Number(totalRow?.total) || 0 };
 	},
 	async removeByEmailIds(c, emailIds) {
-		await orm(c).delete(star).where(inArray(star.emailId, emailIds)).run();
+		const ids = [...new Set(emailIds)];
+		for (let i = 0; i < ids.length; i += 50) {
+			await orm(c).delete(star).where(inArray(star.emailId, ids.slice(i, i + 50))).run();
+		}
 	},
 
 	async removeByUserIds(c, userIds) {
-		await orm(c).delete(star).where(inArray(star.userId, userIds)).run();
+		const ids = [...new Set(userIds)];
+		for (let i = 0; i < ids.length; i += 50) {
+			await orm(c).delete(star).where(inArray(star.userId, ids.slice(i, i + 50))).run();
+		}
 	}
 };
 

@@ -21,7 +21,7 @@ import app from '../hono/hono';
 import result from '../model/result';
 import userContext from '../security/user-context';
 import mcpService from '../service/mcp-service';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { createMcpServer } from '../mcp/mcp-server.js';
 
 // Worker --var 注入的 env 是字符串 'true'，容错判定
@@ -38,16 +38,40 @@ app.post('/mcp', async (c) => {
 	if (!isMcpOn(c)) {
 		return c.json({ error: 'mcp_disabled' }, 403);
 	}
+
+	const accept = (c.req.header('Accept') || '').toLowerCase();
+	if (!accept.includes('application/json') || !accept.includes('text/event-stream')) {
+		return c.json({
+			jsonrpc: '2.0',
+			error: { code: -32000, message: 'Accept must include application/json and text/event-stream' },
+			id: null
+		}, 406);
+	}
+
+	// 只记录 step，不记录令牌/头；错误由 hono.onError 统一返回真实 HTTP 状态。
+	const clone = c.req.raw.clone();
+	try {
+		const body = await clone.json();
+		c.set('mcpStep', body?.method || 'unknown');
+	} catch (e) {
+		c.set('mcpStep', 'invalid-json');
+		return c.json({ jsonrpc: '2.0', error: { code: -32700, message: 'Parse error' }, id: null }, 400);
+	}
+
 	const server = createMcpServer(c);
-	const transport = new StreamableHTTPServerTransport({
-		sessionIdGenerator: undefined,
+	const transport = new WebStandardStreamableHTTPServerTransport({
+		sessionIdGenerator: undefined
 	});
 	await server.connect(transport);
 	return transport.handleRequest(c.req.raw);
 });
 
 app.get('/mcp', async (c) => {
-	return c.json({ name: 'otsmail-mcp', version: '1.0.0', transport: 'streamable-http', enabled: isMcpOn(c) });
+	return c.text('', 405, { Allow: 'POST' });
+});
+
+app.delete('/mcp', async (c) => {
+	return c.text('', 405, { Allow: 'POST' });
 });
 
 // ---------- 后台管理 ----------

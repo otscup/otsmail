@@ -11,6 +11,12 @@ import KvConst from "../const/kv-const";
 import constant from "../const/constant";
 import { t } from "../i18n/i18n";
 
+// PKCE verifier 必须来自发起授权的那次客户端，不能用服务端生成的。
+export function appendCodeVerifier(params, codeVerifier) {
+	if (codeVerifier) params.append('code_verifier', String(codeVerifier));
+	return params;
+}
+
 const oauthService = {
 
 	verifyNonce(c, nonce) {
@@ -128,7 +134,7 @@ const oauthService = {
 
 	async linuxDoLogin(c, params) {
 
-		const { code, nonce } = params;
+		const { code, nonce, codeVerifier } = params;
 		this.verifyNonce(c, nonce);
 
 		let token = '';
@@ -140,6 +146,7 @@ const oauthService = {
 		reqParams.append('code', code)
 		reqParams.append('redirect_uri', c.env.linuxdo_callback_url)
 		reqParams.append('grant_type', 'authorization_code')
+		appendCodeVerifier(reqParams, codeVerifier)
 
 		const tokenRes = await fetch("https://connect.linux.do/oauth2/token", {
 			method: "POST",
@@ -194,7 +201,7 @@ const oauthService = {
 
 			async githubLogin(c, params) {
 
-		const { code, nonce } = params;
+		const { code, nonce, codeVerifier } = params;
 		this.verifyNonce(c, nonce);
 
 		const reqParams = new URLSearchParams()
@@ -202,6 +209,7 @@ const oauthService = {
 		reqParams.append('client_secret', c.env.github_client_secret)
 		reqParams.append('code', code)
 		reqParams.append('redirect_uri', c.env.github_callback_url)
+		appendCodeVerifier(reqParams, codeVerifier)
 
 		const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
 			method: "POST",
@@ -266,7 +274,7 @@ const oauthService = {
 	 */
 	async googleLogin(c, params) {
 
-		const { code, nonce } = params;
+		const { code, nonce, codeVerifier } = params;
 		this.verifyNonce(c, nonce);
 
 		const reqParams = new URLSearchParams()
@@ -275,6 +283,7 @@ const oauthService = {
 		reqParams.append('code', code)
 		reqParams.append('redirect_uri', c.env.google_callback_url)
 		reqParams.append('grant_type', 'authorization_code')
+		appendCodeVerifier(reqParams, codeVerifier)
 
 		const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
 			method: "POST",

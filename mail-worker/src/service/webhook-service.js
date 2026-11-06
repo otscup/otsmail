@@ -27,6 +27,7 @@ const webhookService = {
 			const res = await fetch(url, {
 				method: 'POST',
 				headers,
+				signal: AbortSignal.timeout(8000),
 				body: wx
 					? testBody(secret).toString()
 					: JSON.stringify({
@@ -81,6 +82,7 @@ const webhookService = {
 				const res = await fetch(webhookUrl, {
 					method: 'POST',
 					headers,
+					signal: AbortSignal.timeout(8000),
 					body: wx ? new URLSearchParams({ token: webhookSecret || '', title: email.subject || 'otsmail', content: email.text || email.subject || '' }).toString() : JSON.stringify(payload)
 				});
 				if (!res.ok) {

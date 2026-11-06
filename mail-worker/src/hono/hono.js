@@ -67,6 +67,32 @@ app.use('/update/check', async (c, next) => {
 });
 
 app.onError(async (err, c) => {
+	const errorPath = new URL(c.req.url).pathname;
+
+	// MCP 客户端只看 HTTP 状态码；这里不能再用 200 + 业务 code 包装。
+	if (errorPath === '/mcp') {
+		const status = err.name === 'BizError'
+			? (err.code === 401 ? 401 : err.code === 403 ? 403 : 500)
+			: 500;
+		console.error('MCP request failed', {
+			step: c.get('mcpStep') || 'auth',
+			name: err.name,
+			message: err.message,
+			status
+		});
+		const headers = status === 401
+			? { 'WWW-Authenticate': `Bearer resource_metadata="${new URL(c.req.url).origin}/.well-known/oauth-protected-resource"` }
+			: {};
+		return c.json({
+			jsonrpc: '2.0',
+			error: {
+				code: status === 401 ? -32001 : status === 403 ? -32003 : -32603,
+				message: status === 401 ? 'Unauthorized' : status === 403 ? 'Forbidden' : 'Internal error'
+			},
+			id: null
+		}, status, headers);
+	}
+
 	if (err.name === 'BizError') {
 		console.log(err.message);
 	} else {

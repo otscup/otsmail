@@ -118,10 +118,11 @@
           <div class="cf-title">
             <span class="cf-logo"><Icon icon="simple-icons:cloudflare" width="20" height="20"/></span>
             {{ $t('cfAccountUsage') }}
-            <span class="cf-period" v-if="cloudflare.period">{{ cloudflare.period }}</span>
+            <span class="cf-period" v-if="cfPeriodLabel">{{ cfPeriodLabel }}</span>
             <span class="cf-plan" v-if="cloudflare.plan">{{ cloudflare.plan === 'paid' ? $t('cfPaid') : $t('cfFree') }}</span>
           </div>
           <span class="cf-status" v-if="cloudflare.configured === false">{{ $t('cfNotConfigured') }}</span>
+          <span class="cf-updated" v-else-if="fetchedAtText">{{ $t('cfUpdatedAt') }} {{ fetchedAtText }} · {{ $t('cfCacheHint') }}</span>
         </div>
         <div v-if="cloudflare.configured === false" class="cf-empty">
           {{ $t('cfNotConfiguredDesc') }}
@@ -134,19 +135,19 @@
             <div class="cf-total">
               <span class="cf-total-icon"><Icon icon="mdi:chart-line" width="18"/></span>
               <div>
-                <small>{{ $t('cfRequests') }}</small>
+                <small>{{ requestsLabel }}</small>
                 <strong>{{ formatNumber(workersUsed) }}</strong>
                 <em>{{ quotaText(workersUsed, workersLimit) }}</em>
               </div>
             </div>
             <div class="cf-total">
               <span class="cf-total-icon"><Icon icon="mdi:alert-circle-outline" width="18"/></span>
-              <div><small>{{ $t('cfErrors') }}</small><strong>{{ formatNumber(cloudflare.totalErrors) }}</strong></div>
+              <div><small>{{ errorsLabel }}</small><strong>{{ formatNumber(errorsUsed) }}</strong></div>
             </div>
             <div class="cf-total">
               <span class="cf-total-icon"><Icon icon="mdi:database-outline" width="18"/></span>
               <div>
-                <small>{{ $t('cfD1Rows') }}</small>
+                <small>{{ d1Label }}</small>
                 <strong>{{ d1TotalUsed }}</strong>
                 <em>{{ d1QuotaText }}</em>
               </div>
@@ -162,27 +163,84 @@
             <div class="cf-total">
               <span class="cf-total-icon"><Icon icon="mdi:memory" width="18"/></span>
               <div>
-                <small>{{ $t('cfDoRequests') }}</small>
-                <strong>{{ cloudflare.do ? formatNumber(doUsed) : '—' }}</strong>
-                <em v-if="cloudflare.do">{{ doQuotaText }} · {{ $t('cfDoCpu') }} {{ formatDuration(cloudflare.do.cpuTime) }}</em>
+                <small>{{ doLabel }}</small>
+                <strong>{{ doWindow ? formatNumber(doUsed) : '—' }}</strong>
+                <em v-if="doWindow">{{ doQuotaText }} · {{ $t('cfDoCpu') }} {{ formatDuration(doWindow.cpuTime) }}</em>
                 <em v-else-if="cloudflare.doError" class="cf-quota-error">{{ cloudflare.doError }}</em>
               </div>
             </div>
           </div>
-          <div class="cf-apps-title">{{ $t('cfApps') }}</div>
-          <div class="cf-apps" :class="{ scrollable: cloudflare.apps.length > 5 }">
-            <div v-for="app in cloudflare.apps" :key="app.name" class="cf-app">
-              <span class="cf-app-icon" :class="{primary: app.otsmail}">
-                <Icon :icon="app.otsmail ? 'hugeicons:mail-01' : 'mdi:application-outline'" width="18"/>
-              </span>
-              <div class="cf-app-name">
-                <strong>{{ app.name }}</strong>
-                <small>{{ app.otsmail ? $t('cfCurrentApp') : $t('cfOtherApp') }}</small>
+
+          <div class="cf-viz-grid">
+            <section class="cf-viz-card">
+              <div class="cf-viz-head"><span>{{ $t('cfD1Breakdown') }}</span><small>{{ $t('cfToday') }}</small></div>
+              <div v-if="cfD1Items.length" class="cf-donut-wrap">
+                <div ref="cfD1El" class="cf-donut"></div>
+                <div class="cf-legend">
+                  <div v-for="item in cfD1Items" :key="item.key" class="cf-legend-item" :title="item.sub || item.name">
+                    <i :style="{background:item.color}"></i>
+                    <span class="cf-legend-name">{{ item.name }}<small v-if="item.sub">{{ item.sub }}</small></span>
+                    <strong>{{ formatCompact(item.value) }}</strong>
+                    <em>{{ item.shareText }}</em>
+                  </div>
+                </div>
               </div>
-              <strong class="cf-app-value">{{ formatNumber(app.requests) }}</strong>
-              <span class="cf-share">{{ appShare(app) }}%</span>
-              <div class="cf-bar"><span :style="{ width: appShare(app) + '%' }"></span></div>
-            </div>
+              <div v-else class="cf-viz-empty">{{ $t('cfNoData') }}</div>
+            </section>
+
+            <section class="cf-viz-card">
+              <div class="cf-viz-head"><span>{{ $t('cfDoBreakdown') }}</span><small>{{ $t('cfToday') }}</small></div>
+              <div v-if="cfDoItems.length" class="cf-donut-wrap">
+                <div ref="cfDoEl" class="cf-donut"></div>
+                <div class="cf-legend">
+                  <div v-for="item in cfDoItems" :key="item.key" class="cf-legend-item" :title="item.name">
+                    <i :style="{background:item.color}"></i>
+                    <span class="cf-legend-name">{{ item.name }}</span>
+                    <strong>{{ formatCompact(item.value) }}</strong>
+                    <em>{{ item.shareText }}</em>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="cf-viz-empty">{{ $t('cfNoData') }}</div>
+            </section>
+
+            <section class="cf-viz-card cf-kv-card">
+              <div class="cf-viz-head"><span>{{ $t('cfKvUsage') }}</span><small>{{ $t('cfToday') }}</small></div>
+              <div class="cf-kv-actions" v-if="cloudflare.kv">
+                <div v-for="action in kvActions" :key="action.key">
+                  <span>{{ action.label }}</span>
+                  <strong>{{ formatNumber(action.used) }}</strong>
+                  <em>{{ action.percentText }}</em>
+                </div>
+              </div>
+              <div v-if="cfKvItems.length" class="cf-donut-wrap cf-kv-donut-wrap">
+                <div ref="cfKvEl" class="cf-donut"></div>
+                <div class="cf-legend">
+                  <div v-for="item in cfKvItems" :key="item.key" class="cf-legend-item" :title="item.sub || item.name">
+                    <i :style="{background:item.color}"></i>
+                    <span class="cf-legend-name">{{ item.name }}<small v-if="item.sub">{{ item.sub }}</small></span>
+                    <strong>{{ formatCompact(item.value) }}</strong>
+                    <em>{{ item.shareText }}</em>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="cf-viz-empty">{{ $t('cfNoData') }}</div>
+            </section>
+
+            <section class="cf-viz-card cf-apps-card">
+              <div class="cf-viz-head"><span>{{ $t('cfApps') }}</span><small>{{ $t('cfMonthAccumulated') }}</small></div>
+              <div class="cf-app-list">
+                <div v-for="app in cfTopApps" :key="app.key" class="cf-app-row">
+                  <span class="cf-app-icon" :class="{primary: app.otsmail}">
+                    <Icon :icon="app.otsmail ? 'hugeicons:mail-01' : 'mdi:application-outline'" width="17"/>
+                  </span>
+                  <span class="cf-app-name" :title="app.name">{{ app.name }}</span>
+                  <strong>{{ formatNumber(app.requests) }}</strong>
+                  <em>{{ app.shareText }}</em>
+                  <div class="cf-app-bar"><span :style="{width: app.barPct + '%'}"></span></div>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
         <div v-else class="cf-empty">{{ $t('cfLoading') }}</div>
@@ -271,19 +329,50 @@ const cloudflare = reactive({
   limits: {},
   totalRequests: 0,
   totalErrors: 0,
+  todayErrors: 0,
   workersToday: 0,
+  todayApps: [],
   apps: [],
   d1: null,
   d1Today: null,
   do: null,
   doToday: null,
   doError: '',
+  kv: null,
+  kvError: '',
   r2: null,
+  fetchedAt: '',
   error: ''
 })
 
+const CF_COLORS = ['#3CB2FF', '#13DEB9', '#FBBF24', '#FF7F50', '#BAE6FD', '#C084FC']
+const cfD1El = ref(null)
+const cfDoEl = ref(null)
+const cfKvEl = ref(null)
+
+const isPaid = computed(() => cloudflare.plan === 'paid')
 const workersUsed = computed(() =>
-  cloudflare.plan === 'paid' ? cloudflare.totalRequests : (cloudflare.workersToday || 0)
+  isPaid.value ? cloudflare.totalRequests : (cloudflare.workersToday || 0)
+)
+const errorsUsed = computed(() =>
+  isPaid.value ? cloudflare.totalErrors : (cloudflare.todayErrors || 0)
+)
+const requestsLabel = computed(() => t(isPaid.value ? 'cfRequestsMonth' : 'cfRequestsToday'))
+const errorsLabel = computed(() => t(isPaid.value ? 'cfErrorsMonth' : 'cfErrorsToday'))
+const d1Label = computed(() => t(isPaid.value ? 'cfD1RowsMonth' : 'cfD1RowsToday'))
+const doLabel = computed(() => t(isPaid.value ? 'cfDoRequestsMonth' : 'cfDoRequestsToday'))
+const d1Window = computed(() => isPaid.value ? cloudflare.d1 : cloudflare.d1Today)
+const doWindow = computed(() => isPaid.value ? cloudflare.do : cloudflare.doToday)
+const errorApps = computed(() => {
+  const apps = isPaid.value ? cloudflare.apps : cloudflare.todayApps;
+  return (apps || []).filter(app => Number(app.errors || 0) > 0).sort((a, b) => b.errors - a.errors);
+})
+const fetchedAtText = computed(() => {
+  if (!cloudflare.fetchedAt) return '';
+  return new Date(cloudflare.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+})
+const cfPeriodLabel = computed(() =>
+  isPaid.value ? cloudflare.period : `${new Date().toISOString().slice(0, 10)} UTC`
 )
 const workersLimit = computed(() =>
   cloudflare.plan === 'paid'
@@ -336,6 +425,122 @@ function appShare(app) {
   if (!cloudflare.totalRequests) return 0
   return Math.max(1, Math.round((app.requests / cloudflare.totalRequests) * 100))
 }
+
+function dbShare(db) {
+  return Math.max(db?.share ? 1 : 0, Math.round(Number(db?.share || 0) * 100))
+}
+
+function doScriptShare(script) {
+  return Math.max(script?.share ? 1 : 0, Math.round(Number(script?.share || 0) * 100))
+}
+
+function nsReadShare(ns) {
+  const max = Math.max(...(cloudflare.kv?.namespaces || []).map(item => Number(item.read || 0)), 1)
+  return Math.max(ns.read ? 1 : 0, Math.round((Number(ns.read || 0) / max) * 100))
+}
+
+function chartPct(value) {
+  const number = Number(value || 0)
+  return number <= 0 ? 2 : Math.min(100, Math.max(6, number))
+}
+
+function formatCompact(value) {
+  const number = Number(value || 0)
+  if (number >= 1e9) return (number / 1e9).toFixed(1).replace('.0', '') + 'B'
+  if (number >= 1e6) return (number / 1e6).toFixed(1).replace('.0', '') + 'M'
+  if (number >= 1e3) return (number / 1e3).toFixed(1).replace('.0', '') + 'K'
+  return String(number)
+}
+
+function kvLimit(key) {
+  const limit = cloudflare.limits?.[key]
+  const map = { kvDailyRead: 'read', kvDailyWrite: 'write', kvDailyDelete: 'delete', kvDailyList: 'list' }
+  const used = cloudflare.kv?.[map[key]] || 0
+  return limit ? quotaText(used, limit) : ''
+}
+
+const kvActions = computed(() => {
+  const items = [
+    ['read', 'cfKvRead', 'kvDailyRead'],
+    ['write', 'cfKvWrite', 'kvDailyWrite'],
+    ['delete', 'cfKvDelete', 'kvDailyDelete'],
+    ['list', 'cfKvList', 'kvDailyList']
+  ]
+  return items.map(([key, label, limitKey]) => {
+    const used = Number(cloudflare.kv?.[key] || 0)
+    const limit = Number(cloudflare.limits?.[limitKey] || 0)
+    return { key, label: t(label), used, limit, percentText: shareText(used, limit) }
+  })
+})
+
+function shareText(value, total) {
+  const pct = Number(total) > 0 ? (Number(value) / Number(total)) * 100 : 0
+  if (pct > 0 && pct < 0.1) return '<0.1%'
+  return `${pct.toFixed(1)}%`
+}
+
+function donutItems(rows, total) {
+  const list = rows.filter(row => Number(row.value || 0) > 0)
+  const visible = list.slice(0, 6)
+  const rest = list.slice(6)
+  if (rest.length) {
+    visible.push({
+      key: 'other',
+      name: t('cfOther'),
+      value: rest.reduce((sumValue, row) => sumValue + Number(row.value || 0), 0)
+    })
+  }
+  return visible.map((row, index) => ({
+    ...row,
+    color: row.key === 'other' ? '#9CA3AF' : CF_COLORS[index % CF_COLORS.length],
+    shareText: shareText(row.value, total)
+  }))
+}
+
+const cfD1Total = computed(() =>
+  (d1Window.value?.databases || []).reduce((sumValue, db) => sumValue + Number(db.rowsRead || 0) + Number(db.rowsWritten || 0), 0))
+const cfD1Items = computed(() => donutItems(
+  (d1Window.value?.databases || []).map(db => ({
+    key: db.databaseId,
+    name: db.name || String(db.databaseId || '').slice(0, 8),
+    sub: String(db.databaseId || '').slice(0, 8),
+    value: Number(db.rowsRead || 0) + Number(db.rowsWritten || 0)
+  })), cfD1Total.value))
+
+const cfDoTotal = computed(() =>
+  (doWindow.value?.scripts || []).reduce((sumValue, script) => sumValue + Number(script.requests || 0), 0))
+const cfDoItems = computed(() => donutItems(
+  (doWindow.value?.scripts || []).map(script => ({
+    key: script.name,
+    name: script.name,
+    value: Number(script.requests || 0)
+  })), cfDoTotal.value))
+
+const cfKvTotal = computed(() =>
+  (cloudflare.kv?.namespaces || []).reduce((sumValue, ns) => sumValue + Number(ns.read || 0) + Number(ns.write || 0) + Number(ns.delete || 0) + Number(ns.list || 0), 0))
+const cfKvItems = computed(() => donutItems(
+  (cloudflare.kv?.namespaces || []).map(ns => ({
+    key: ns.namespaceId,
+    name: ns.name || String(ns.namespaceId || '').slice(0, 8),
+    sub: String(ns.namespaceId || '').slice(0, 8),
+    value: Number(ns.read || 0) + Number(ns.write || 0) + Number(ns.delete || 0) + Number(ns.list || 0)
+  })), cfKvTotal.value))
+
+const cfTopApps = computed(() => {
+  const total = Number(cloudflare.totalRequests || 0)
+  const apps = (cloudflare.apps || []).slice(0, 6).map(app => ({
+    ...app,
+    key: app.name,
+    shareText: shareText(app.requests, total),
+    barPct: total ? Math.max(0.5, Math.min(100, (Number(app.requests) / total) * 100)) : 0
+  }))
+  const rest = (cloudflare.apps || []).slice(6)
+  if (rest.length) {
+    const requests = rest.reduce((sumValue, app) => sumValue + Number(app.requests || 0), 0)
+    apps.push({ key: 'other', name: t('cfOther'), requests, shareText: shareText(requests, total), barPct: total ? Math.max(0.5, Math.min(100, (requests / total) * 100)) : 0 })
+  }
+  return apps
+})
 
 const numberCount = reactive({
   normalReceiveTotal: 0,
@@ -398,6 +603,9 @@ let senderPie = null
 let increaseLine = null
 let emailColumn = null
 let sendGauge = null
+let cfD1Chart = null
+let cfDoChart = null
+let cfKvChart = null
 let first = true
 let boxKey = ref(0)
 let senderPieLeft = window.innerWidth < 500 ? `${window.innerWidth - 110}` : '72%'
@@ -409,7 +617,10 @@ onMounted(() => {
   analysisUsage().then(data => Object.assign(usage, data)).catch(() => {})
 
   analysisCloudflare()
-    .then(data => Object.assign(cloudflare, data))
+    .then(data => {
+      Object.assign(cloudflare, data)
+      setTimeout(initCfCharts, 0)
+    })
     .catch(error => {
       cloudflare.configured = true
       cloudflare.error = error?.message || t('cfRequestFailed')
@@ -496,7 +707,56 @@ function initPicture() {
     createIncreaseLine()
     createEmailColumnChart();
     createSendGauge();
+    initCfCharts();
   })
+}
+
+function initCfCharts() {
+  if (route.name !== 'analysis') return
+  cfD1Chart = createCfDonut(cfD1El.value, cfD1Chart, cfD1Items.value, cfD1Total.value, '行')
+  cfDoChart = createCfDonut(cfDoEl.value, cfDoChart, cfDoItems.value, cfDoTotal.value, '次')
+  cfKvChart = createCfDonut(cfKvEl.value, cfKvChart, cfKvItems.value, cfKvTotal.value, '次')
+}
+
+function createCfDonut(el, chart, items, total, unit) {
+  if (!el || !items.length) return chart
+  const instance = chart || echarts.getInstanceByDom(el) || echarts.init(el)
+  instance.setOption({
+    color: items.map(item => item.color),
+    animationDuration: 400,
+    title: {
+      text: formatCompact(total),
+      subtext: unit,
+      left: '50%',
+      top: '40%',
+      textAlign: 'center',
+      textStyle: { color: topic.value.color, fontSize: 20, fontWeight: 700 },
+      subtextStyle: { color: topic.value.axisColor, fontSize: 10 }
+    },
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: topic.value.background,
+      borderColor: topic.value.splitLineColor,
+      textStyle: { color: topic.value.color },
+      formatter: params => `${params.marker} ${params.name}<br/>${formatNumber(params.value)} · ${shareText(params.value, total)}`
+    },
+    series: [{
+      type: 'pie',
+      radius: ['55%', '75%'],
+      center: ['50%', '50%'],
+      avoidLabelOverlap: false,
+      itemStyle: {
+        borderColor: topic.value.background,
+        borderWidth: 2,
+        borderRadius: 4
+      },
+      label: { show: false },
+      labelLine: { show: false },
+      emphasis: { scale: true, scaleSize: 4 },
+      data: items.map(item => ({ name: item.name, value: item.value }))
+    }]
+  }, true)
+  return instance
 }
 
 function setStyle() {
@@ -940,6 +1200,50 @@ function createSendGauge() {
   margin-top: 10px;
   font-size: 12px;
 }
+/* Cloudflare usage: compact two-column dashboard */
+.cf-viz-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; align-items: start; }
+.cf-viz-card { min-width: 0; padding: 14px 16px; border: 1px solid var(--el-border-color); border-radius: 14px; background: var(--el-bg-color); }
+.cf-viz-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 12px; font-weight: 650; color: var(--el-text-color-primary); }
+.cf-viz-head small { font-size: 10px; font-weight: 400; color: var(--el-text-color-placeholder); }
+.cf-donut-wrap { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 10px; align-items: center; min-height: 190px; }
+.cf-donut { width: 100%; height: 190px; min-width: 0; }
+.cf-legend { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cf-legend-item { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto auto; gap: 6px; align-items: center; min-width: 0; font-size: 11px; line-height: 1.3; }
+.cf-legend-item i { width: 8px; height: 8px; border-radius: 50%; }
+.cf-legend-name { min-width: 0; color: var(--el-text-color-primary); overflow-wrap: anywhere; white-space: normal; }
+.cf-legend-name small { display: block; margin-top: 1px; font-size: 9px; line-height: 1.2; color: var(--el-text-color-placeholder); }
+.cf-legend-item strong { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--el-text-color-primary); }
+.cf-legend-item em { min-width: 42px; text-align: right; font-style: normal; font-size: 10px; color: var(--el-text-color-secondary); font-variant-numeric: tabular-nums; }
+.cf-viz-empty { display: flex; align-items: center; justify-content: center; min-height: 160px; font-size: 12px; color: var(--el-text-color-placeholder); }
+.cf-kv-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 4px 0 8px; }
+.cf-kv-actions > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 7px 8px; border-radius: 8px; background: var(--el-fill-color-light); }
+.cf-kv-actions span { font-size: 10px; color: var(--el-text-color-secondary); }
+.cf-kv-actions strong { font-size: 15px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.cf-kv-actions em { font-style: normal; font-size: 9px; color: var(--el-text-color-placeholder); }
+.cf-kv-donut-wrap { grid-template-columns: 150px minmax(0, 1fr); min-height: 170px; margin-top: 2px; }
+.cf-kv-donut-wrap .cf-donut { height: 170px; }
+.cf-app-list { display: flex; flex-direction: column; gap: 2px; }
+.cf-app-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto 44px; gap: 7px; align-items: center; min-width: 0; padding: 4px 0 3px; border-bottom: 1px solid var(--el-border-color-lighter); }
+.cf-app-row:last-child { border-bottom: 0; }
+.cf-app-row .cf-app-icon { width: 21px; height: 21px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; background: var(--el-fill-color-light); }
+.cf-app-row .cf-app-icon.primary { color: var(--rd-accent); background: color-mix(in srgb, var(--rd-accent) 12%, transparent); }
+.cf-app-name { min-width: 0; font-size: 11px; line-height: 1.3; color: var(--el-text-color-primary); overflow-wrap: anywhere; white-space: normal; }
+.cf-app-row > strong { font-size: 11px; font-variant-numeric: tabular-nums; }
+.cf-app-row > em { font-style: normal; font-size: 10px; text-align: right; color: var(--el-text-color-secondary); font-variant-numeric: tabular-nums; }
+.cf-app-bar { grid-column: 2 / -1; height: 3px; overflow: hidden; border-radius: 99px; background: var(--el-fill-color-light); }
+.cf-app-bar span { display: block; height: 100%; border-radius: inherit; background: var(--rd-accent); }
+@media (max-width: 1000px) {
+  .cf-viz-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 767px) {
+  .cf-viz-card { padding: 12px; }
+  .cf-donut-wrap, .cf-kv-donut-wrap { grid-template-columns: 132px minmax(0, 1fr); gap: 6px; }
+  .cf-donut, .cf-kv-donut-wrap .cf-donut { height: 160px; }
+  .cf-kv-actions { grid-template-columns: 1fr 1fr; }
+  .cf-legend-item { grid-template-columns: 7px minmax(0, 1fr) auto; }
+  .cf-legend-item em { grid-column: 3; min-width: 34px; }
+}
+
 </style>
 <style scoped lang="scss">
 .analysis-loading {
@@ -1102,7 +1406,34 @@ function createSendGauge() {
     .cf-total strong { font-size: 19px; line-height: 1.2; overflow-wrap: anywhere; }
     .cf-total em { font-style: normal; font-size: 10px; line-height: 1.35; color: var(--el-text-color-secondary); overflow-wrap: anywhere; }
     .cf-quota-error { color: var(--el-color-danger) !important; }
+    .cf-updated { font-size: 10px; color: var(--el-text-color-secondary); white-space: nowrap; }
+    .cf-breakdown { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--el-border-color-lighter); }
+    .cf-breakdown-title { margin-bottom: 5px; font-size: 11px; font-weight: 600; color: var(--el-text-color-secondary); }
+    .cf-detail-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; gap: 10px; padding: 5px 0; border-top: 1px dashed var(--el-border-color-lighter); font-size: 11px; }
+    .cf-detail-row:first-of-type { border-top: 0; }
+    .cf-detail-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cf-detail-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .cf-detail-meta { color: var(--el-text-color-secondary); font-variant-numeric: tabular-nums; }
+    .cf-chart { display: flex; align-items: flex-end; gap: 12px; overflow-x: auto; padding: 12px 2px 4px; min-height: 176px; scrollbar-width: thin; }
+    .cf-chart-col { display: flex; flex: 0 0 92px; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+    .cf-chart-col > strong { font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--el-text-color-regular); }
+    .cf-chart-track { display: flex; align-items: flex-end; width: 38px; height: 112px; padding: 3px; border-radius: 8px; background: var(--el-fill-color-light); }
+    .cf-chart-track i { display: block; width: 100%; min-height: 3px; border-radius: 6px; background: linear-gradient(180deg, var(--el-color-primary), color-mix(in srgb, var(--el-color-primary) 58%, var(--el-bg-color))); transition: height .35s ease; }
+    .cf-chart-col > span { max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 600; color: var(--el-text-color-regular); }
+    .cf-chart-col > small { max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; color: var(--el-text-color-secondary); }
+    .cf-kv-chart { min-height: 150px; padding-top: 8px; }
+    .cf-kv-chart .cf-chart-track { height: 82px; }
+    .cf-kv { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--el-border-color); }
+    .cf-kv-title { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: var(--el-text-color-regular); }
+    .cf-kv-title small { font-size: 10px; font-weight: 400; color: var(--el-text-color-secondary); }
+    .cf-kv-totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .cf-kv-totals > div { display: grid; gap: 2px; min-width: 0; padding: 9px 10px; border-radius: 7px; background: var(--el-fill-color-lighter); }
+    .cf-kv-totals span { font-size: 10px; color: var(--el-text-color-secondary); }
+    .cf-kv-totals strong { font-size: 16px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+    .cf-kv-totals em { font-style: normal; font-size: 9px; color: var(--el-text-color-secondary); }
+    .cf-kv-ns { margin-top: 10px; }
     .cf-apps-title { margin: 16px 0 8px; font-size: 12px; color: var(--el-text-color-secondary); }
+    .cf-apps-title small { margin-left: 6px; font-size: 10px; color: var(--el-text-color-placeholder); }
     .cf-apps { display: grid; gap: 6px; }
     .cf-apps.scrollable { max-height: 238px; overflow-y: auto; padding-right: 4px; }
     .cf-apps.scrollable::-webkit-scrollbar { width: 6px; }
@@ -1117,8 +1448,8 @@ function createSendGauge() {
     .cf-share { font-size: 11px; text-align: right; color: var(--el-text-color-secondary); }
     .cf-bar { grid-column: 2 / -1; height: 3px; border-radius: 3px; background: var(--el-fill-color); overflow: hidden; }
     .cf-bar span { display: block; height: 100%; border-radius: inherit; background: var(--el-color-primary); }
-    @media (max-width: 1100px) { .cf-totals { grid-template-columns: 1fr 1fr; } }
-    @media (max-width: 767px) { .cf-totals { grid-template-columns: 1fr; } .cf-app { grid-template-columns: 30px minmax(0, 1fr) auto; } .cf-share { display: none; } }
+    @media (max-width: 1100px) { .cf-totals { grid-template-columns: 1fr 1fr; } .cf-updated { display: none; } }
+    @media (max-width: 767px) { .cf-totals { grid-template-columns: 1fr; } .cf-kv-totals { grid-template-columns: 1fr 1fr; } .cf-app { grid-template-columns: 30px minmax(0, 1fr) auto; } .cf-share { display: none; } }
   }
 
   .picture {
@@ -1192,6 +1523,50 @@ function createSendGauge() {
       }
     }
   }
+}
+
+/* Cloudflare usage: compact two-column dashboard */
+.cf-viz-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; align-items: start; }
+.cf-viz-card { min-width: 0; padding: 14px 16px; border: 1px solid var(--el-border-color); border-radius: 14px; background: var(--el-bg-color); }
+.cf-viz-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 12px; font-weight: 650; color: var(--el-text-color-primary); }
+.cf-viz-head small { font-size: 10px; font-weight: 400; color: var(--el-text-color-placeholder); }
+.cf-donut-wrap { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 10px; align-items: center; min-height: 190px; }
+.cf-donut { width: 100%; height: 190px; min-width: 0; }
+.cf-legend { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cf-legend-item { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto auto; gap: 6px; align-items: center; min-width: 0; font-size: 11px; line-height: 1.3; }
+.cf-legend-item i { width: 8px; height: 8px; border-radius: 50%; }
+.cf-legend-name { min-width: 0; color: var(--el-text-color-primary); overflow-wrap: anywhere; white-space: normal; }
+.cf-legend-name small { display: block; margin-top: 1px; font-size: 9px; line-height: 1.2; color: var(--el-text-color-placeholder); }
+.cf-legend-item strong { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--el-text-color-primary); }
+.cf-legend-item em { min-width: 42px; text-align: right; font-style: normal; font-size: 10px; color: var(--el-text-color-secondary); font-variant-numeric: tabular-nums; }
+.cf-viz-empty { display: flex; align-items: center; justify-content: center; min-height: 160px; font-size: 12px; color: var(--el-text-color-placeholder); }
+.cf-kv-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 4px 0 8px; }
+.cf-kv-actions > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 7px 8px; border-radius: 8px; background: var(--el-fill-color-light); }
+.cf-kv-actions span { font-size: 10px; color: var(--el-text-color-secondary); }
+.cf-kv-actions strong { font-size: 15px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.cf-kv-actions em { font-style: normal; font-size: 9px; color: var(--el-text-color-placeholder); }
+.cf-kv-donut-wrap { grid-template-columns: 150px minmax(0, 1fr); min-height: 170px; margin-top: 2px; }
+.cf-kv-donut-wrap .cf-donut { height: 170px; }
+.cf-app-list { display: flex; flex-direction: column; gap: 2px; }
+.cf-app-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto 44px; gap: 7px; align-items: center; min-width: 0; padding: 4px 0 3px; border-bottom: 1px solid var(--el-border-color-lighter); }
+.cf-app-row:last-child { border-bottom: 0; }
+.cf-app-row .cf-app-icon { width: 21px; height: 21px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; background: var(--el-fill-color-light); }
+.cf-app-row .cf-app-icon.primary { color: var(--rd-accent); background: color-mix(in srgb, var(--rd-accent) 12%, transparent); }
+.cf-app-name { min-width: 0; font-size: 11px; line-height: 1.3; color: var(--el-text-color-primary); overflow-wrap: anywhere; white-space: normal; }
+.cf-app-row > strong { font-size: 11px; font-variant-numeric: tabular-nums; }
+.cf-app-row > em { font-style: normal; font-size: 10px; text-align: right; color: var(--el-text-color-secondary); font-variant-numeric: tabular-nums; }
+.cf-app-bar { grid-column: 2 / -1; height: 3px; overflow: hidden; border-radius: 99px; background: var(--el-fill-color-light); }
+.cf-app-bar span { display: block; height: 100%; border-radius: inherit; background: var(--rd-accent); }
+@media (max-width: 1000px) {
+  .cf-viz-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 767px) {
+  .cf-viz-card { padding: 12px; }
+  .cf-donut-wrap, .cf-kv-donut-wrap { grid-template-columns: 132px minmax(0, 1fr); gap: 6px; }
+  .cf-donut, .cf-kv-donut-wrap .cf-donut { height: 160px; }
+  .cf-kv-actions { grid-template-columns: 1fr 1fr; }
+  .cf-legend-item { grid-template-columns: 7px minmax(0, 1fr) auto; }
+  .cf-legend-item em { grid-column: 3; min-width: 34px; }
 }
 
 </style>

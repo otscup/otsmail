@@ -15,8 +15,9 @@ const WORKERS_QUERY = `query($accountTag: String!, $start: Time!, $end: Time!) {
 const D1_QUERY = `query($accountTag: String!, $start: Date!, $end: Date!) {
 	viewer {
 		accounts(filter: { accountTag: $accountTag }) {
-			d1AnalyticsAdaptiveGroups(limit: 1000, filter: { date_geq: $start, date_leq: $end }) {
+			d1QueriesAdaptiveGroups(limit: 1000, filter: { date_geq: $start, date_leq: $end }) {
 				sum { rowsRead rowsWritten }
+				dimensions { databaseId }
 			}
 		}
 	}
@@ -27,6 +28,7 @@ const WORKERS_DAY_QUERY = `query($accountTag: String!, $start: Time!, $end: Time
 		accounts(filter: { accountTag: $accountTag }) {
 			workersInvocationsAdaptive(limit: 1000, filter: { datetime_geq: $start, datetime_leq: $end }) {
 				sum { requests errors }
+				dimensions { scriptName }
 			}
 		}
 	}
@@ -35,8 +37,9 @@ const WORKERS_DAY_QUERY = `query($accountTag: String!, $start: Time!, $end: Time
 const D1_DAY_QUERY = `query($accountTag: String!, $start: Date!, $end: Date!) {
 	viewer {
 		accounts(filter: { accountTag: $accountTag }) {
-			d1AnalyticsAdaptiveGroups(limit: 1000, filter: { date_geq: $start, date_leq: $end }) {
+			d1QueriesAdaptiveGroups(limit: 1000, filter: { date_geq: $start, date_leq: $end }) {
 				sum { rowsRead rowsWritten }
+				dimensions { databaseId }
 			}
 		}
 	}
@@ -47,6 +50,7 @@ const DO_QUERY = `query($accountTag: String!, $start: Date!, $end: Date!) {
 		accounts(filter: { accountTag: $accountTag }) {
 			durableObjectsInvocationsAdaptiveGroups(limit: 1000, filter: { date_geq: $start, date_leq: $end }) {
 				sum { requests }
+				dimensions { scriptName }
 			}
 			durableObjectsPeriodicGroups(limit: 1000, filter: { date_geq: $start, date_leq: $end }) {
 				sum { cpuTime }
@@ -63,6 +67,21 @@ const DO_DAY_QUERY = `query($accountTag: String!, $start: Date!, $end: Date!) {
 		accounts(filter: { accountTag: $accountTag }) {
 			durableObjectsInvocationsAdaptiveGroups(limit: 1000, filter: { date_geq: $start, date_leq: $end }) {
 				sum { requests }
+				dimensions { scriptName }
+			}
+			durableObjectsPeriodicGroups(limit: 1000, filter: { date_geq: $start, date_leq: $end }) {
+				sum { cpuTime }
+			}
+		}
+	}
+}`;
+
+const KV_QUERY = `query($accountTag: String!, $start: Date!, $end: Date!) {
+	viewer {
+		accounts(filter: { accountTag: $accountTag }) {
+			kvOperationsAdaptiveGroups(limit: 5000, filter: { date_geq: $start, date_leq: $end }) {
+				sum { requests }
+				dimensions { namespaceId actionType }
 			}
 		}
 	}
@@ -100,6 +119,36 @@ function sum(list, pick) {
 	return list.reduce((total, item) => total + Number(pick(item) || 0), 0);
 }
 
+function shortId(id) {
+	return String(id || 'unknown').slice(0, 8);
+}
+
+function aggregateD1(rows, names) {
+	const byDb = new Map();
+	for (const row of rows || []) {
+		const id = row.dimensions?.databaseId || 'unknown';
+		const current = byDb.get(id) || { databaseId: id, rowsRead: 0, rowsWritten: 0, count: 0 };
+		current.rowsRead += Number(row.sum?.rowsRead || 0);
+		current.rowsWritten += Number(row.sum?.rowsWritten || 0);
+		current.count += Number(row.sum?.count || 0);
+		byDb.set(id, current);
+	}
+	const databases = [...byDb.values()]
+		.map(item => ({ ...item, name: names.get(item.databaseId) || shortId(item.databaseId) }))
+		.sort((a, b) => (b.rowsRead + b.rowsWritten) - (a.rowsRead + a.rowsWritten));
+	const total = databases.reduce((acc, item) => {
+		acc.rowsRead += item.rowsRead;
+		acc.rowsWritten += item.rowsWritten;
+		acc.count += item.count;
+		return acc;
+	}, { rowsRead: 0, rowsWritten: 0, count: 0 });
+	const weighted = total.rowsRead + total.rowsWritten;
+	for (const item of databases) {
+		item.share = weighted ? Math.max(0, (item.rowsRead + item.rowsWritten) / weighted) : 0;
+	}
+	return { ...total, databases };
+}
+
 const PLAN_LIMITS = {
 	free: {
 		workersDailyRequests: 100000,
@@ -108,7 +157,11 @@ const PLAN_LIMITS = {
 		r2StorageBytes: 10 * 1024 ** 3,
 		durableObjectDailyRequests: 100000,
 		durableObjectStorageBytes: 5 * 1000 ** 3,
-		durableObjects: true
+		durableObjects: true,
+		kvDailyRead: 100000,
+		kvDailyWrite: 1000,
+		kvDailyDelete: 1000,
+		kvDailyList: 1000
 	},
 	paid: {
 		workersMonthlyRequests: 10000000,
@@ -141,6 +194,50 @@ async function detectPlan(c, token, accountId) {
 	}
 }
 
+async function apiNames(token, url, idField, nameField) {
+	try {
+		const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+		if (!response.ok) {
+			console.warn(`cf names api failed: ${response.status} ${url}`);
+			return new Map();
+		}
+		const payload = await response.json();
+		return new Map((payload.result || []).map(item => [item[idField], item[nameField]]));
+	} catch (error) {
+		console.warn(`cf names api error: ${error.message} ${url}`);
+		return new Map();
+	}
+}
+
+async function loadNames(c, token, accountId) {
+	const key = `cf:usage:${accountId}:names`;
+	try {
+		const cached = await c.env.kv?.get(key, { type: 'json' });
+		if (cached) {
+			return {
+				d1: new Map(Object.entries(cached.d1 || {})),
+				kv: new Map(Object.entries(cached.kv || {}))
+			};
+		}
+	} catch {
+		// KV 不可用时回源，不影响用量页。
+	}
+
+	const [d1, kv] = await Promise.all([
+		apiNames(token, `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database`, 'uuid', 'name'),
+		apiNames(token, `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces`, 'id', 'title')
+	]);
+	try {
+		await c.env.kv?.put(key, JSON.stringify({
+			d1: Object.fromEntries(d1),
+			kv: Object.fromEntries(kv)
+		}), { expirationTtl: 3600 });
+	} catch {
+		// 名单缓存失败时仍返回本次名称。
+	}
+	return { d1, kv };
+}
+
 const cloudflareService = {
 
 	async usage(c) {
@@ -171,6 +268,10 @@ const cloudflareService = {
 		const cached = await c.env.kv?.get(cacheKey, { type: 'json' });
 		if (cached) return cached;
 
+		const names = await loadNames(c, token, accountId);
+		const d1Names = names.d1;
+		const kvNames = names.kv;
+
 		const data = {
 			configured: true,
 			period: startDate.slice(0, 7),
@@ -179,6 +280,8 @@ const cloudflareService = {
 			totalRequests: 0,
 			totalErrors: 0,
 			workersToday: 0,
+			todayErrors: 0,
+			todayApps: [],
 			apps: [],
 			otsmail: null,
 			othersRequests: 0,
@@ -186,6 +289,7 @@ const cloudflareService = {
 			d1Today: null,
 			do: null,
 			doToday: null,
+			kv: null,
 			r2: null,
 			fetchedAt: endTime
 		};
@@ -218,20 +322,28 @@ const cloudflareService = {
 			const today = await graphql(token, WORKERS_DAY_QUERY, {
 				accountTag: accountId, start: dayStartTime, end: endTime
 			});
-			data.workersToday = sum(today.workersInvocationsAdaptive || [], row => row.sum?.requests);
+			const rows = today.workersInvocationsAdaptive || [];
+			data.workersToday = sum(rows, row => row.sum?.requests);
+			data.todayErrors = sum(rows, row => row.sum?.errors);
+			const byName = new Map();
+			for (const row of rows) {
+				const name = row.dimensions?.scriptName || 'unknown';
+				const current = byName.get(name) || { name, requests: 0, errors: 0 };
+				current.requests += Number(row.sum?.requests || 0);
+				current.errors += Number(row.sum?.errors || 0);
+				byName.set(name, current);
+			}
+			data.todayApps = [...byName.values()].sort((a, b) => b.requests - a.requests);
 		} catch {
 			data.workersToday = null;
+			data.todayErrors = null;
 		}
 
 		try {
 			const d1 = await graphql(token, D1_QUERY, {
 				accountTag: accountId, start: startDate, end: endDate
 			});
-			const rows = d1.d1AnalyticsAdaptiveGroups || [];
-			data.d1 = {
-				rowsRead: sum(rows, row => row.sum?.rowsRead),
-				rowsWritten: sum(rows, row => row.sum?.rowsWritten)
-			};
+			data.d1 = aggregateD1(d1.d1QueriesAdaptiveGroups, d1Names);
 		} catch (error) {
 			data.d1Error = error.message;
 		}
@@ -240,11 +352,7 @@ const cloudflareService = {
 			const today = await graphql(token, D1_DAY_QUERY, {
 				accountTag: accountId, start: dayStartDate, end: endDate
 			});
-			const rows = today.d1AnalyticsAdaptiveGroups || [];
-			data.d1Today = {
-				rowsRead: sum(rows, row => row.sum?.rowsRead),
-				rowsWritten: sum(rows, row => row.sum?.rowsWritten)
-			};
+			data.d1Today = aggregateD1(today.d1QueriesAdaptiveGroups, d1Names);
 		} catch {
 			data.d1Today = null;
 		}
@@ -256,10 +364,21 @@ const cloudflareService = {
 			const invocationRows = durable.durableObjectsInvocationsAdaptiveGroups || [];
 			const periodicRows = durable.durableObjectsPeriodicGroups || [];
 			const storageRows = durable.durableObjectsStorageGroups || [];
+			const byScript = new Map();
+			for (const row of invocationRows) {
+				const name = row.dimensions?.scriptName || 'unknown';
+				const current = byScript.get(name) || { name, requests: 0 };
+				current.requests += Number(row.sum?.requests || 0);
+				byScript.set(name, current);
+			}
+			const scripts = [...byScript.values()].sort((a, b) => b.requests - a.requests);
+			const requests = sum(scripts, row => row.requests);
+			for (const script of scripts) script.share = requests ? script.requests / requests : 0;
 			data.do = {
-				requests: sum(invocationRows, row => row.sum?.requests),
+				requests,
 				cpuTime: sum(periodicRows, row => row.sum?.cpuTime),
-				storageBytes: storageRows.length ? Math.max(...storageRows.map(row => Number(row.max?.storedBytes || 0))) : null
+				storageBytes: storageRows.length ? Math.max(...storageRows.map(row => Number(row.max?.storedBytes || 0))) : null,
+				scripts
 			};
 		} catch (error) {
 			data.doError = error.message;
@@ -269,11 +388,55 @@ const cloudflareService = {
 			const durableToday = await graphql(token, DO_DAY_QUERY, {
 				accountTag: accountId, start: dayStartDate, end: endDate
 			});
+			const rows = durableToday.durableObjectsInvocationsAdaptiveGroups || [];
+			const byScript = new Map();
+			for (const row of rows) {
+				const name = row.dimensions?.scriptName || 'unknown';
+				const current = byScript.get(name) || { name, requests: 0 };
+				current.requests += Number(row.sum?.requests || 0);
+				byScript.set(name, current);
+			}
+			const scripts = [...byScript.values()].sort((a, b) => b.requests - a.requests);
+			const requests = sum(scripts, row => row.requests);
+			for (const script of scripts) script.share = requests ? script.requests / requests : 0;
 			data.doToday = {
-				requests: sum(durableToday.durableObjectsInvocationsAdaptiveGroups || [], row => row.sum?.requests)
+				requests,
+				cpuTime: sum(durableToday.durableObjectsPeriodicGroups || [], row => row.sum?.cpuTime),
+				scripts
 			};
 		} catch {
 			data.doToday = null;
+		}
+
+		try {
+			const kv = await graphql(token, KV_QUERY, {
+				accountTag: accountId, start: dayStartDate, end: endDate
+			});
+			const byNamespace = new Map();
+			const usage = { read: 0, write: 0, delete: 0, list: 0 };
+			for (const row of kv.kvOperationsAdaptiveGroups || []) {
+				const id = row.dimensions?.namespaceId || 'unknown';
+				const action = String(row.dimensions?.actionType || '').toLowerCase();
+				const bucket = action.startsWith('read') ? 'read'
+					: action.startsWith('write') ? 'write'
+						: action.startsWith('delete') ? 'delete'
+							: action.startsWith('list') ? 'list' : null;
+				if (!bucket) continue;
+				const current = byNamespace.get(id) || {
+					namespaceId: id,
+					name: kvNames.get(id) || shortId(id),
+					read: 0, write: 0, delete: 0, list: 0
+				};
+				const requests = Number(row.sum?.requests || 0);
+				current[bucket] += requests;
+				usage[bucket] += requests;
+				byNamespace.set(id, current);
+			}
+			const namespaces = [...byNamespace.values()].sort((a, b) =>
+				(b.read + b.write + b.delete + b.list) - (a.read + a.write + a.delete + a.list));
+			data.kv = { ...usage, namespaces };
+		} catch (error) {
+			data.kvError = error.message;
 		}
 
 		try {
