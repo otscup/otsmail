@@ -2,6 +2,9 @@
   <div class="header" :class="!hasPerm('email:send') ? 'not-send' : ''">
     <div class="header-btn">
       <hanburger class="header-menu" @click="changeAside"></hanburger>
+      <button type="button" class="header-collapse-btn" :aria-label="$t('toggleSidebar')" :title="$t('toggleSidebar')" @click="changeAside">
+        <Icon :icon="uiStore.asideCollapsed ? 'mingcute:right-line' : 'mingcute:left-line'" width="17" height="17"/>
+      </button>
       <button v-if="showMailSearch" type="button" class="mobile-search-btn" :aria-label="$t('searchMail')" @click="openMobileSearch">
         <Icon icon="mdi:magnify" width="19" height="19"/>
       </button>

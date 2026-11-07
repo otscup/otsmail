@@ -48,3 +48,11 @@ export function updateMySetting(data) {
 export function telegramBindTicket() {
     return http.post('/my/telegram/ticket')
 }
+
+export function mySessions() {
+    return http.get('/my/sessions')
+}
+
+export function kickMySession(id) {
+    return http.delete(`/my/sessions/${id}`)
+}

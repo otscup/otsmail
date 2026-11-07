@@ -27,6 +27,7 @@
         </span>
         <span class="row-actions" v-else-if="mailbox === 'spam'">
           <button class="row-btn" @click.stop="notSpam(row.email)">{{ $t('unmarkSpam') }}</button>
+          <button class="row-btn danger" @click.stop="emailDelete([row.email.emailId])">{{ $t('delete') }}</button>
         </span>
       </template>
     </emailScroll>
@@ -43,7 +44,7 @@
 
 <script setup>
 import emailScroll from "@/components/email-scroll/index.vue"
-import {emailList, emailDelete, emailRead, emailUnread, emailRestore, emailSpamCancel, emailPhysicsDelete} from "@/request/email.js";
+import {emailList, emailDelete as emailDeleteApi, emailRead, emailUnread, emailRestore, emailSpamCancel, emailPhysicsDelete} from "@/request/email.js";
 import {starAdd, starCancel} from "@/request/star.js";
 import {useAccountStore} from "@/store/account.js";
 import {useEmailStore} from "@/store/email.js";
@@ -148,6 +149,17 @@ async function deleteForever(email) {
   await emailPhysicsDelete(email.emailId)
   scroll.value.deleteEmail([email.emailId])
 }
+
+// 回收站里的“删除”就是彻底删除；其它分类走 /email/delete。
+async function emailDelete(emailIds, forever = false) {
+  if (forever || mailbox.value === 'deleted') {
+    for (const emailId of emailIds) {
+      await emailPhysicsDelete(emailId)
+    }
+    return
+  }
+  await emailDeleteApi(emailIds)
+}
 </script>
 
 <style scoped>
@@ -247,7 +259,8 @@ async function deleteForever(email) {
   opacity: 0;
 }
 
-.mailbox-page :deep(.email-row.deleted .email-actions) {
+.mailbox-page :deep(.email-row.deleted .email-actions),
+.mailbox-page :deep(.email-row.spam .email-actions) {
   display: none !important;
 }
 

@@ -1,5 +1,6 @@
 import app from '../hono/hono';
 import userService from '../service/user-service';
+import loginService from '../service/login-service';
 import result from '../model/result';
 import userContext from '../security/user-context';
 import BizError from '../error/biz-error';
@@ -69,6 +70,15 @@ app.post('/my/2fa/disable', async (c) => {
 app.put('/my/2fa/required', async (c) => {
 	const { required } = await c.req.json();
 	await userService.setTwoFactorRequired(c, !!required, userContext.getUserId(c));
+	return c.json(result.ok());
+});
+
+app.get('/my/sessions', async (c) => {
+	return c.json(result.ok(await loginService.sessions(c, userContext.getUserId(c))));
+});
+
+app.delete('/my/sessions/:id', async (c) => {
+	await loginService.kickSession(c, userContext.getUserId(c), c.req.param('id'));
 	return c.json(result.ok());
 });
 

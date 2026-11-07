@@ -56,13 +56,14 @@ async function choose(id) {
 <style scoped>
 .skin-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   width: 100%;
 }
 
 .skin-card {
   display: grid;
+  min-width: 0;
   gap: 10px;
   padding: 10px;
   border: 1px solid var(--rd-line);
@@ -139,6 +140,8 @@ async function choose(id) {
   font-size: 12px;
   line-height: 1.45;
   color: var(--rd-muted);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .skin-card.skin-paper {
@@ -163,6 +166,14 @@ async function choose(id) {
   --skin-paper: #fff9f1;
   --skin-line: #e3d4c6;
   --skin-accent: #9e2738;
+}
+
+.skin-card.skin-classic {
+  --skin-rail: #eef1f7;
+  --skin-side: #f4f6fb;
+  --skin-paper: #ffffff;
+  --skin-line: #dde3ee;
+  --skin-accent: #0a84ff;
 }
 
 @media (max-width: 760px) {

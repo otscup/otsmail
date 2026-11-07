@@ -12,3 +12,15 @@ export function logout() {
 export function register(form) {
     return http.post('/register', form)
 }
+
+export function qrCreate() {
+    return http.post('/login/qr')
+}
+
+export function qrPoll(id) {
+    return http.get(`/login/qr/${id}`, {noMsg: true})
+}
+
+export function qrConfirm(id) {
+    return http.post('/my/qr/confirm', {id})
+}

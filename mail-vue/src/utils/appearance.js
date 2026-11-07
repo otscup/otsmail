@@ -1,7 +1,8 @@
 export const HOME_SKINS = [
   { id: 'paper', labelKey: 'skinPaper', descKey: 'skinPaperDesc', loginTheme: 'paper' },
   { id: 'fresh', labelKey: 'skinFresh', descKey: 'skinFreshDesc', loginTheme: 'fresh' },
-  { id: 'gala', labelKey: 'skinGala', descKey: 'skinGalaDesc', loginTheme: 'gala' }
+  { id: 'gala', labelKey: 'skinGala', descKey: 'skinGalaDesc', loginTheme: 'gala' },
+  { id: 'classic', labelKey: 'skinClassic', descKey: 'skinClassicDesc', loginTheme: 'centered' }
 ]
 
 export const DEFAULT_HOME_SKIN = 'paper'

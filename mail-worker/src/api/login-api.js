@@ -18,3 +18,18 @@ app.delete('/logout', async (c) => {
 	return c.json(result.ok());
 });
 
+// 扫码登录：网页端创建并轮询；App 用已登录会话确认。
+app.post('/login/qr', async (c) => {
+	return c.json(result.ok(await loginService.createQr(c)));
+});
+
+app.get('/login/qr/:id', async (c) => {
+	return c.json(result.ok(await loginService.pollQr(c, c.req.param('id'))));
+});
+
+app.post('/my/qr/confirm', async (c) => {
+	const body = await c.req.json();
+	const origin = await loginService.confirmQr(c, userContext.getUserId(c), body.id);
+	return c.json(result.ok(origin));
+});
+

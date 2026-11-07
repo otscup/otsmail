@@ -21,6 +21,10 @@ import { t } from '../i18n/i18n.js';
 import verifyRecordService from './verify-record-service';
 import totpUtils from '../utils/totp-utils';
 import loginGuard from './login-guard';
+import reqUtils from '../utils/req-utils';
+
+// 会话上限：同一设备只留一条，所以 20 条足够覆盖多设备，又不会把 App 的 token 挤掉。
+const MAX_SESSIONS = 20;
 
 const loginService = {
 
@@ -261,12 +265,33 @@ const loginService = {
 
 		let authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userRow.userId, { type: 'json' });
 
+		const ua = reqUtils.getUserAgent(c);
+		const sessionMeta = {
+			ip: reqUtils.getIp(c),
+			browser: ua.browser,
+			os: ua.os,
+			device: ua.device,
+			time: dayjs().toISOString()
+		};
+		// 同一台机器重复登录只保留最新一条，否则会话列表会被同一设备刷满。
+		const fingerprint = [sessionMeta.ip, sessionMeta.browser, sessionMeta.os, sessionMeta.device].join('|');
+
 		if (authInfo && (authInfo.user.email === userRow.email)) {
 
 			if (userRow.email === c.env.admin) authInfo.user.type = 0;
 
-			if (authInfo.tokens.length > 10) {
-				authInfo.tokens.shift();
+			if (!authInfo.sessions) authInfo.sessions = {};
+			for (const [oldToken, meta] of Object.entries(authInfo.sessions)) {
+				const oldFingerprint = [meta.ip, meta.browser, meta.os, meta.device].join('|');
+				if (oldFingerprint !== fingerprint) continue;
+				const oldIndex = authInfo.tokens.indexOf(oldToken);
+				if (oldIndex !== -1) authInfo.tokens.splice(oldIndex, 1);
+				delete authInfo.sessions[oldToken];
+			}
+
+			if (authInfo.tokens.length >= MAX_SESSIONS) {
+				const dropped = authInfo.tokens.shift();
+				if (authInfo.sessions) delete authInfo.sessions[dropped];
 			}
 
 			authInfo.tokens.push(uuid);
@@ -283,6 +308,10 @@ const loginService = {
 
 		}
 
+		// 会话元数据与 tokens 平行保存；旧 KV 没有 sessions 时按需补建。
+		if (!authInfo.sessions) authInfo.sessions = {};
+		authInfo.sessions[uuid] = sessionMeta;
+
 		await userService.updateUserInfo(c, userRow.userId);
 
 		await c.env.kv.put(KvConst.AUTH_INFO + userRow.userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
@@ -290,13 +319,97 @@ const loginService = {
 	},
 
 	async logout(c, userId) {
-		const token =userContext.getToken(c);
+		const token = await userContext.getToken(c);
 		const authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userId, { type: 'json' });
 		if (!authInfo?.tokens) return;
 		const index = authInfo.tokens.findIndex(item => item === token);
 		if (index === -1) return;
 		authInfo.tokens.splice(index, 1);
+		if (authInfo.sessions) delete authInfo.sessions[token];
 		await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
+	},
+
+	async sessions(c, userId) {
+		const authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userId, { type: 'json' });
+		const current = await userContext.getToken(c);
+		const tokens = authInfo?.tokens || [];
+		const meta = authInfo?.sessions || {};
+		return tokens.map(token => ({
+			id: token,
+			current: token === current,
+			ip: meta[token]?.ip || '',
+			browser: meta[token]?.browser || '',
+			os: meta[token]?.os || '',
+			device: meta[token]?.device || '',
+			time: meta[token]?.time || ''
+		}));
+	},
+
+	async kickSession(c, userId, sessionId) {
+		const authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userId, { type: 'json' });
+		if (!authInfo?.tokens) return;
+		const index = authInfo.tokens.findIndex(item => item === sessionId);
+		if (index === -1) throw new BizError(t('deviceNotFound'), 404);
+		authInfo.tokens.splice(index, 1);
+		if (authInfo.sessions) delete authInfo.sessions[sessionId];
+		await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
+	},
+
+	// 扫码登录：网页拿 id 轮询，App 登录后确认，网页凭 id 换一次 token。
+	async createQr(c) {
+		await this.qrRateLimit(c, 'create', 20);
+		const id = uuidv4().replace(/-/g, '');
+		const ua = reqUtils.getUserAgent(c);
+		// 发起方信息随二维码一起存，App 确认框才能显示「Chrome on Windows / IP」。
+		const origin = {
+			ip: reqUtils.getIp(c),
+			browser: ua.browser,
+			os: ua.os,
+			device: ua.device
+		};
+		await c.env.kv.put(KvConst.QR_LOGIN + id, JSON.stringify({ status: 'pending', origin }), { expirationTtl: 120 });
+		return { id, expiresIn: 120 };
+	},
+
+	async confirmQr(c, userId, id) {
+		if (!id) throw new BizError(t('qrInvalid'), 400);
+		const raw = await c.env.kv.get(KvConst.QR_LOGIN + id);
+		if (!raw) throw new BizError(t('qrExpired'), 410);
+		const data = JSON.parse(raw);
+		// 幂等：同一用户重复确认（客户端重试）直接成功，不报错。
+		if (data.status === 'confirmed') {
+			if (data.userId === userId) return data.origin || {};
+			throw new BizError(t('qrInvalid'), 400);
+		}
+		await c.env.kv.put(KvConst.QR_LOGIN + id, JSON.stringify({ status: 'confirmed', userId, origin: data.origin }), { expirationTtl: 120 });
+		return data.origin || {};
+	},
+
+	async pollQr(c, id) {
+		if (!id) throw new BizError(t('qrInvalid'), 400);
+		await this.qrRateLimit(c, 'poll', 60);
+		const raw = await c.env.kv.get(KvConst.QR_LOGIN + id);
+		if (!raw) return { status: 'expired' };
+		const data = JSON.parse(raw);
+		if (data.status !== 'confirmed') return { status: 'pending' };
+		// 一次性：先删再发 token，避免同一个二维码被重复兑换。
+		await c.env.kv.delete(KvConst.QR_LOGIN + id);
+		const userRow = await userService.selectById(c, data.userId);
+		if (!userRow || userRow.isDel === isDel.DELETE) throw new BizError(t('notExistUser'));
+		if (userRow.status === userConst.status.BAN) throw new BizError(t('isBanUser'));
+		const token = await this.login(c, { email: userRow.email }, true);
+		return { status: 'confirmed', token };
+	},
+
+	// 未登录接口按 IP 限流，避免有人刷 KV。KV 计数非原子，只做粗粒度防刷。
+	async qrRateLimit(c, action, limit) {
+		if (!c.env?.kv) return;
+		const ip = reqUtils.getIp(c) || 'unknown';
+		const minute = Math.floor(Date.now() / 60000);
+		const key = `qr-rl:${action}:${ip}:${minute}`;
+		const used = Number(await c.env.kv.get(key)) || 0;
+		if (used >= limit) throw new BizError(t('qrTooMany'), 429);
+		await c.env.kv.put(key, String(used + 1), { expirationTtl: 120 });
 	}
 
 };

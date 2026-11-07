@@ -106,13 +106,13 @@
                       <slot name="name" :email="item"><span v-html="highlightText(item.name || '')"></span></slot>
                     </span>
                     <div v-if="!isMobile" class="email-actions">
-                      <button type="button" class="email-action" :title="t('delete')" @click.stop="rightDelete(item.emailId)">
+                      <button type="button" class="email-action" :title="t('delete')" @click.stop="rightDelete(item)">
                         <Icon icon="fluent:delete-20-regular" width="14" height="14"/>
                       </button>
-                      <button type="button" class="email-action" :class="{disabled: item.unread !== EmailUnreadEnum.UNREAD}" :title="t('markAsRead')" @click.stop="markRead(item)">
+                      <button v-if="supportsReadState && item.unread === EmailUnreadEnum.UNREAD" type="button" class="email-action" :title="t('markAsRead')" @click.stop="markRead(item)">
                         <Icon icon="fluent:mail-read-20-regular" width="14" height="14"/>
                       </button>
-                      <button type="button" class="email-action" :class="{disabled: item.unread === EmailUnreadEnum.UNREAD}" :title="t('markAsUnread')" @click.stop="markUnread(item)">
+                      <button v-if="supportsReadState && item.unread !== EmailUnreadEnum.UNREAD" type="button" class="email-action" :title="t('markAsUnread')" @click.stop="markUnread(item)">
                         <Icon icon="fluent:mail-unread-20-regular" width="14" height="14"/>
                       </button>
                     </div>
@@ -216,11 +216,19 @@
               </div>
             </template>
           </el-dropdown-item>
-          <el-dropdown-item v-if="['email','star','all-email'].includes(props.type)" @click="toggleRead(rightClickEmail)">
+          <el-dropdown-item v-if="supportsReadState && rightClickEmail.unread === EmailUnreadEnum.UNREAD" @click="markRead(rightClickEmail)">
             <template #default>
               <div class="right-dropdown-item">
-                <Icon :icon="rightClickEmail.unread === EmailUnreadEnum.UNREAD ? 'fluent:mail-read-20-regular' : 'fluent:mail-unread-20-regular'" width="20" height="20" />
-                <span>{{ rightClickEmail.unread === EmailUnreadEnum.UNREAD ? t('markAsRead') : t('markAsUnread') }}</span>
+                <Icon icon="fluent:mail-read-20-regular" width="20" height="20" />
+                <span>{{ t('markAsRead') }}</span>
+              </div>
+            </template>
+          </el-dropdown-item>
+          <el-dropdown-item v-if="supportsReadState && rightClickEmail.unread !== EmailUnreadEnum.UNREAD" @click="markUnread(rightClickEmail)">
+            <template #default>
+              <div class="right-dropdown-item">
+                <Icon icon="fluent:mail-unread-20-regular" width="20" height="20" />
+                <span>{{ t('markAsUnread') }}</span>
               </div>
             </template>
           </el-dropdown-item>
@@ -311,7 +319,7 @@
               </div>
             </template>
           </el-dropdown-item>
-          <el-dropdown-item @click="rightDelete(rightClickEmail.emailId)">
+          <el-dropdown-item @click="rightDelete(rightClickEmail)">
             <template #default>
               <div class="right-dropdown-item">
                 <Icon icon="uiw:delete" width="16" height="20" style="margin-left: 1px;margin-right: 3px" />
@@ -407,6 +415,8 @@ const {t} = useI18n()
 const settingStore = useSettingStore()
 const uiStore = useUiStore();
 const showAvatars = computed(() => settingStore.showAvatars !== false && settingStore.settings.showAvatar !== 0 && settingStore.settings.showAvatar !== false)
+// 草稿没有已读状态；已发送/已删除/垃圾箱里改已读没有意义，只保留删除。
+const supportsReadState = computed(() => !['draft', 'send', 'deleted', 'spam'].includes(props.type))
 const emailStore = useEmailStore();
 const accountStore = useAccountStore();
 const loading = ref(false);
@@ -957,7 +967,27 @@ function bumpCategory(email, delta) {
   }
 }
 
-function rightDelete(emailId) {
+function rightDelete(item) {
+  const emailId = item.emailId
+
+  if (props.type === 'draft') {
+    emit('delete-draft', [item.draftId])
+    return
+  }
+
+  if (props.type === 'deleted') {
+    ElMessageBox.confirm(t('delOneEmailConfirm'), {
+      confirmButtonText: t('confirm'),
+      cancelButtonText: t('cancel'),
+      type: 'warning'
+    }).then(() => {
+      props.emailDelete([emailId], true).then(() => {
+        ElMessage({message: t('delSuccessMsg'), type: 'success', plain: true})
+        emailStore.deleteIds = [emailId]
+      })
+    })
+    return
+  }
 
   if (props.type === 'all-email') {
     ElMessageBox.confirm(t('delOneEmailConfirm'), {
@@ -1022,7 +1052,7 @@ function handleDelete() {
     }
 
     const emailIds = getSelectedMailsIds();
-    props.emailDelete(emailIds).then(() => {
+    props.emailDelete(emailIds, props.type === 'deleted').then(() => {
       ElMessage({
         message: t('delSuccessMsg'),
         type: 'success',

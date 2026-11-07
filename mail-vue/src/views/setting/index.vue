@@ -142,6 +142,26 @@
         <el-option label="English" value="en" @pointerdown.prevent.stop="changeLang('en')"/>
       </el-select>
     </div>
+    <div class="container">
+      <div class="title">{{ $t('loginDevices') }}</div>
+      <div class="item wide">
+        <div class="row-desc">{{ $t('loginDevicesDesc') }}</div>
+        <div class="device-list">
+          <div v-for="item in sessions" :key="item.id" class="device-row">
+            <div class="device-main">
+              <div class="device-name">
+                {{ item.device || $t('deviceUnknown') }}
+                <span v-if="item.current" class="device-tag">{{ $t('deviceCurrent') }}</span>
+              </div>
+              <div class="device-meta">{{ [item.browser, item.os, item.ip].filter(Boolean).join(' · ') || $t('deviceUnknown') }}</div>
+              <div v-if="item.time" class="device-meta">{{ $t('deviceLastActive') }} {{ formatDeviceTime(item.time) }}</div>
+            </div>
+            <button v-if="!item.current" type="button" class="device-kick" @click="kickDevice(item)">{{ $t('deviceKick') }}</button>
+          </div>
+          <div v-if="!sessions.length" class="row-desc">{{ $t('deviceNoSessions') }}</div>
+        </div>
+      </div>
+    </div>
     <div class="del-email" v-perm="'my:delete'">
       <div class="title">{{$t('deleteUser')}}</div>
       <div style="color: var(--regular-text-color);">
@@ -234,7 +254,7 @@ import {oidcConfig, oauthBindings, oauthUnbind, oauthSetBindingActive} from "@/r
 import {createPkce} from "@/utils/pkce.js";
 import {notifyEnabled, enableNotify, disableNotify} from "@/utils/notify.js";
 import {testPush} from "@/request/push.js";
-import {updateMySetting} from "@/request/my.js";
+import {updateMySetting, mySessions, kickMySession} from "@/request/my.js";
 
 const { t } = useI18n()
 const accountStore = useAccountStore()
@@ -315,6 +335,30 @@ async function unbindProvider(provider) {
   }
 }
 onMounted(loadBindings)
+
+const sessions = ref([])
+async function loadSessions() {
+  try {
+    sessions.value = await mySessions()
+  } catch (e) {
+    sessions.value = []
+  }
+}
+function formatDeviceTime(value) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
+}
+async function kickDevice(item) {
+  try {
+    await ElMessageBox.confirm(t('deviceKickConfirm'), t('loginDevices'), {type: 'warning'})
+    await kickMySession(item.id)
+    sessions.value = sessions.value.filter(row => row.id !== item.id)
+    ElMessage({message: t('deviceKicked'), type: 'success', plain: true})
+  } catch (e) {
+    if (e !== 'cancel') ElMessage({message: e?.message || t('skinSyncFailed'), type: 'error', plain: true})
+  }
+}
+onMounted(loadSessions)
 
 // 回调必须落在登录页，登录页才能拿 code；老配置里填站点根的要纠正
 function oidcCallback(url) {
@@ -845,6 +889,70 @@ async function toggleNotify(value) {
     font-size: var(--text-footnote, 13px);
     line-height: 1.4;
     white-space: normal;
+  }
+
+  .device-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .device-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--rd-line, rgba(148, 163, 184, .25));
+    border-radius: 10px;
+    background: var(--rd-panel-2, transparent);
+  }
+
+  .device-main {
+    min-width: 0;
+  }
+
+  .device-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: var(--rd-text, var(--label));
+  }
+
+  .device-tag {
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--rd-accent-weak, rgba(10, 132, 255, .12));
+    color: var(--rd-accent, #0a84ff);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .device-meta {
+    margin-top: 2px;
+    color: var(--rd-muted, var(--label-2));
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .device-kick {
+    flex: none;
+    padding: 5px 12px;
+    border: 1px solid var(--rd-line, rgba(148, 163, 184, .3));
+    border-radius: 8px;
+    background: transparent;
+    color: var(--rd-muted, var(--label-2));
+    font-size: 12px;
+    cursor: pointer;
+    transition: color .15s ease, border-color .15s ease, background .15s ease;
+  }
+
+  .device-kick:hover {
+    border-color: #e5484d;
+    background: rgba(229, 72, 77, .08);
+    color: #e5484d;
   }
 
   .avatar-preview {

@@ -141,14 +141,17 @@ export async function credential(c, userId, extId) {
 	if (!Number.isFinite(id) || id <= 0) throw new BizError('缺少第三方邮箱 id', 400);
 
 	const row = await c.env.db.prepare(`
-		SELECT ext_id, account_id, provider, address, auth_type, secret_seal,
+		SELECT ext_id, account_id, provider, address, auth_type, secret_seal, secret_version,
 		       imap_host, imap_port, smtp_host, smtp_port
 		FROM ext_account
 		WHERE ext_id = ? AND user_id = ? AND is_del = 0
 	`).bind(id, userId).first();
 	if (!row) throw new BizError('没有找到这个第三方邮箱', 404);
 
-	const aad = `${userId}:${row.account_id}:${row.provider}`;
+	// v1 的 AAD 依赖绑定当时的 account 行 id；v2 起改用地址，account 行删除后仍能解密
+	const aad = Number(row.secret_version || 1) >= 2
+		? `${userId}:${row.address}:${row.provider}`
+		: `${userId}:${row.account_id}:${row.provider}`;
 	const secret = await openSecret(c.env, row.secret_seal, aad);
 	return {
 		extId: row.ext_id,
@@ -189,47 +192,41 @@ export async function bind(c, userId, body = {}) {
 	).bind(userId, address).first();
 	if (exists) throw new BizError('这个邮箱已经绑定过了', 400);
 
-	const acc = await c.env.db.prepare(
-		`INSERT INTO account (email, status, user_id) VALUES (?, 0, ?)`
-	).bind(address, userId).run();
-	const accountId = Number(acc.meta?.last_row_id || 0);
-	if (!accountId) throw new BizError('创建本地账户失败', 500);
+	// 不再往共享 account 表插普通行：老客户端与网页端的账户列表只读 account 表，
+	// 写进去会把这个外部邮箱当成 OTS 账户展示（点进去没有任何邮件）。
+	// 外部邮箱只存在于 ext_account，account_id 固定为 0。
+	// 密文 AAD 从「收件地址」派生（secret_version=2），不再依赖 account 行，
+	// 因此同一个用户下不同外部邮箱的密文也不能互相搬运。
+	const accountId = 0;
+	const aad = `${userId}:${address}:${provider.id}`;
+	const sealed = await sealSecret(c.env, secret, aad);
 
-	try {
-		const aad = `${userId}:${accountId}:${provider.id}`;
-		const sealed = await sealSecret(c.env, secret, aad);
+	const inserted = await c.env.db.prepare(`
+		INSERT INTO ext_account (
+			user_id, account_id, provider, address, auth_type, secret_seal, secret_version,
+			imap_host, imap_port, smtp_host, smtp_port, imap_idle, status, last_check_at, last_error
+		) VALUES (?, ?, ?, ?, ?, ?, 2, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, NULL)
+	`).bind(
+		userId,
+		accountId,
+		provider.id,
+		address,
+		authType,
+		sealed,
+		endpoint.imap.host,
+		endpoint.imap.port,
+		endpoint.smtp.host,
+		endpoint.smtp.port,
+		probe.imapIdle === true ? 1 : 0,
+	).run();
 
-		const inserted = await c.env.db.prepare(`
-			INSERT INTO ext_account (
-				user_id, account_id, provider, address, auth_type, secret_seal, secret_version,
-				imap_host, imap_port, smtp_host, smtp_port, imap_idle, status, last_check_at, last_error
-			) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, NULL)
-		`).bind(
-			userId,
-			accountId,
-			provider.id,
-			address,
-			authType,
-			sealed,
-			endpoint.imap.host,
-			endpoint.imap.port,
-			endpoint.smtp.host,
-			endpoint.smtp.port,
-			probe.imapIdle === true ? 1 : 0,
-		).run();
-
-		return {
-			extId: Number(inserted.meta?.last_row_id || 0),
-			accountId,
-			provider: provider.id,
-			address,
-			authType,
-		};
-	} catch (e) {
-		// 第二步失败就把本地账户行回收，避免列表里留一个空账户
-		await c.env.db.prepare(`DELETE FROM account WHERE account_id = ? AND user_id = ?`).bind(accountId, userId).run();
-		throw e;
-	}
+	return {
+		extId: Number(inserted.meta?.last_row_id || 0),
+		accountId,
+		provider: provider.id,
+		address,
+		authType,
+	};
 }
 
 export async function remove(c, userId, extId) {
@@ -242,8 +239,11 @@ export async function remove(c, userId, extId) {
 	await c.env.db.prepare(
 		`UPDATE ext_account SET is_del = 1, update_time = CURRENT_TIMESTAMP WHERE ext_id = ?`
 	).bind(extId).run();
-	await c.env.db.prepare(
-		`UPDATE account SET is_del = 1 WHERE account_id = ? AND user_id = ?`
-	).bind(row.account_id, userId).run();
+	// 历史绑定可能还挂着一行共享 account（v2 之后不再产生）；account_id=0 时跳过
+	if (Number(row.account_id) > 0) {
+		await c.env.db.prepare(
+			`UPDATE account SET is_del = 1 WHERE account_id = ? AND user_id = ?`
+		).bind(row.account_id, userId).run();
+	}
 	return true;
 }

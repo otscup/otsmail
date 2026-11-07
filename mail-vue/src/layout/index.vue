@@ -1,12 +1,6 @@
 <template>
   <el-container class="layout layout-v2" :class="{ 'layout-collapsed': uiStore.asideCollapsed && !isMobile }"
                 :style="{ gridTemplateColumns: isMobile ? '1fr' : (uiStore.asideCollapsed ? '1fr' : '272px 1fr') }">
-    <button v-if="!isMobile" type="button" class="side-toggle"
-            :class="{ collapsed: uiStore.asideCollapsed }"
-            :title="uiStore.asideCollapsed ? '展开侧栏 Expand sidebar' : '收起侧栏 Collapse sidebar'"
-            @click="uiStore.asideCollapsed = !uiStore.asideCollapsed">
-      <Icon :icon="uiStore.asideCollapsed ? 'mingcute:right-line' : 'mingcute:left-line'" width="15" height="15"/>
-    </button>
     <el-aside
         v-if="!uiStore.asideCollapsed || isMobile"
         class="aside"
@@ -31,7 +25,6 @@
 </template>
 
 <script setup>
-import { Icon } from '@iconify/vue'
 import Aside from '@/layout/aside/index.vue'
 import Header from '@/layout/header/index.vue'
 import Main from '@/layout/main/index.vue'
@@ -199,13 +192,6 @@ onBeforeUnmount(() => {
 .layout-v2 .el-aside { grid-column:1; width:272px !important; height:100vh; background:var(--rd-panel); border-right:1px solid var(--rd-line); }
 .layout-v2 .main-container { grid-column:2; min-width:0; }
 .layout-v2.layout-collapsed .main-container { grid-column:1; }
-.side-toggle { position:absolute; left:258px; top:22px; z-index:120; width:28px; height:28px; border-radius:50%;
-  display:grid; place-items:center; border:1px solid var(--rd-line-strong, rgba(148,163,184,.25)); background:var(--rd-panel);
-  color:var(--rd-muted, #64748b); box-shadow:0 5px 16px rgba(0,0,0,.18); cursor:pointer; transition:left .22s ease, background .18s; }
-.side-toggle:hover { color:var(--rd-accent, #0a84ff); background:var(--rd-panel-2); }
-.side-toggle.collapsed { left:12px; }
-.side-toggle:active { transform:scale(.92); }
-@media (max-width:1024px){ .side-toggle{display:none} }
 </style>
 
 

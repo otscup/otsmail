@@ -230,6 +230,83 @@ export async function archive(c, userId, body = {}) {
 	return { mailId, inserted: true, attachments: storedAtts };
 }
 
+/**
+ * 读回归档（换机补历史用）：新设备本地库为空时，先把服务端已经归档的邮件拉回本地，
+ * 不必重新连 IMAP 下载一遍。只读，不改游标；按 date + mail_id 倒序翻页。
+ * 附件只返回元信息（r2_key 不外泄），正文随邮件一起返回。
+ */
+export async function listArchive(c, userId, query = {}) {
+	await ensureMailSchema(c);
+
+	const extId = intOrZero(query.extId);
+	if (!extId) throw new BizError('缺少第三方邮箱 id', 400);
+	const limit = Math.min(Math.max(intOrZero(query.limit) || 50, 1), 200);
+	const beforeDate = intOrZero(query.beforeDate);
+	const beforeMailId = intOrZero(query.beforeMailId);
+
+	const account = await c.env.db.prepare(
+		`SELECT ext_id FROM ext_account WHERE ext_id = ? AND user_id = ? AND is_del = 0`
+	).bind(extId, userId).first();
+	if (!account) throw new BizError('没有找到这个第三方邮箱', 404);
+
+	const where = ['ext_id = ?', 'user_id = ?'];
+	const args = [extId, userId];
+	if (beforeDate > 0) {
+		where.push('(date < ? OR (date = ? AND mail_id < ?))');
+		args.push(beforeDate, beforeDate, beforeMailId);
+	}
+	const rows = await c.env.db.prepare(`
+		SELECT mail_id, uid, uid_validity, message_id, subject, from_name, from_addr,
+		       to_name, to_addr, cc, date, seen, snippet, body_text, body_html, att_count
+		FROM ext_mail
+		WHERE ${where.join(' AND ')}
+		ORDER BY date DESC, mail_id DESC
+		LIMIT ?
+	`).bind(...args, limit + 1).all();
+
+	const list = (rows.results || []).slice(0, limit);
+	const hasMore = (rows.results || []).length > limit;
+
+	const ids = list.map(m => Number(m.mail_id));
+	const atts = [];
+	for (let i = 0; i < ids.length; i += 50) {
+		const chunk = ids.slice(i, i + 50);
+		const placeholders = chunk.map(() => '?').join(',');
+		const got = await c.env.db.prepare(
+			`SELECT mail_id, filename, mime_type, size FROM ext_att WHERE mail_id IN (${placeholders})`
+		).bind(...chunk).all();
+		atts.push(...(got.results || []));
+	}
+	const byMail = new Map();
+	for (const a of atts) {
+		const key = Number(a.mail_id);
+		if (!byMail.has(key)) byMail.set(key, []);
+		byMail.get(key).push({ filename: a.filename, mime: a.mime_type, size: Number(a.size) || 0 });
+	}
+
+	return {
+		list: list.map(m => ({
+			mailId: Number(m.mail_id),
+			uid: Number(m.uid) || 0,
+			uidValidity: Number(m.uid_validity) || 0,
+			messageId: m.message_id,
+			subject: m.subject,
+			fromName: m.from_name,
+			fromAddr: m.from_addr,
+			toName: m.to_name,
+			toAddr: m.to_addr,
+			cc: m.cc,
+			date: Number(m.date) || 0,
+			seen: Number(m.seen) === 1,
+			snippet: m.snippet,
+			text: m.body_text,
+			html: m.body_html,
+			attachments: byMail.get(Number(m.mail_id)) || [],
+		})),
+		hasMore,
+	};
+}
+
 /** 解绑时清空该账户的归档与 R2 对象；R2 失败不影响解绑本身 */
 export async function dropArchive(c, userId, extId) {
 	await ensureMailSchema(c);

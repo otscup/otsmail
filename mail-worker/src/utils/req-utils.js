@@ -1,13 +1,13 @@
 import { UAParser } from 'ua-parser-js';
 const reqUtils = {
 	getIp(c) {
-		return  c.req.header('CF-Connecting-IP') ||
-			c.req.header('X-Forwarded-For') ||
+		return  c.req?.header?.('CF-Connecting-IP') ||
+			c.req?.header?.('X-Forwarded-For') ||
 			'Unknown';
 	},
 
 	getUserAgent(c) {
-		const ua = c.req.header('user-agent') || '';
+		const ua = c.req?.header?.('user-agent') || '';
 
 		const parser = new UAParser(ua);
 		const { browser, device, os } = parser.getResult();
@@ -16,11 +16,11 @@ const reqUtils = {
 		let osInfo = null;
 
 		if (browser.name) {
-			browserInfo = browser.name + ' ' + browser.version;
+			browserInfo = (browser.name + ' ' + (browser.version || '')).trim();
 		}
 
 		if (os.name) {
-			osInfo = os.name + os.version;
+			osInfo = os.name + (os.version || '');
 		}
 
 		let deviceInfo = 'Desktop';

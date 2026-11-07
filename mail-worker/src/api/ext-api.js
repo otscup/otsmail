@@ -9,7 +9,7 @@ import {
 	remove as removeExtAccount,
 	credential as credentialOf,
 } from '../service/ext-account-service';
-import { archive as archiveMail, dropArchive, saveSyncError } from '../service/ext-mail-service';
+import { archive as archiveMail, dropArchive, saveSyncError, listArchive } from '../service/ext-mail-service';
 
 // 自动探测规则表（服务端真源；客户端带一份同样的离线副本）
 app.get('/ext/providers', c => c.json(result.ok(publicCatalog())));
@@ -44,6 +44,12 @@ app.post('/ext/mail/archive', async c => {
 	const userId = userContext.getUserId(c);
 	const body = await c.req.json().catch(() => ({}));
 	return c.json(result.ok(await archiveMail(c, userId, body)));
+});
+
+// 读回归档：新设备/重装后本地为空时，按页把服务端已归档的邮件补回本地（只读，不动游标）
+app.get('/ext/mail/list', async c => {
+	const userId = userContext.getUserId(c);
+	return c.json(result.ok(await listArchive(c, userId, c.req.query())));
 });
 
 // 拉取失败原因回写（只存分类文案，不存凭据）

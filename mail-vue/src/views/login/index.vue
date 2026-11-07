@@ -98,6 +98,7 @@
           <el-button class="btn" type="primary" @click="submit" :loading="loginLoading"
           >{{ $t('loginBtn') }}
           </el-button>
+          <el-button class="qr-login-btn" link @click="openQr">{{ $t('qrLogin') }}</el-button>
           <div class="login-divider" v-if="hasAltLogin"><span>{{ $t('or') || '或' }}</span></div>
           <div class="social-row" v-if="hasProviderButtons">
             <el-button class="provider-btn" v-if="settingStore.settings.linuxdoSwitch" @click="linuxDoLogin">
@@ -210,6 +211,13 @@
         </el-button>
       </div>
     </el-dialog>
+    <el-dialog v-model="qrShow" :title="$t('qrLogin')" width="300" class="qr-dialog" @closed="stopQrPoll">
+      <div class="qr-box">
+        <img v-if="qrImage" :src="qrImage" alt="QR" class="qr-image"/>
+        <div v-if="qrStatus === 'expired'" class="qr-tip">{{ $t('qrExpired') }}</div>
+        <div v-else class="qr-tip">{{ $t('qrScanTip') }}</div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -218,6 +226,8 @@ import router from "@/router";
 import {computed, nextTick, onBeforeUnmount, onMounted, reactive, ref} from "vue";
 import {login} from "@/request/login.js";
 import {register} from "@/request/login.js";
+import {qrCreate, qrPoll} from "@/request/login.js";
+import QRCode from 'qrcode';
 import {versionLatest} from "@/request/version.js";
 import {ElNotification} from "element-plus";
 import {websiteConfig} from "@/request/setting.js";
@@ -242,8 +252,8 @@ import {
 } from "@/request/ouath.js";
 import {setToken} from "@/utils/token-store.js";
 import {createPkce, takePkce} from "@/utils/pkce.js";
-import {normalizeLoginTheme} from './themes.js';
-import {applySkin, getStoredSkin, loginThemeForSkin} from '@/utils/appearance.js';
+import {normalizeLoginTheme, DEFAULT_LOGIN_THEME} from './themes.js';
+import {applySkin, getSavedSkin, getStoredSkin, loginThemeForSkin} from '@/utils/appearance.js';
 
 const {t} = useI18n();
 const accountStore = useAccountStore();
@@ -251,8 +261,9 @@ const userStore = useUserStore();
 const uiStore = useUiStore();
 const settingStore = useSettingStore();
 const loginTheme = computed(() => {
-  const skin = localStorage.getItem('otsmail_skin')
-  return skin ? loginThemeForSkin(getStoredSkin()) : normalizeLoginTheme(settingStore.settings.loginTheme)
+  // 浏览器存过皮肤就用皮肤对应的登录页；没存过（新访客）才用后台“登录页皮肤”设置。
+  const skin = getSavedSkin()
+  return skin ? loginThemeForSkin(skin) : normalizeLoginTheme(settingStore.settings.loginTheme)
 });
 const hasProviderButtons = computed(() =>
     Boolean(settingStore.settings.linuxdoSwitch || settingStore.settings.githubSwitch || settingStore.settings.googleSwitch)
@@ -329,7 +340,52 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
+  stopQrPoll()
 })
+
+// 扫码登录：网页只负责展示二维码和轮询，App 用已登录会话确认。
+const qrShow = ref(false)
+const qrImage = ref('')
+const qrStatus = ref('pending')
+let qrTimer = null
+
+function stopQrPoll() {
+  if (qrTimer) {
+    clearInterval(qrTimer)
+    qrTimer = null
+  }
+}
+
+async function openQr() {
+  qrShow.value = true
+  qrStatus.value = 'pending'
+  qrImage.value = ''
+  stopQrPoll()
+  try {
+    const res = await qrCreate()
+    const payload = JSON.stringify({ type: 'otsmail-login', id: res.id })
+    qrImage.value = await QRCode.toDataURL(payload, { margin: 1, width: 220 })
+    qrTimer = setInterval(async () => {
+      try {
+        const poll = await qrPoll(res.id)
+        if (poll.status === 'confirmed' && poll.token) {
+          stopQrPoll()
+          qrStatus.value = 'confirmed'
+          qrShow.value = false
+          await saveToken(poll.token)
+        } else if (poll.status === 'expired') {
+          stopQrPoll()
+          qrStatus.value = 'expired'
+        }
+      } catch (e) {
+        stopQrPoll()
+        qrStatus.value = 'expired'
+      }
+    }, 2000)
+  } catch (e) {
+    qrStatus.value = 'expired'
+  }
+}
 
 const registerForm = reactive({
   email: '',
@@ -378,6 +434,13 @@ window.loadBefore = (e) => {
 const loginOpacity = computed(() => {
   const opacity = settingStore.settings.loginOpacity
   return uiStore.dark ? `rgba(0, 0, 0, ${opacity})` : `rgba(255, 255, 255, ${opacity})`
+})
+
+// 玻璃卡片必须留出透光率：后台把不透明度拉到 1 时，纯白底会让 backdrop-filter 完全失效。
+const loginGlass = computed(() => {
+  const raw = Number(settingStore.settings.loginOpacity)
+  const opacity = Math.min(Number.isFinite(raw) ? raw : 1, uiStore.dark ? 0.62 : 0.72)
+  return uiStore.dark ? `rgba(12, 16, 24, ${opacity})` : `rgba(255, 255, 255, ${opacity})`
 })
 
 const hideLoginDomain = computed(() => settingStore.settings.loginDomain === 1)
@@ -907,6 +970,35 @@ function submitRegister() {
     border-radius: 6px;
   }
 
+  .qr-login-btn {
+    width: 100%;
+    margin: 6px 0 0 !important;
+    font-size: 12px;
+    color: var(--rd-muted) !important;
+  }
+
+  .qr-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 0 8px;
+  }
+
+  .qr-image {
+    width: 220px;
+    height: 220px;
+    border-radius: 10px;
+    background: #fff;
+    padding: 6px;
+  }
+
+  .qr-tip {
+    font-size: 12px;
+    color: var(--rd-muted);
+    text-align: center;
+  }
+
   .oidc-provider-icon {
     width: 18px;
     height: 18px;
@@ -1296,6 +1388,9 @@ function submitRegister() {
   background-position: center !important;
   background-size: cover !important;
   background-repeat: no-repeat !important;
+  /* 玻璃要有东西可糊：0.26 的底图几乎看不见，毛玻璃就成了白板。 */
+  opacity: .62 !important;
+  filter: none !important;
 }
 #login-box[data-login-theme="paper"] {
   --paper-ink: #0b1b2b;
@@ -1713,7 +1808,10 @@ function submitRegister() {
   padding: 34px 34px 28px !important;
   border: 1px solid #e2e7f0 !important;
   border-radius: 20px !important;
-  background: v-bind(loginOpacity) !important;
+  background: v-bind(loginGlass) !important;
+  /* 半透明底 + 背景模糊才是玻璃；只调透明度只会露出糊掉的背景图。 */
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
   box-shadow: 0 24px 70px rgba(18,32,56,.1), 0 2px 8px rgba(18,32,56,.04) !important;
 }
 #login-box[data-login-theme="centered"] .form-title { font-size: 28px !important; letter-spacing: -.035em; }
@@ -2183,17 +2281,32 @@ function submitRegister() {
   #login-box[data-login-theme="gala"] .form-title { font-size: 40px !important; }
 }
 
-/* 账号输入：整条保持和密码框一样的底色，域名选择放在框内右侧，不再单独做灰色 append。 */
+/* 账号输入：域名选择放在输入行内右侧。方框只给 centered/fresh，paper/gala 保持横线输入。 */
 #login-box[data-login-theme] .container .email-input {
   position: relative;
   z-index: 10;
 }
-#login-box[data-login-theme] .container .email-input :deep(.el-input__wrapper) {
+#login-box[data-login-theme="centered"] .container .email-input :deep(.el-input__wrapper),
+#login-box[data-login-theme="fresh"] .container .email-input :deep(.el-input__wrapper) {
   background: #fff !important;
   border: 0 !important;
   border-radius: 10px !important;
   box-shadow: inset 0 0 0 1px var(--rd-line) !important;
   overflow: visible !important;
+}
+#login-box[data-login-theme="paper"] .container .email-input :deep(.el-input__wrapper),
+#login-box[data-login-theme="gala"] .container .email-input :deep(.el-input__wrapper) {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+#login-box[data-login-theme="paper"] .container .email-input :deep(.el-input__wrapper) {
+  border-bottom: 1px solid var(--paper-line) !important;
+}
+#login-box[data-login-theme="gala"] .container .email-input :deep(.el-input__wrapper) {
+  border-bottom: 1px solid #c5ab88 !important;
 }
 #login-box[data-login-theme] .container .email-input :deep(.el-input__inner) {
   padding-right: 116px !important;

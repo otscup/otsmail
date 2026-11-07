@@ -134,6 +134,27 @@ html:not([data-theme="dark"])[data-skin="gala"] {
   --el-color-primary: #9e2738;
 }
 
+html:not([data-theme="dark"])[data-skin="classic"] {
+  --rd-bg: #f4f6fb;
+  --rd-panel: #ffffff;
+  --rd-panel-2: #f7f9fd;
+  --rd-line: rgba(15, 23, 42, .09);
+  --rd-line-strong: rgba(15, 23, 42, .16);
+  --rd-text: #111827;
+  --rd-muted: #5f6f86;
+  --rd-faint: #8b98aa;
+  --rd-accent: #0a84ff;
+  --rd-accent-2: #6d5ce7;
+  --rd-accent-weak: rgba(10, 132, 255, .09);
+  --rd-header: rgba(255, 255, 255, .84);
+  --rd-rail: rgba(255, 255, 255, .92);
+  --rd-shadow: 0 12px 34px rgba(15, 23, 42, .07);
+  --rd-shadow-lg: 0 28px 70px rgba(15, 23, 42, .12);
+  --separator-opaque: #d9e0ea;
+  --bar-bg: rgba(255, 255, 255, .82);
+  --el-color-primary: #0a84ff;
+}
+
 html:not([data-theme="dark"])[data-skin] {
   --el-color-primary-light-3: color-mix(in srgb, var(--rd-accent) 70%, white);
   --el-color-primary-light-5: color-mix(in srgb, var(--rd-accent) 50%, white);
@@ -167,6 +188,14 @@ html[data-theme="dark"][data-skin="gala"] {
   --rd-accent: #e57789; --rd-accent-2: #d8b46a; --rd-accent-weak: rgba(229, 119, 137, .12);
   --rd-header: rgba(21, 10, 13, .78); --rd-rail: rgba(21, 10, 13, .9);
   --el-color-primary: #e57789;
+}
+html[data-theme="dark"][data-skin="classic"] {
+  --rd-bg: #060910; --rd-panel: #0b111d; --rd-panel-2: #0f1728;
+  --rd-line: rgba(255, 255, 255, .075); --rd-line-strong: rgba(255, 255, 255, .13);
+  --rd-text: #edf4ff; --rd-muted: #93a2ba; --rd-faint: #64718a;
+  --rd-accent: #63e6ff; --rd-accent-2: #9b8cff; --rd-accent-weak: rgba(99, 230, 255, .11);
+  --rd-header: rgba(8, 13, 23, .74); --rd-rail: rgba(7, 11, 20, .86);
+  --el-color-primary: #63e6ff;
 }
 html[data-theme="dark"][data-skin] {
   --el-color-primary-light-3: color-mix(in srgb, var(--rd-accent) 70%, black);
@@ -728,9 +757,18 @@ html[data-theme="dark"] .el-dropdown__popper {
 
 
 .layout-v2 .header-menu { display: none !important; }
+/* Dedicated sidebar-collapse control, sitting right beside the search field. */
+.layout-v2 .header-collapse-btn {
+  flex: 0 0 auto; display: grid; place-items: center; width: 30px; height: 30px;
+  border: 1px solid var(--rd-line); border-radius: 8px; background: transparent;
+  color: var(--rd-muted); cursor: pointer; transition: background .15s ease, color .15s ease;
+}
+.layout-v2 .header-collapse-btn:hover { background: var(--rd-panel-2); color: var(--rd-text); }
+.layout-v2 .header-collapse-btn:active { transform: scale(.94); }
 @media (max-width: 1024px) {
   .layout-v2 .header-menu { display: block !important; flex: 0 0 32px; }
   .layout-v2 .header-menu > div { padding: 0 6px !important; }
+  .layout-v2 .header-collapse-btn { display: none; }
 }
 .layout-v2 .writer-box svg { width: 18px !important; height: 18px !important; flex: 0 0 18px; }
 
@@ -2159,3 +2197,80 @@ html[data-theme] .settings-tabs button.active {
     font-size: 12px !important;
   }
 }
+
+/* ---------------- classic skin: neon accents (v30) ---------------- */
+html[data-skin="classic"] .layout-v2 .compose-btn,
+html[data-skin="classic"] .layout-v2 .header .writer-box {
+  color: #fff !important;
+  background: linear-gradient(100deg, #58e5ff 0%, #6888ff 58%, #9a5cff 100%) !important;
+  box-shadow: 0 10px 28px rgba(105, 124, 255, .28), inset 0 1px 0 rgba(255, 255, 255, .35) !important;
+}
+html[data-skin="classic"] .layout-v2 .compose-btn:hover,
+html[data-skin="classic"] .layout-v2 .header .writer-box:hover {
+  background: linear-gradient(100deg, #4ddcff 0%, #5a7dff 58%, #8d4dff 100%) !important;
+  filter: brightness(1.03);
+}
+html[data-skin="classic"] .layout-v2 .brand-logo,
+html[data-skin="classic"] .layout-v2 .rail-brand {
+  background: linear-gradient(145deg, #63e6ff, #8b7dff 58%, #f17dd4) !important;
+  box-shadow: 0 8px 24px rgba(88, 112, 255, .28), inset 0 0 0 1px rgba(255, 255, 255, .28) !important;
+}
+html[data-skin="classic"] .layout-v2 .brand-logo::before { background: linear-gradient(145deg, #63e6ff, #8b7dff 58%, #f17dd4) !important; opacity: .22; }
+html[data-skin="classic"] .layout-v2 .rail-btn.active {
+  color: #fff !important;
+  background: linear-gradient(145deg, #0a84ff, #6d5ce7) !important;
+}
+html[data-skin="classic"] .layout-v2 .header .ai-orb-mini {
+  background: linear-gradient(135deg, #55d6ff, #7c7bff 60%, #d56bff) !important;
+  box-shadow: 0 0 12px rgba(124, 123, 255, .35) !important;
+}
+html[data-skin="classic"] .layout-v2 .email-container .mail-avatar,
+html[data-skin="classic"] .layout-v2 .aside .side-avatar,
+html[data-skin="classic"] .layout-v2 .header .avatar-text,
+html[data-skin="classic"] .layout-v2 .details-avatar,
+html[data-skin="classic"] .reader-avatar {
+  background: conic-gradient(from 210deg, #6ee7ff, #7c7bff, #d56bff, #6ee7ff) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .65), 0 0 18px rgba(124, 123, 255, .22) !important;
+}
+html[data-skin="classic"] .layout-v2 .email-container .email-row.is-unread::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(180deg, #57d9ff, #7c7bff); border-radius: 0 3px 3px 0;
+}
+html[data-skin="classic"] .layout-v2 .email-container .email-row.is-open::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(180deg, #2f6bff, #8b5cf6); border-radius: 0 3px 3px 0; z-index: 2;
+}
+html[data-skin="classic"] .layout-v2 .email-container .email-row.is-checked {
+  background: linear-gradient(90deg, rgba(10, 132, 255, .16), rgba(109, 92, 231, .10)) !important;
+}
+
+/* ---------------- category tabs: always scrollable (v30) ---------------- */
+.email-container .mail-categories {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto !important;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rd-line-strong) transparent;
+}
+.email-container .mail-categories::-webkit-scrollbar { height: 3px; display: block; }
+.email-container .mail-categories::-webkit-scrollbar-thumb { background: var(--rd-line-strong); border-radius: 3px; }
+.email-container .mail-category { flex: 0 0 auto; white-space: nowrap; }
+
+/* ---------------- login devices: bottom card, 5 visible, scroll (v30) ---------------- */
+.device-list { max-height: 480px; overflow-y: auto; overscroll-behavior: contain; }
+.device-list::-webkit-scrollbar { width: 4px; }
+.device-list::-webkit-scrollbar-thumb { background: var(--rd-line-strong); border-radius: 4px; }
+
+/* ---------------- login theme row: label on top, full-width select ---------------- */
+.settings-container .setting-item.login-theme-item { width: 100% !important; grid-template-columns: minmax(0,1fr) !important; align-items: start !important; gap: 8px !important; }
+.settings-container .setting-item.login-theme-item > div:last-child { justify-self: stretch !important; width: 100% !important; }
+.settings-container .setting-item.login-theme-item .el-select { width: 100% !important; max-width: 100% !important; }/* 这一行在单列卡片里，必须让 item 自身撑满，否则 180px 标签列会把下拉挤到重叠。 */
+.settings-card .setting-item.login-theme-item { width: 100% !important; grid-template-columns: minmax(0,1fr) !important; align-items: start !important; gap: 8px !important; }
+.settings-card .setting-item.login-theme-item > div:first-child { width: 100% !important; }
+.settings-card .setting-item.login-theme-item > div:last-child { justify-self: stretch !important; width: 100% !important; grid-template-columns: minmax(0,1fr) !important; }
+.settings-card .setting-item.login-theme-item .el-select { width: 100% !important; max-width: 100% !important; }
+/* ios-overrides 的 `> div:last-child .el-select` 带 :last-child（算一个类），特异性 (0,4,1) 高于上面两条，必须再抬一级。 */
+.settings-container .settings-card .setting-item.login-theme-item > div:last-child .el-select { width: 100% !important; max-width: 100% !important; }

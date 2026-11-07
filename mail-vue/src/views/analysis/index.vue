@@ -228,7 +228,7 @@
             </section>
 
             <section class="cf-viz-card cf-apps-card">
-              <div class="cf-viz-head"><span>{{ $t('cfApps') }}</span><small>{{ $t('cfMonthAccumulated') }}</small></div>
+              <div class="cf-viz-head"><span>{{ $t('cfApps') }}</span><small>{{ $t('cfAppsHint') }}</small></div>
               <div class="cf-app-list">
                 <div v-for="app in cfTopApps" :key="app.key" class="cf-app-row">
                   <span class="cf-app-icon" :class="{primary: app.otsmail}">

@@ -137,7 +137,6 @@
               <div class="setting-item login-theme-item">
                 <div>
                   <span>{{ $t('loginTheme') }}</span>
-                  <div class="setting-hint">保存后刷新登录页</div>
                 </div>
                 <div>
                   <el-select :model-value="setting.loginTheme || 'paper'" style="width:190px"
@@ -2923,6 +2922,10 @@ form .el-button {
 .settings-card.collapsed .card-title::after { transform:rotate(-90deg); }
 .settings-card.collapsed .card-content { display:none; }
 .setting-item { grid-template-columns: 180px minmax(0,1fr) !important; }
+/* 卡片只有一列宽，180px 标签 + 190px 下拉会互相压住；这一行改成上下排。 */
+.setting-item.login-theme-item { grid-template-columns: minmax(0,1fr) !important; }
+.setting-item.login-theme-item > div:last-child { grid-template-columns: minmax(0,1fr) !important; justify-items: stretch; }
+.setting-item.login-theme-item :deep(.el-select) { width: 100% !important; }
 .ai-settings-card {
   width: 100%;
   max-width: none;
