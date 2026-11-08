@@ -1519,26 +1519,37 @@ const emailService = {
 
 		async sendScheduled(c) {
 			if (!c.env.kv) return;
-			const list = await c.env.kv.list({prefix: 'scheduled:', limit: 1000});
-			for (const item of list.keys) {
-				const raw = await c.env.kv.get(item.name);
-				if (!raw) continue;
-				let payload;
-				try {
-					payload = JSON.parse(raw);
-				} catch {
-					await c.env.kv.delete(item.name);
-					continue;
+			let cursor;
+			do {
+				// KV list 单次最多 1000 条，必须翻页，否则第 1000 条之后的定时信永远发不出去。
+				const page = await c.env.kv.list({ prefix: 'scheduled:', limit: 1000, cursor });
+				for (const item of page.keys) {
+					const raw = await c.env.kv.get(item.name);
+					if (!raw) continue;
+					let payload;
+					try {
+						payload = JSON.parse(raw);
+					} catch {
+						await c.env.kv.delete(item.name);
+						continue;
+					}
+					if (!payload.scheduledAt || new Date(payload.scheduledAt).getTime() > Date.now()) continue;
+					// 先抢占再发：cron 可能并发，抢不到说明另一个实例已在处理，跳过避免重复发送。
+					const claimKey = item.name + ':sending';
+					if (await c.env.kv.get(claimKey)) continue;
+					await c.env.kv.put(claimKey, '1', { expirationTtl: 300 });
+					try {
+						await this.send(c, payload, payload.userId);
+						await c.env.kv.delete(item.name);
+					} catch (error) {
+						console.error('scheduled send failed', item.name, error);
+						// 失败保留，下一次 cron 重试；避免网络抖动直接丢信。
+					} finally {
+						await c.env.kv.delete(claimKey).catch(() => {});
+					}
 				}
-				if (!payload.scheduledAt || new Date(payload.scheduledAt).getTime() > Date.now()) continue;
-				try {
-					await this.send(c, payload, payload.userId);
-					await c.env.kv.delete(item.name);
-				} catch (error) {
-					console.error('scheduled send failed', item.name, error);
-					// 失败保留，下一次 cron 重试；避免网络抖动直接丢信。
-				}
-			}
+				cursor = page.list_complete ? undefined : page.cursor;
+			} while (cursor);
 		},
 
 		// 用户手动分类即训练一个按发件人的规则；只影响该用户后续收信。

@@ -181,13 +181,15 @@ export async function archive(c, userId, body = {}) {
 		payload.push({ filename, mimeType, size, data: keep ? data : '', stored: keep });
 	}
 
-	// 已经归档过（同一账户同一 Message-ID）就直接返回，不重复写库也不重复上传附件
+	// 已经归档过（同一账户同一 Message-ID）就跳过邮件本身，但附件可能上次没传成功，需要补传
 	const existed = await c.env.db.prepare(
 		`SELECT mail_id FROM ext_mail WHERE ext_id = ? AND message_id = ?`
 	).bind(extId, messageId).first();
 	if (existed) {
+		const mailId = Number(existed.mail_id);
+		const backfilled = await storeAttachments(c, userId, extId, mailId, messageId, payload);
 		await advanceCursor(c, userId, extId, uidValidity, uid);
-		return { mailId: Number(existed.mail_id), inserted: false, attachments: 0 };
+		return { mailId, inserted: false, attachments: backfilled };
 	}
 
 	const inserted = await c.env.db.prepare(`
@@ -205,29 +207,50 @@ export async function archive(c, userId, body = {}) {
 	const mailId = Number(inserted.meta?.last_row_id || 0);
 	if (!mailId) throw new BizError('归档写入失败', 500);
 
+	const storedAtts = await storeAttachments(c, userId, extId, mailId, messageId, payload);
+
+	await advanceCursor(c, userId, extId, uidValidity, uid);
+	return { mailId, inserted: true, attachments: storedAtts };
+}
+
+/**
+ * 写附件：已存在且 r2_key 为空的记录补传，不重复插入。
+ * 上次归档附件失败时 r2_key 留空，重试必须能补上，否则附件永远缺。
+ */
+async function storeAttachments(c, userId, extId, mailId, messageId, payload) {
 	const hash = await sha16(`${extId}:${messageId}`);
-	let storedAtts = 0;
+	const existing = await c.env.db.prepare(
+		`SELECT att_id, filename, r2_key FROM ext_att WHERE mail_id = ? AND user_id = ?`
+	).bind(mailId, userId).all();
+	const byName = new Map((existing.results || []).map(row => [row.filename, row]));
+	let stored = 0;
 	for (let i = 0; i < payload.length; i++) {
 		const att = payload[i];
+		const prev = byName.get(att.filename);
+		if (prev && prev.r2_key) continue;
 		let key = '';
 		if (att.stored) {
 			try {
 				key = `ext/${userId}/${extId}/${hash}/${i}-${safeName(att.filename)}`;
 				await r2Service.putObj(c, key, toBytes(att.data), { contentType: att.mimeType });
-				storedAtts++;
+				stored++;
 			} catch (e) {
 				// 附件存失败不影响邮件本身归档，元信息照样保留
 				key = '';
 			}
 		}
-		await c.env.db.prepare(`
-			INSERT INTO ext_att (mail_id, user_id, ext_id, filename, mime_type, size, r2_key)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`).bind(mailId, userId, extId, att.filename, att.mimeType, att.size, key).run();
+		if (prev) {
+			await c.env.db.prepare(
+				`UPDATE ext_att SET r2_key = ?, size = ?, mime_type = ? WHERE att_id = ?`
+			).bind(key, att.size, att.mimeType, prev.att_id).run();
+		} else {
+			await c.env.db.prepare(`
+				INSERT INTO ext_att (mail_id, user_id, ext_id, filename, mime_type, size, r2_key)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
+			`).bind(mailId, userId, extId, att.filename, att.mimeType, att.size, key).run();
+		}
 	}
-
-	await advanceCursor(c, userId, extId, uidValidity, uid);
-	return { mailId, inserted: true, attachments: storedAtts };
+	return stored;
 }
 
 /**

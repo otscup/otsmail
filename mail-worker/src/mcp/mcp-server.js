@@ -61,6 +61,16 @@ export function createMcpServer(c) {
 		return Array.isArray(permKeys) && permKeys.includes(permKey);
 	}
 
+	// 单封邮件必须属于主账号：MCP 只暴露主账号作用域，不能借 emailId 摸到同用户其它账号的邮件。
+	async function assertMainAccountEmail(emailId) {
+		const accountId = await mainAccountId();
+		const row = await emailService.detail(c, { emailId: Number(emailId) }, userId);
+		if (!accountId || Number(row.accountId) !== Number(accountId)) {
+			throw new Error(t('emailNotExist'));
+		}
+		return { row, accountId };
+	}
+
 	// 速率限制（KV 计数，按 用户+日期）：自动化入口无节流会一键删光，这里按日限额。
 	async function allowAction(kind) {
 		const dayKey = new Date().toISOString().slice(0, 10);
@@ -92,24 +102,8 @@ export function createMcpServer(c) {
 		}
 	}
 
-	// folder / keyword 内存后过滤（emailService.list 不支持这两个维度）
-	function filterEmails(list, folder, keyword) {
-		let rows = Array.isArray(list) ? list : [];
-		if (folder === 'sent') {
-			rows = rows.filter(e => e.type === emailConst.type.SEND);
-		} else if (folder === 'trash') {
-			rows = rows.filter(e => e.isDel === isDel.DELETE);
-		} else if (folder === 'inbox') {
-			rows = rows.filter(e => e.type === emailConst.type.RECEIVE);
-		} else if (folder === 'draft') {
-			rows = rows.filter(e => e.status === emailConst.status.SAVING);
-		}
-		if (keyword) {
-			const kw = String(keyword).toLowerCase();
-			rows = rows.filter(e => (e.subject || '').toLowerCase().includes(kw) || (e.name || '').toLowerCase().includes(kw) || (e.sendEmail || '').toLowerCase().includes(kw));
-		}
-		return rows;
-	}
+	// folder / keyword 直接交给 emailService.list 过滤（type/mailbox/status/text），不再内存后过滤：
+	// 内存过滤会先取一页再筛，分页和 total 都会错。
 
 	server.tool(
 		'list_emails',
@@ -122,18 +116,36 @@ export function createMcpServer(c) {
 		},
 		async ({ page, pageSize, folder, keyword }) => {
 			const size = Math.min(50, Math.max(1, pageSize));
-			const offset = (page - 1) * size;
 			const accountId = await mainAccountId();
-			// allReceive=0 强制只取主账号邮件（不传会按账号 allReceive 属性跨账号，违反 MCP 单账号作用域）
-			const list = await emailService.list(c, {
+			// 文件夹直接交给 emailService.list 过滤：type/mailbox/status 必须显式传，
+			// 少传一个就会把 undefined 绑进 SQL（D1_TYPE_ERROR）。
+			const params = {
 				size,
+				page,
 				emailId: 0,
-				timeSort: 1,
+				timeSort: 0,
 				accountId,
-				allReceive: 0
-			}, userId);
-			const rows = filterEmails(list, folder, keyword);
-			return ok(rows.slice(offset, offset + size));
+				allReceive: 0,
+				type: emailConst.type.RECEIVE,
+				mailbox: 'inbox'
+			};
+			if (folder === 'sent') {
+				params.type = emailConst.type.SEND;
+				params.mailbox = 'all';
+			} else if (folder === 'trash') {
+				params.mailbox = 'deleted';
+			} else if (folder === 'draft') {
+				params.type = emailConst.type.SEND;
+				params.mailbox = 'all';
+				params.status = emailConst.status.SAVING;
+			}
+			if (keyword) {
+				params.text = keyword;
+				params.searchType = 'all';
+			}
+			const result = await emailService.list(c, params, userId);
+			// emailService.list 返回 { list, total, latestEmail }，不是数组
+			return ok({ total: result?.total || 0, list: result?.list || [] });
 		}
 	);
 
@@ -142,8 +154,12 @@ export function createMcpServer(c) {
 		'读取单封邮件的完整内容（正文、附件列表等）',
 		{ id: z.string().describe('邮件ID') },
 		async ({ id }) => {
-			const data = await emailService.detail(c, { emailId: Number(id) }, userId);
-			return ok(data);
+			try {
+				const { row } = await assertMainAccountEmail(id);
+				return ok(row);
+			} catch (e) {
+				return err(e.message);
+			}
 		}
 	);
 
@@ -201,10 +217,14 @@ export function createMcpServer(c) {
 			if (!(await allowAction('delete'))) {
 				return err(t('mcpRateLimit'));
 			}
-			await emailService.delete(c, { emailIds: String(id) }, userId);
-			const accountId = await mainAccountId();
-			await audit(c, 'delete_email', accountId, String(id));
-			return ok({ success: true });
+			try {
+				const { accountId } = await assertMainAccountEmail(id);
+				await emailService.delete(c, { emailIds: String(id) }, userId);
+				await audit(c, 'delete_email', accountId, String(id));
+				return ok({ success: true });
+			} catch (e) {
+				return err(e.message);
+			}
 		}
 	);
 
@@ -213,10 +233,14 @@ export function createMcpServer(c) {
 		'将邮件标记为已读',
 		{ id: z.string().describe('邮件ID') },
 		async ({ id }) => {
-			await emailService.read(c, { emailIds: String(id) }, userId);
-			const accountId = await mainAccountId();
-			await audit(c, 'mark_read', accountId, String(id));
-			return ok({ success: true });
+			try {
+				const { accountId } = await assertMainAccountEmail(id);
+				await emailService.read(c, { emailIds: String(id) }, userId);
+				await audit(c, 'mark_read', accountId, String(id));
+				return ok({ success: true });
+			} catch (e) {
+				return err(e.message);
+			}
 		}
 	);
 

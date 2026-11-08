@@ -8,8 +8,30 @@ describe('url safety', () => {
 		}
 	});
 
+	it('blocks carrier-grade NAT, link-local, reserved and IPv4-mapped addresses', () => {
+		for (const url of [
+			'http://100.64.0.1',
+			'http://169.254.169.254/latest/meta-data',
+			'http://198.18.0.1',
+			'http://224.0.0.1',
+			'http://0.0.0.0',
+			'http://[::ffff:127.0.0.1]',
+			'http://[fd00::1]',
+			'http://[fe80::1]',
+			'http://metadata.google.internal'
+		]) {
+			expect(isPrivateUrl(url)).toBe(true);
+		}
+	});
+
+	it('rejects non-http protocols', () => {
+		expect(isPrivateUrl('file:///etc/passwd')).toBe(true);
+		expect(isPrivateUrl('gopher://example.com')).toBe(true);
+	});
+
 	it('allows public https endpoints', () => {
 		expect(isPrivateUrl('https://api.openai.com/v1')).toBe(false);
 		expect(isPrivateUrl('https://hooks.example.com/mail')).toBe(false);
+		expect(isPrivateUrl('https://100.example.com')).toBe(false);
 	});
 });

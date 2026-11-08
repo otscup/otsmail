@@ -58,6 +58,11 @@ const webhookService = {
 	async sendEmail({ env }, email, webhookUrl, webhookRetry = 0, webhookSecret = '') {
 		webhookUrl = domainUtils.toOssDomain(webhookUrl);
 		if (!webhookUrl) return;
+		// 真实收信路径同样要拦内网地址，否则测试按钮拦得住、实际发信拦不住。
+		if (isPrivateUrl(webhookUrl)) {
+			console.error('webhook blocked private url:', webhookUrl);
+			return;
+		}
 
 		const payload = {
 			emailId: email.emailId,

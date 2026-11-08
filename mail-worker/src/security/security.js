@@ -9,6 +9,13 @@ import { t } from '../i18n/i18n'
 import mcpService from '../service/mcp-service';
 import app from '../hono/hono';
 
+// Match by path segment: /email/send must not match /email/sendxxx, or sibling routes borrow each other's permission.
+export function pathMatches(path, prefix) {
+	if (path === prefix) return true;
+	if (!path.startsWith(prefix)) return false;
+	return path.charAt(prefix.length) === '/';
+}
+
 const exclude = [
 	'/login',
 	'/register',
@@ -113,20 +120,20 @@ app.use('*', async (c, next) => {
 
 	const path = c.req.path;
 
-	// Streamable HTTP 无状态模式不提供 GET SSE / DELETE 会话；先于鉴权返回 405。
+	// Streamable HTTP 鏃犵姸鎬佹ā寮忎笉鎻愪緵 GET SSE / DELETE 浼氳瘽锛涘厛浜庨壌鏉冭繑鍥?405銆?
 	if (path === '/mcp' && (c.req.method === 'GET' || c.req.method === 'DELETE')) {
 		return c.text('', 405, { Allow: 'POST' });
 	}
 
 	const index = exclude.findIndex(item => {
-		return path.startsWith(item);
+		return pathMatches(path, item);
 	});
 
 	if (index > -1) {
 		return await next();
 	}
 
-	if (path.startsWith('/public')) {
+	if (pathMatches(path, '/public')) {
 
 		const userPublicToken = await c.env.kv.get(KvConst.PUBLIC_KEY);
 		const publicToken = c.req.header(constant.TOKEN_HEADER);
@@ -137,16 +144,16 @@ app.use('*', async (c, next) => {
 	}
 
 
-	// Token 只从 Authorization 头读取，避免出现在 URL、代理和访问日志中
+	// Token 鍙粠 Authorization 澶磋鍙栵紝閬垮厤鍑虹幇鍦?URL銆佷唬鐞嗗拰璁块棶鏃ュ織涓?
 	const jwt = c.req.header(constant.TOKEN_HEADER);
 
-	// MCP 访问令牌（mcp_ 前缀）：与 JWT 共用同一套用户上下文与权限校验，只是不查 KV 会话表
+	// MCP 璁块棶浠ょ墝锛坢cp_ 鍓嶇紑锛夛細涓?JWT 鍏辩敤鍚屼竴濂楃敤鎴蜂笂涓嬫枃涓庢潈闄愭牎楠岋紝鍙槸涓嶆煡 KV 浼氳瘽琛?
 	const mcpAuth = await mcpService.verifyBearer(c, jwt);
 
 	if (mcpAuth) {
 		const mcpOn = c.env.mcp_switch === true || String(c.env.mcp_switch).toLowerCase() === 'true';
 		if (!mcpOn) throw new BizError('MCP is disabled', 401);
-		if (!path.startsWith('/mcp')) throw new BizError('MCP token only valid for /mcp', 403);
+		if (!pathMatches(path, '/mcp')) throw new BizError('MCP token only valid for /mcp', 403);
 	}
 
 	const result = mcpAuth ? { userId: mcpAuth.userId, token: null, viaMcp: true } : await jwtUtils.verifyToken(c, jwt);
@@ -166,7 +173,7 @@ app.use('*', async (c, next) => {
 		throw new BizError(t('authExpired'), 401);
 	}
 
-	// 系统管理员权限不能只信 KV 快照：降级后旧快照最多还能活到跨天。
+	// 绯荤粺绠＄悊鍛樻潈闄愪笉鑳藉彧淇?KV 蹇収锛氶檷绾у悗鏃у揩鐓ф渶澶氳繕鑳芥椿鍒拌法澶┿€?
 	if (!result.viaMcp && Number(authInfo.user.type) === 0) {
 		const liveUser = await userService.selectById(c, userId);
 		if (!liveUser || Number(liveUser.type) !== 0) {
@@ -175,7 +182,7 @@ app.use('*', async (c, next) => {
 	}
 
 	const permIndex = requirePerms.findIndex(item => {
-		return path.startsWith(item);
+		return pathMatches(path, item);
 	});
 
 	if (permIndex > -1) {
@@ -185,10 +192,10 @@ app.use('*', async (c, next) => {
 		const userPaths = permKeyToPaths(permKeys);
 
 		const userPermIndex = userPaths.findIndex(item => {
-			return path.startsWith(item);
+			return pathMatches(path, item);
 		});
 
-		// 0 是系统管理员角色；不再按邮箱字符串放行
+		// 0 鏄郴缁熺鐞嗗憳瑙掕壊锛涗笉鍐嶆寜閭瀛楃涓叉斁琛?
 		if (userPermIndex === -1 && Number(authInfo.user.type) !== 0) {
 			throw new BizError(t('unauthorized'), 403);
 		}

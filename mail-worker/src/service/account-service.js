@@ -10,6 +10,7 @@ import {accountConst, isDel, settingConst} from '../const/entity-const';
 import settingService from './setting-service';
 import turnstileService from './turnstile-service';
 import roleService from './role-service';
+import { removeByAccountId as removeExtByAccountId } from './ext-account-service';
 import { t } from '../i18n/i18n';
 import verifyRecordService from './verify-record-service';
 
@@ -181,6 +182,8 @@ const accountService = {
 			and(eq(account.userId, userId),
 				eq(account.accountId, accountId)))
 			.run();
+		// 账户删了，挂在它上面的第三方绑定和凭据也要一起结束生命周期。
+		await removeExtByAccountId(c, userId, accountId);
 	},
 
 	selectById(c, accountId) {
@@ -201,6 +204,10 @@ const accountService = {
 	async physicsDeleteByUserIds(c, userIds) {
 		await emailService.physicsDeleteUserIds(c, userIds);
 		await orm(c).delete(account).where(inArray(account.userId,userIds)).run();
+		// 用户被物理删除时，第三方绑定与凭据一并清掉。
+		await c.env.db.prepare(
+			`UPDATE ext_account SET is_del = 1, secret_seal = '' WHERE user_id IN (${userIds.map(() => '?').join(',')})`
+		).bind(...userIds).run().catch(() => {});
 	},
 
 	async selectUserAccountCountList(c, userIds, del = isDel.NORMAL) {

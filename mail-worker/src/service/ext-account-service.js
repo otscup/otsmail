@@ -236,8 +236,9 @@ export async function remove(c, userId, extId) {
 	).bind(extId, userId).first();
 	if (!row) throw new BizError('没有找到这个第三方邮箱', 404);
 
+	// 解绑即销毁凭据：只置 is_del 会把 secret_seal 留在库里，凭据生命周期没有真正结束。
 	await c.env.db.prepare(
-		`UPDATE ext_account SET is_del = 1, update_time = CURRENT_TIMESTAMP WHERE ext_id = ?`
+		`UPDATE ext_account SET is_del = 1, secret_seal = '', update_time = CURRENT_TIMESTAMP WHERE ext_id = ?`
 	).bind(extId).run();
 	// 历史绑定可能还挂着一行共享 account（v2 之后不再产生）；account_id=0 时跳过
 	if (Number(row.account_id) > 0) {
@@ -246,4 +247,19 @@ export async function remove(c, userId, extId) {
 		).bind(row.account_id, userId).run();
 	}
 	return true;
+}
+
+/**
+ * 删除邮箱账户时同步清理挂在它上面的第三方绑定。
+ * 否则 account 行没了、ext_account 还留着 secret_seal，凭据会变成孤儿。
+ */
+export async function removeByAccountId(c, userId, accountId) {
+	const id = Number(accountId);
+	if (!Number.isFinite(id) || id <= 0) return 0;
+	await ensureSchema(c);
+	const res = await c.env.db.prepare(
+		`UPDATE ext_account SET is_del = 1, secret_seal = '', update_time = CURRENT_TIMESTAMP
+		 WHERE user_id = ? AND account_id = ? AND is_del = 0`
+	).bind(userId, id).run();
+	return res?.meta?.changes || 0;
 }
