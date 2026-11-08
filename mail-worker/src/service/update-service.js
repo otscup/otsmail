@@ -21,6 +21,31 @@ async function fetchReleases(c) {
 	return response.json();
 }
 
+// REST 匿名额度只有 60 次/小时，被限流时退回 atom（不限流，但只给最近 10 条）。
+async function fetchReleasesAtom() {
+	const response = await fetch(`https://github.com/${REPO}/releases.atom`, {
+		headers: { 'User-Agent': 'otsmail-update-check' },
+		signal: AbortSignal.timeout(8000)
+	});
+	if (!response.ok) throw new Error(`GitHub atom ${response.status}`);
+	const xml = await response.text();
+	const entries = [];
+	const blocks = xml.split('<entry>').slice(1);
+	for (const block of blocks) {
+		const id = /<id>[^<]*\/([^<\/]+)<\/id>/.exec(block);
+		const updated = /<updated>([^<]+)<\/updated>/.exec(block);
+		const link = /<link[^>]+href="([^"]+)"/.exec(block);
+		if (!id) continue;
+		entries.push({
+			tag_name: id[1],
+			published_at: updated ? updated[1] : null,
+			html_url: link ? link[1] : '',
+			body: ''
+		});
+	}
+	return entries;
+}
+
 function pickLatest(items) {
 	const releases = (Array.isArray(items) ? items : [])
 		.map(item => {
@@ -82,15 +107,20 @@ async function check(c) {
 	try {
 		release = pickLatest(await fetchReleases(c));
 	} catch (e) {
-		console.error('update check failed', e);
-		return {
-			status: 'upstreamError',
-			current: currentVersion(c).version,
-			latest: null,
-			hasUpdate: false,
-			checkedAt: new Date().toISOString(),
-			cached: false
-		};
+		console.error('update check failed, falling back to atom', e);
+		try {
+			release = pickLatest(await fetchReleasesAtom());
+		} catch (e2) {
+			console.error('update atom failed', e2);
+			return {
+				status: 'upstreamError',
+				current: currentVersion(c).version,
+				latest: null,
+				hasUpdate: false,
+				checkedAt: new Date().toISOString(),
+				cached: false
+			};
+		}
 	}
 
 	try {
