@@ -10,15 +10,27 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <script>
-    const uiStoreStr =  localStorage.getItem('ui')
-    if (uiStoreStr) {
-      const uiStore =  JSON.parse(uiStoreStr)
+    // 首屏加载动画要在 Vue 挂载前就按当前皮肤/明暗取色，这里先把 data-theme / data-skin 写到 <html> 上；
+    // Vue 挂载后 App.vue 与 applySkin() 会用同一份 localStorage 再设一次，值一致不会闪。
+    (function () {
       const root = document.documentElement
-      root.setAttribute('class', uiStore.dark ? 'dark' : '');
-      const metaTag = document.getElementById('theme-color-meta');
-      const isMobile =  !window.matchMedia("(pointer: fine) and (hover: hover)").matches;
-      metaTag.setAttribute('content', uiStore.dark ? (isMobile ? '#141414' : '#000000') : (isMobile ? '#FFFFFF' : '#F1F1F1'));
-    }
+      const uiStoreStr = localStorage.getItem('ui')
+      let dark = false
+      if (uiStoreStr) {
+        try {
+          const uiStore = JSON.parse(uiStoreStr)
+          dark = !!uiStore.dark
+          root.setAttribute('class', dark ? 'dark' : '')
+          const metaTag = document.getElementById('theme-color-meta')
+          const isMobile = !window.matchMedia('(pointer: fine) and (hover: hover)').matches
+          if (metaTag) metaTag.setAttribute('content', dark ? (isMobile ? '#141414' : '#000000') : (isMobile ? '#FFFFFF' : '#F1F1F1'))
+        } catch (e) {}
+      }
+      const skins = ['paper', 'fresh', 'gala', 'classic']
+      const savedSkin = localStorage.getItem('otsmail_skin')
+      root.setAttribute('data-skin', skins.includes(savedSkin) ? savedSkin : 'paper')
+      root.setAttribute('data-theme', dark ? 'dark' : 'light')
+    })()
   </script>
 </head>
 <style>
@@ -28,17 +40,77 @@
   .dark {
     background: #141414;
   }
+
+  /* 首屏加载：方案 B「起飞冲刺」（奶团子追纸飞机） */
   #loading-first {
     position: fixed;
-    left: 0;
-    top: 0;
-    height: 100%;
-    width: 100%;
+    inset: 0;
     display: flex;
-    justify-content: center;
     align-items: center;
+    justify-content: center;
     z-index: 500;
-    background: var(--el-bg-color);
+    background: #f4f6fb;
+    background: var(--rd-bg, #f4f6fb);
+  }
+
+  html[data-theme="dark"] #loading-first {
+    background: #060910;
+    background: var(--rd-bg, #060910);
+  }
+
+  /*
+   * 纸飞机与速度线取 --rd-accent / --rd-accent-2；奶团子固定暖色不跟主题。
+   * 首屏可能早于打包样式表生效，下面按四套皮肤 + 暗色给出与 redesign.css 完全一致的兜底色，
+   * 变量可用时仍以 --rd-accent 系列为准。
+   */
+  #loading-first {
+    --ld-accent: #0a84ff;
+    --ld-accent-2: #6d5ce7;
+    --ld-bun-shadow: rgba(120, 90, 50, .18);
+  }
+
+  html[data-skin="paper"] #loading-first {
+    --ld-accent: var(--rd-accent, #2452d8);
+    --ld-accent-2: var(--rd-accent-2, #ad5f38);
+  }
+
+  html[data-skin="fresh"] #loading-first {
+    --ld-accent: var(--rd-accent, #0d6b55);
+    --ld-accent-2: var(--rd-accent-2, #b8753e);
+  }
+
+  html[data-skin="gala"] #loading-first {
+    --ld-accent: var(--rd-accent, #9e2738);
+    --ld-accent-2: var(--rd-accent-2, #b48a4a);
+  }
+
+  html[data-skin="classic"] #loading-first {
+    --ld-accent: var(--rd-accent, #0a84ff);
+    --ld-accent-2: var(--rd-accent-2, #6d5ce7);
+  }
+
+  html[data-theme="dark"] #loading-first {
+    --ld-bun-shadow: rgba(201, 168, 116, .24);
+  }
+
+  html[data-theme="dark"][data-skin="paper"] #loading-first {
+    --ld-accent: var(--rd-accent, #9db6ff);
+    --ld-accent-2: var(--rd-accent-2, #d39a78);
+  }
+
+  html[data-theme="dark"][data-skin="fresh"] #loading-first {
+    --ld-accent: var(--rd-accent, #7bd8b8);
+    --ld-accent-2: var(--rd-accent-2, #d7a56f);
+  }
+
+  html[data-theme="dark"][data-skin="gala"] #loading-first {
+    --ld-accent: var(--rd-accent, #e57789);
+    --ld-accent-2: var(--rd-accent-2, #d8b46a);
+  }
+
+  html[data-theme="dark"][data-skin="classic"] #loading-first {
+    --ld-accent: var(--rd-accent, #63e6ff);
+    --ld-accent-2: var(--rd-accent-2, #9b8cff);
   }
 
   .loading-hide {
@@ -46,91 +118,225 @@
     opacity: 0;
   }
 
-  .loading-icon {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-  }
-
-  .loading-image {
+  /* 70px 基准，宽屏放大到 140px 档 */
+  .ld-scene {
+    position: relative;
     width: 70px;
     height: 70px;
-    object-fit: contain;
   }
 
-  .loading-progress {
-    position: relative;
-    width: 64px;
-    height: 4px;
-    overflow: hidden;
-    border-radius: 999px;
-    background: rgba(64, 158, 255, 0.18);
+  @media (min-width: 520px) {
+    .ld-scene {
+      transform: scale(2);
+    }
   }
 
-  .loading-progress::before {
-    content: "";
+  .ld-plane {
     position: absolute;
-    left: 0;
-    top: 0;
+    left: 12px;
+    top: 34px;
+    width: 14px;
+    height: 14px;
+    z-index: 2;
+    animation: ld-plane-run 3.4s linear infinite;
+    will-change: transform, opacity;
+  }
+
+  .ld-plane svg {
+    display: block;
     width: 100%;
     height: 100%;
-    border-radius: inherit;
-    background: #409EFF;
-    transform: scaleX(0);
-    transform-origin: left center;
-    animation: loading-progress-grow 2.4s linear forwards;
+    overflow: visible;
   }
 
-  .loading-progress::after {
-    content: "";
+  .ld-plane .wing {
+    fill: var(--ld-accent);
+  }
+
+  .ld-plane .crease {
+    fill: none;
+    stroke: var(--rd-panel, #ffffff);
+    stroke-width: 1.7;
+    stroke-linecap: round;
+  }
+
+  .ld-speed {
     position: absolute;
-    top: 0;
-    width: 24px;
-    height: 100%;
-    border-radius: inherit;
-    background: rgba(64, 158, 255, 0.45);
-    filter: blur(4px);
-    transform: translateX(-24px);
-    animation: loading-progress-peg 2.4s linear forwards;
+    right: 100%;
+    top: 50%;
+    width: 12px;
+    height: 1.5px;
+    border-radius: 2px;
+    background: var(--ld-accent-2);
+    transform-origin: 100% 50%;
+    opacity: 0;
+    animation: ld-speed-flash 3.4s linear infinite;
   }
 
-  .loading-complete .loading-progress::before {
-    animation: none;
-    transform: scaleX(1);
-    transition: transform 200ms linear;
+  .ld-speed.s2 {
+    top: calc(50% - 3.5px);
+    width: 8px;
   }
 
-  .loading-complete .loading-progress::after {
-    animation: none;
-    transform: translateX(60px);
-    transition: transform 200ms linear;
+  .ld-speed.s3 {
+    top: calc(50% + 3.5px);
+    width: 7px;
   }
 
-  @keyframes loading-progress-grow {
-    0% {
-      transform: scaleX(0);
+  @keyframes ld-speed-flash {
+    0%, 9% { opacity: 0; transform: scaleX(.3); }
+    15% { opacity: .6; transform: scaleX(1); }
+    28% { opacity: .45; transform: scaleX(.9); }
+    33%, 100% { opacity: 0; transform: scaleX(.3); }
+  }
+
+  @keyframes ld-plane-run {
+    0% { transform: translate(0, 0) rotate(0deg); opacity: 1; animation-timing-function: cubic-bezier(.4, 0, .6, 1); }
+    9% { transform: translate(0, -2px) rotate(-2deg); opacity: 1; animation-timing-function: cubic-bezier(.55, 0, .95, .4); }
+    30% { transform: translate(86px, -16px) rotate(-12deg); opacity: 1; }
+    33% { transform: translate(95px, -18px) rotate(-12deg); opacity: 0; }
+    55% { transform: translate(-92px, -6px) rotate(-4deg); opacity: 0; }
+    58% { transform: translate(-10px, -1px) rotate(-2deg); opacity: 0; }
+    63% { transform: translate(-2px, 0) rotate(0deg); opacity: 1; }
+    78%, 100% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  }
+
+  .ld-bun-x {
+    position: absolute;
+    left: 50%;
+    bottom: 8px;
+    width: 26px;
+    margin-left: -13px;
+    z-index: 3;
+    animation: ld-bun-b-x 3.4s ease-in-out infinite;
+  }
+
+  .ld-bun-hop {
+    transform-origin: 50% 100%;
+    animation: ld-hop-b 3.4s cubic-bezier(.3, .1, .4, 1) infinite;
+  }
+
+  .ld-bun {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  html[data-theme="dark"] .ld-bun {
+    filter: drop-shadow(0 0 5px rgba(253, 240, 216, .35));
+  }
+
+  @media (max-width: 519px) {
+    .ld-bun .shine {
+      display: none;
     }
-    100% {
-      transform: scaleX(1);
-    }
   }
 
-  @keyframes loading-progress-peg {
-    0% {
-      transform: translateX(-24px);
-    }
-    100% {
-      transform: translateX(60px);
+  .ld-eye {
+    transform-origin: center;
+    animation: ld-squint-b 3.4s linear infinite;
+  }
+
+  .ld-bun-shadow {
+    position: absolute;
+    left: 50%;
+    bottom: -2px;
+    width: 21px;
+    height: 3.4px;
+    margin-left: -10.5px;
+    border-radius: 50%;
+    background: var(--ld-bun-shadow);
+    animation: ld-shadow-b 3.4s cubic-bezier(.3, .1, .4, 1) infinite;
+  }
+
+  @keyframes ld-bun-b-x {
+    0%, 8% { transform: translateX(0); }
+    16% { transform: translateX(2px); }
+    24% { transform: translateX(5px); }
+    40%, 64% { transform: translateX(9px); }
+    74% { transform: translateX(6px); }
+    88% { transform: translateX(2px); }
+    100% { transform: translateX(0); }
+  }
+
+  @keyframes ld-hop-b {
+    0%, 7% { transform: translateY(0) scale(1, 1) rotate(0deg); }
+    10% { transform: translateY(0) scale(1.07, .9) rotate(0deg); }
+    14% { transform: translateY(-8px) scale(.96, 1.05) rotate(-3deg); }
+    18% { transform: translateY(0) scale(1.07, .9) rotate(2deg); }
+    22% { transform: translateY(0) scale(1, 1) rotate(0deg); }
+    25% { transform: translateY(0) scale(1.05, .93) rotate(0deg); }
+    29% { transform: translateY(-5px) scale(.98, 1.03) rotate(5deg); }
+    33% { transform: translateY(0) scale(1.06, .92) rotate(3deg); }
+    37% { transform: translateY(0) scale(1, 1) rotate(0deg); }
+    40% { transform: translateY(0) scale(1.04, .94) rotate(0deg); }
+    44% { transform: translateY(-3px) scale(.99, 1.02) rotate(4deg); }
+    48% { transform: translateY(0) scale(1.06, .9) rotate(2deg); }
+    52% { transform: translateY(1px) scale(1.09, .87) rotate(-2deg); }
+    60% { transform: translateY(2px) scale(1.2, .78) rotate(-5deg); }
+    68% { transform: translateY(3px) scale(1.16, .8) rotate(-6deg); }
+    76% { transform: translateY(2px) scale(1.08, .9) rotate(-3deg); }
+    88% { transform: translateY(0) scale(1.01, .99) rotate(0deg); }
+    100% { transform: translateY(0) scale(1, 1) rotate(0deg); }
+  }
+
+  @keyframes ld-shadow-b {
+    0%, 7% { transform: scale(1); opacity: 1; }
+    14% { transform: scale(.7); opacity: .5; }
+    18% { transform: scale(1.04); opacity: 1; }
+    29% { transform: scale(.84); opacity: .72; }
+    33% { transform: scale(1.03); opacity: 1; }
+    44% { transform: scale(.9); opacity: .85; }
+    60% { transform: scale(1.12); opacity: 1; }
+    88%, 100% { transform: scale(1); opacity: 1; }
+  }
+
+  @keyframes ld-squint-b {
+    0%, 46% { transform: scaleY(1); }
+    54%, 70% { transform: scaleY(.55); }
+    80%, 100% { transform: scaleY(1); }
+  }
+
+  /* 降低打扰：只保留 0% 的静态构图 */
+  @media (prefers-reduced-motion: reduce) {
+    #loading-first *,
+    #loading-first *::before,
+    #loading-first *::after {
+      animation: none !important;
+      transition: none !important;
     }
   }
 </style>
 <body>
-<div id="loading-first" >
-  <div class="loading-icon">
-    <img class="loading-image" src="/mail-pwa.png" alt="otsmail">
-    <div class="loading-progress" aria-hidden="true"></div>
+<div id="loading-first" role="status" aria-label="正在加载">
+  <div class="ld-scene" aria-hidden="true">
+    <div class="ld-plane">
+      <i class="ld-speed s1"></i>
+      <i class="ld-speed s2"></i>
+      <i class="ld-speed s3"></i>
+      <svg viewBox="0 0 24 24">
+        <path class="wing" d="M2.5 11.9 21.5 3 14.8 21 11.4 13.3 2.5 11.9Z"/>
+        <path class="crease" d="M11.4 13.3 21.5 3"/>
+      </svg>
+    </div>
+
+    <div class="ld-bun-x">
+      <div class="ld-bun-shadow"></div>
+      <div class="ld-bun-hop">
+        <svg class="ld-bun" viewBox="0 0 100 90">
+          <path d="M50 12C74 12 88 38 92 64 95 80 84 84 50 84 16 84 5 80 8 64 12 38 26 12 50 12Z"
+                fill="#FDF0D8" stroke="#E6D2AE" stroke-width="2"/>
+          <ellipse cx="50" cy="80" rx="34" ry="9" fill="#C9A874" opacity=".16"/>
+          <ellipse cx="50" cy="83" rx="27" ry="6" fill="#C9A874" opacity=".14"/>
+          <ellipse class="shine" cx="36" cy="33" rx="16" ry="9" fill="#FFFFFF" opacity=".3"
+                   transform="rotate(-22 36 33)"/>
+          <circle class="ld-eye" cx="36" cy="48" r="4.2" fill="#1e293b"/>
+          <circle class="ld-eye" cx="64" cy="48" r="4.2" fill="#1e293b"/>
+          <path d="M43 56Q50 63 57 56" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </div>
   </div>
 </div>
 <div id="app"></div>
