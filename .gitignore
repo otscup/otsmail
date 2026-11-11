@@ -55,3 +55,7 @@ _*.sql
 _*.png
 *-d1.sql
 *-data.sql
+
+# AI 会话产物、交接文档：只留在本机，不入库
+.trae/
+HANDOFF_*.md

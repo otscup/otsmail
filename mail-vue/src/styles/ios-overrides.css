@@ -228,6 +228,20 @@ html, body, #app {
   padding: var(--space-3) var(--space-4) !important;
 }
 
+/* 弹窗内的输入框：不要灰色底色，保持干净纯白/纯净透明背景 */
+.el-dialog .el-input__wrapper,
+.el-dialog .el-textarea__inner {
+  background: var(--bg-primary, #ffffff) !important;
+  border: 1px solid var(--border-color, #dcdfe6) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="dark"] .el-dialog .el-input__wrapper,
+html[data-theme="dark"] .el-dialog .el-textarea__inner {
+  background: var(--bg-secondary, #2c2c2e) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
 /* ---- Tabs: segmented control ---- */
 .el-tabs__header { border-bottom: none !important; }
 .el-tabs__item {
