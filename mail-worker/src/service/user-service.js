@@ -16,6 +16,7 @@ import roleService from './role-service';
 import emailUtils from '../utils/email-utils';
 import saltHashUtils from '../utils/crypto-utils';
 import constant from '../const/constant';
+import authCache from './auth-cache';
 import { t } from '../i18n/i18n'
 import reqUtils from '../utils/req-utils';
 import {oauth} from "../entity/oauth";
@@ -102,6 +103,7 @@ const userService = {
 		const { salt, hash } = await cryptoUtils.hashPassword(password, c);
 		await orm(c).update(user).set({ password: hash, salt: salt }).where(eq(user.userId, userId)).run();
 		await c.env.kv.delete(KvConst.AUTH_INFO + userId);
+		authCache.clear(userId);
 	},
 
 	/**
@@ -159,6 +161,7 @@ const userService = {
 		if (syncDelete === settingConst.syncDelete.OPEN) {
 			await this.physicsDelete(c, { userIds: String(userId) });
 			await c.env.kv.delete(kvConst.AUTH_INFO + userId)
+			authCache.clear(userId);
 			return;
 		}
 		await orm(c).update(user).set({ isDel: isDel.DELETE }).where(eq(user.userId, userId)).run();
@@ -166,6 +169,7 @@ const userService = {
 		// 之前注册过的 Google/GitHub 登录会被 login() 命中 isDel → 报"账号已注销"，且无法用该 OAuth 再注册。
 		await oauthService.deleteByUserIds(c, [userId]);
 		await c.env.kv.delete(kvConst.AUTH_INFO + userId)
+		authCache.clear(userId);
 	},
 
 	async physicsDelete(c, params) {
@@ -346,6 +350,7 @@ const userService = {
 
 		// 状态/角色变更后立即失效，避免旧 KV 快照继续放行。
 		await c.env.kv.delete(KvConst.AUTH_INFO + userId);
+		authCache.clear(userId);
 	},
 
 	async setType(c, params) {
@@ -367,6 +372,7 @@ const userService = {
 
 		// 角色变了，旧会话里的 type 可能仍是大权限，必须重登。
 		await c.env.kv.delete(KvConst.AUTH_INFO + userId);
+		authCache.clear(userId);
 
 	},
 

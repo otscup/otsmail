@@ -7,6 +7,7 @@ import cryptoUtils from '../utils/crypto-utils';
 import BizError from '../error/biz-error';
 import constant from '../const/constant';
 import KvConst from '../const/kv-const';
+import authCache from './auth-cache';
 
 const CODE_EXPIRE_SECONDS = 10 * 60; // 验证码 10 分钟有效
 const IP_WINDOW_SECONDS = 60 * 60; // IP 1 小时窗口
@@ -277,6 +278,7 @@ const passwordRecoveryService = {
 
 		// 清除历史会话 / tokens，强制下线
 		await c.env.kv.delete(KvConst.AUTH_INFO + userRow.userId);
+		authCache.clear(userRow.userId);
 
 		// 删除验证码
 		await c.env.kv.delete(codeKey);

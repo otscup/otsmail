@@ -20,6 +20,7 @@ import { toUtc } from '../utils/date-uitil';
 import { t } from '../i18n/i18n.js';
 import verifyRecordService from './verify-record-service';
 import totpUtils from '../utils/totp-utils';
+import authCache from './auth-cache';
 import loginGuard from './login-guard';
 import reqUtils from '../utils/req-utils';
 
@@ -370,6 +371,7 @@ const loginService = {
 		await userService.updateUserInfo(c, userRow.userId);
 
 		await c.env.kv.put(KvConst.AUTH_INFO + userRow.userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
+		authCache.put(c, userRow.userId, authInfo);
 		return jwt;
 	},
 
@@ -382,6 +384,7 @@ const loginService = {
 		authInfo.tokens.splice(index, 1);
 		if (authInfo.sessions) delete authInfo.sessions[token];
 		await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
+		authCache.clear(userId);
 	},
 
 	async sessions(c, userId) {
@@ -418,6 +421,7 @@ const loginService = {
 			authInfo.tokens = tokens.filter(token => !removed.includes(token));
 			for (const token of removed) delete authInfo.sessions[token];
 			await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
+			authCache.clear(userId);
 		}
 
 		// 当前设备固定排第一，其余按最近活跃时间倒序
@@ -445,6 +449,7 @@ const loginService = {
 		authInfo.tokens.splice(index, 1);
 		if (authInfo.sessions) delete authInfo.sessions[sessionId];
 		await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
+		authCache.clear(userId);
 	},
 
 	// 扫码登录：网页拿 id 轮询，App 登录后确认，网页凭 id 换一次 token。
