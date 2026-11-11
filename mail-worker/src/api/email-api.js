@@ -20,7 +20,9 @@ app.get('/email/events', async (c) => {
 		let last = (await c.env.kv?.get(lastKey)) || '';
 		await stream.writeSSE({ event: 'ready', data: JSON.stringify({ last }) });
 		while (!stream.aborted) {
-			await stream.sleep(10000);
+			// 60 秒一次：每轮都要读一次 KV，10 秒一轮等于每个常开页面每天 8640 次读。
+			// WebSocket（EMAIL_HUB）才是主通道，SSE 只做兜底，1 分钟延迟可接受。
+			await stream.sleep(60000);
 			if (stream.aborted) break;
 			const latest = (await c.env.kv?.get(lastKey)) || '';
 			if (latest && latest !== last) {
