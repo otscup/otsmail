@@ -157,6 +157,20 @@
           <el-button v-else type="primary" :loading="passkeyLoading" @click="addPasskey">添加 Passkey</el-button>
         </div>
       </div>
+      <!-- Passkey 列表：按创建时间与凭据 ID 前缀区分，支持单条删除 -->
+      <div class="passkey-block" v-if="passkeyList.length">
+        <div class="row-desc">删除前请核对创建时间与凭据 ID 前缀，避免删错条目（创建时间按北京时间显示）。</div>
+        <div class="device-list">
+          <div v-for="item in passkeyList" :key="item.id" class="device-row">
+            <div class="device-main">
+              <div class="device-name">{{ item.name || 'Passkey' }}</div>
+              <div class="device-meta">创建时间：{{ formatPasskeyTime(item.createdAt) }}（北京时间）</div>
+              <div class="device-meta">凭据 ID：{{ credentialPrefix(item.credentialId) }}… · 来源：未记录（服务端未保存创建来源）</div>
+            </div>
+            <button type="button" class="device-kick" @click="removePasskey(item)">删除</button>
+          </div>
+        </div>
+      </div>
       <div class="item" v-if="!settingStore.settings.githubSwitch && !settingStore.settings.googleSwitch && !settingStore.settings.linuxdoSwitch && enabledOidcProviders.length === 0">
         <div><span>{{ $t('noThirdParty') }}</span></div>
       </div>
@@ -275,7 +289,7 @@
   </div>
 </template>
 <script setup>
-import {computed, reactive, ref, onMounted, onUnmounted, defineOptions} from 'vue'
+import {computed, reactive, ref, onMounted, onUnmounted, defineOptions, h} from 'vue'
 import {Icon} from '@iconify/vue'
 import {
   resetPassword,
@@ -508,6 +522,64 @@ async function loadPasskeys() {
   } catch {}
 }
 
+// 旧接口/D1 里的时间可能是 UTC 但不带时区后缀，直接 new Date 会被当成本地时间
+function parseServerTime(value) {
+  const text = String(value || '').trim()
+  if (!text) return null
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text) ? text.replace(' ', 'T') + 'Z' : text
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+// 统一按北京时间展示，避免 UTC 时间被浏览器当本地时间
+function formatPasskeyTime(value) {
+  const date = parseServerTime(value)
+  if (!date) return '未知'
+  return date.toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+}
+
+// credentialId 前缀用于和 Bitwarden 里的条目对照（服务端未保存注册来源，不做臆测）
+function credentialPrefix(value) {
+  const text = String(value || '')
+  return text ? text.slice(0, 8) : '未知'
+}
+
+async function removePasskey(item) {
+  try {
+    await ElMessageBox.confirm(
+      h('div', { style: 'line-height: 1.8' }, [
+        h('div', '删除后该通行密钥将无法再用于登录，请核对是不是这一条：'),
+        h('div', `创建时间：${formatPasskeyTime(item.createdAt)}（北京时间）`),
+        h('div', `凭据 ID：${credentialPrefix(item.credentialId)}…`)
+      ]),
+      '删除通行密钥',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch (e) {
+    return
+  }
+  try {
+    const res = await fetch(`/api/my/passkey/${item.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: localStorage.getItem('token') || '' }
+    }).then(r => r.json())
+    if (res.code !== 200) throw new Error(res.message || '删除失败')
+    ElMessage({ message: '已删除', type: 'success', plain: true })
+    loadPasskeys()
+  } catch (e) {
+    ElMessage({ message: e?.message || '删除失败', type: 'error', plain: true })
+  }
+}
+
 async function addPasskey() {
   if (!window.PublicKeyCredential) {
     ElMessage.error('当前浏览器或系统不支持 Passkey')
@@ -561,10 +633,16 @@ async function clearPasskeys() {
   try {
     await ElMessageBox.confirm('确定要管理并重置所有已绑定的 Passkey 吗？', '管理 Passkey', { type: 'warning' })
     for (const item of passkeyList.value) {
-      await fetch(`/api/my/passkey/${item.id}`, {
+      const res = await fetch(`/api/my/passkey/${item.id}`, {
         method: 'DELETE',
         headers: { Authorization: localStorage.getItem('token') || '' }
-      })
+      }).then(r => r.json()).catch(() => null)
+      // 服务端可能因「删完就没有任何登录方式」而拒绝，必须把原因提示出来
+      if (res && res.code !== 200) {
+        ElMessage({ message: res.message || '删除失败', type: 'error', plain: true })
+        loadPasskeys()
+        return
+      }
     }
     ElMessage.success('已清空 Passkey')
     loadPasskeys()

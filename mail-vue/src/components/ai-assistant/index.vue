@@ -1,6 +1,7 @@
 <template>
   <div class="ai-assistant" :class="{ 'is-inline': inline }">
-    <button class="ai-fab" type="button" :aria-label="t('aiAssistant')" :title="t('aiAssistant')" @click="togglePanel">
+    <button class="ai-fab" type="button" :aria-label="t('aiMenuTitle')" :title="t('aiMenuTitle')"
+            :aria-expanded="menuOpen" @click="toggleFeatureMenu($event)">
       <CreamBun :size="inline ? 26 : 44" />
     </button>
     <Teleport to="body">
@@ -45,6 +46,23 @@
     </Teleport>
 
     <Teleport to="body">
+      <Transition name="ai-menu">
+        <div v-if="menuOpen" class="ai-feature-menu is-floating" role="menu" :aria-label="t('aiMenuTitle')"
+             :style="menuStyle" @pointerdown.stop>
+          <div class="ai-feature-menu-title">{{ t('aiMenuTitle') }}</div>
+          <button v-for="item in menuItems" :key="item.key" class="ai-feature-item" type="button"
+                  role="menuitem" :disabled="item.disabled"
+                  :title="item.disabled ? t(item.reason) : t(item.label)"
+                  @click="runMenuItem(item)">
+            <Icon :icon="item.icon" width="16" height="16"/>
+            <span class="ai-feature-label">{{ t(item.label) }}</span>
+            <span v-if="item.disabled" class="ai-feature-hint">{{ t(item.reason) }}</span>
+          </button>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <Teleport to="body">
       <!-- 不再有全屏遮罩：点页面其它地方不关闭面板，面板靠 z-index 浮在最上层 -->
       <Transition :css="false" @enter="enterPanel" @leave="leavePanel">
         <section v-if="open" ref="panelRef" class="ai-panel"
@@ -57,7 +75,7 @@
                   @pointercancel="onHeaderPointerUp">
             <div class="ai-brand">
               <button class="ai-bun-btn" type="button" :aria-label="t('aiMenuTitle')" :title="t('aiMenuTitle')"
-                      :aria-expanded="menuOpen" @click.stop="toggleFeatureMenu">
+                      :aria-expanded="menuOpen" @click.stop="toggleFeatureMenu($event)">
                 <CreamBun :size="40" class="ai-header-bun"/>
               </button>
               <div class="ai-heading">
@@ -75,21 +93,6 @@
               <button class="ai-min" type="button" :aria-label="t('aiMinimize')" @click="minimizePanel">–</button>
             </div>
 
-            <!-- 顶栏奶团子不再是第二个开关：这里只列真实可用的 AI 能力 -->
-            <Transition name="ai-menu">
-              <div v-if="menuOpen" class="ai-feature-menu" role="menu" :aria-label="t('aiMenuTitle')"
-                   @pointerdown.stop>
-                <div class="ai-feature-menu-title">{{ t('aiMenuTitle') }}</div>
-                <button v-for="item in menuItems" :key="item.key" class="ai-feature-item" type="button"
-                        role="menuitem" :disabled="item.disabled"
-                        :title="item.disabled ? t(item.reason) : t(item.label)"
-                        @click="runMenuItem(item)">
-                  <Icon :icon="item.icon" width="16" height="16"/>
-                  <span class="ai-feature-label">{{ t(item.label) }}</span>
-                  <span v-if="item.disabled" class="ai-feature-hint">{{ t(item.reason) }}</span>
-                </button>
-              </div>
-            </Transition>
           </header>
 
       <div class="ai-body" ref="bodyRef">
@@ -666,6 +669,11 @@ function toggleBubbleTips() {
 
 // ---- 顶栏奶团子：AI 功能菜单（只列真实可用的能力） ----
 const menuOpen = ref(false)
+// 菜单挂在 body 上（面板关闭时也要能显示），用锚点按钮的 rect 换算固定定位
+const menuAnchor = ref({ left: 8, top: 8 })
+const MENU_WIDTH = 250
+const MENU_EST_HEIGHT = 210
+const menuStyle = computed(() => ({ left: `${menuAnchor.value.left}px`, top: `${menuAnchor.value.top}px` }))
 const menuItems = computed(() => [
   {
     key: 'summary',
@@ -714,9 +722,28 @@ function syncActiveContext() {
   if (!composeMode.value) panelText.value = props.text
 }
 
-function toggleFeatureMenu() {
-  menuOpen.value = !menuOpen.value
+function toggleFeatureMenu(event) {
+  if (menuOpen.value) {
+    menuOpen.value = false
+    return
+  }
+  positionMenu(event)
+  menuOpen.value = true
   if (menuOpen.value) stopBubbles()
+}
+
+// 菜单定位：贴按钮下方，左右与上下都夹进视口；放不下就翻到按钮上方
+function positionMenu(event) {
+  const anchor = event?.currentTarget
+  if (!anchor?.getBoundingClientRect) return
+  const rect = anchor.getBoundingClientRect()
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const width = Math.min(MENU_WIDTH, vw - 16)
+  const left = Math.min(Math.max(8, rect.left), Math.max(8, vw - width - 8))
+  let top = rect.bottom + 8
+  if (top + MENU_EST_HEIGHT > vh - 8) top = Math.max(8, rect.top - MENU_EST_HEIGHT - 8)
+  menuAnchor.value = { left: Math.round(left), top: Math.round(top) }
 }
 
 async function runMenuItem(item) {
@@ -732,7 +759,7 @@ async function runMenuItem(item) {
 }
 
 function onDocumentPointerDown(event) {
-  if (menuOpen.value && !event.target.closest?.('.ai-feature-menu, .ai-bun-btn')) {
+  if (menuOpen.value && !event.target.closest?.('.ai-feature-menu, .ai-bun-btn, .ai-fab')) {
     menuOpen.value = false
   }
 }
@@ -1378,6 +1405,12 @@ onUnmounted(() => {
 }
 .ai-bun-btn:hover { background: var(--fill-quaternary, rgba(116,116,128,.12)); }
 .ai-bun-btn:focus-visible { outline: 2px solid var(--blue, #007aff); outline-offset: 2px; }
+/* 菜单挂在 body 上：固定定位，层级高于面板(5000)，由 JS 用锚点按钮的 rect 写入 left/top */
+.ai-feature-menu.is-floating {
+  position: fixed;
+  z-index: 5001;
+  width: min(250px, calc(100vw - 16px));
+}
 .ai-feature-menu {
   position: absolute; left: 14px; top: calc(100% + 8px); z-index: 20;
   width: min(250px, calc(100% - 28px));

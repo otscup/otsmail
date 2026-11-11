@@ -4,9 +4,10 @@ import {
 	verifyAuthenticationResponse,
 	verifyRegistrationResponse
 } from '@simplewebauthn/server';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or, ne, sql } from 'drizzle-orm';
 import orm from '../entity/orm';
 import { passkey } from '../entity/passkey';
+import { oauth } from '../entity/oauth';
 import BizError from '../error/biz-error';
 import {
 	PASSKEY_KV_LOGIN,
@@ -54,6 +55,22 @@ function challengeFromClientData(clientDataJSON) {
 function toB64url(value) {
 	if (typeof value !== 'string' || !value) return value;
 	return value.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * D1 的 CURRENT_TIMESTAMP 存的是 UTC 但不带时区后缀（形如 "2026-11-11 21:00:58"），
+ * 浏览器 new Date(str) 会按本地时区解析，导致列表时间差 8 小时。
+ * 这里统一补成带 Z 的 ISO 字符串（"2026-11-11T21:00:58.000Z"），
+ * 前端再按 Asia/Shanghai 渲染；已经带时区标识的值原样返回。
+ */
+function toIsoUtc(value) {
+	if (!value) return value;
+	const text = String(value).trim();
+	if (!text) return text;
+	if (/(Z|[+-]\d{2}:?\d{2})$/i.test(text)) return text;
+	const normalized = text.includes('T') ? text : text.replace(' ', 'T');
+	const date = new Date(normalized + 'Z');
+	return Number.isNaN(date.getTime()) ? text : date.toISOString();
 }
 
 /**
@@ -171,12 +188,14 @@ const passkeyService = {
 
 	// 列出用户所有 Passkey
 	async list(c, userId) {
-		return orm(c).select({
+		const rows = await orm(c).select({
 			id: passkey.id,
 			name: passkey.name,
 			credentialId: passkey.credentialId,
 			createdAt: passkey.createdAt
 		}).from(passkey).where(eq(passkey.userId, userId)).all();
+		// createdAt 是 D1 的 UTC 裸时间，统一补上时区标识再返回，避免前端按本地时间误读
+		return rows.map(row => ({ ...row, createdAt: toIsoUtc(row.createdAt) }));
 	},
 
 	// 删除某个 Passkey（限定本人，避免越权删除他人凭据）
@@ -191,13 +210,21 @@ const passkeyService = {
 		// 不存在或不属于本人：保持原来的幂等语义，直接返回
 		if (!target) return true;
 
-		// 密码登录已关闭时，不允许删掉最后一条通行密钥，否则账号会被彻底锁死
+		// 熔断校验：只有「删掉这条后账号将没有任何可用登录方式」时才拒绝。
+		// 可用登录方式 = 密码登录（未关闭） / 已绑定且启用的第三方或 OIDC 账号 / 其他 Passkey。
+		// 第三方绑定是否可用沿用 user-service.togglePasswordLogin 的判定口径（active 为空或非 0）。
 		const userRow = await userService.selectById(c, userId);
 		if (Number(userRow?.disablePasswordLogin) === 1) {
-			const remain = await orm(c).select({ id: passkey.id }).from(passkey)
-				.where(eq(passkey.userId, userId)).all();
-			if ((remain?.length || 0) <= 1) {
-				throw new BizError('无法删除最后一条通行密钥：密码登录已关闭，删除后将无法登录该账号', 400);
+			const [remain, bindings] = await Promise.all([
+				orm(c).select({ id: passkey.id }).from(passkey)
+					.where(eq(passkey.userId, userId)).all(),
+				orm(c).select({ oauthId: oauth.oauthId }).from(oauth)
+					.where(and(eq(oauth.userId, userId), or(sql`${oauth.active} IS NULL`, ne(oauth.active, 0)))).all()
+			]);
+			const otherPasskeyCount = (remain?.length || 0) - 1;
+			const hasOtherLogin = otherPasskeyCount > 0 || (bindings?.length || 0) > 0;
+			if (!hasOtherLogin) {
+				throw new BizError('无法删除最后一条通行密钥：当前已关闭密码登录，且账号没有其他可用登录方式（未绑定 GitHub / Google / LinuxDo / 企业 SSO，也没有其他通行密钥）。请先在「第三方账号」中绑定一种登录方式，或重新开启密码登录后再删除', 400);
 			}
 		}
 

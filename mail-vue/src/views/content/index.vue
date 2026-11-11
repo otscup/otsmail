@@ -45,7 +45,6 @@
       <el-tooltip v-if="email.listUnsubscribe" :content="$t('unsubscribe')" placement="top">
         <Icon class="icon" icon="mdi:email-off-outline" width="20" height="20" @click="unsubscribeCurrent"/>
       </el-tooltip>
-      <aiAssistant class="detail-ai" inline reader :email-id="email.emailId" :email-subject="email.subject"/>
       <button type="button" class="reader-summary-btn" :class="{active: showSummary}" @click="toggleSummary">
         <Icon icon="mdi:star-four-points" width="16" height="16"/><span>AI Brief</span>
       </button>
@@ -264,7 +263,6 @@ import {useRouter} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
 import {emailDelete, emailRead, emailDetail, emailSpam, emailSpamCancel, emailMoveCategory, emailRetry, emailLearn} from "@/request/email.js";
 import {Icon} from "@iconify/vue";
-import aiAssistant from '@/components/ai-assistant/index.vue';
 import {useEmailStore} from "@/store/email.js";
 import {useAccountStore} from "@/store/account.js";
 import {formatDetailDate} from "@/utils/day.js";
@@ -951,7 +949,6 @@ const handleDelete = () => {
   }
 }
 
-.detail-ai { display: inline-flex; }
 
 .move-category-item {
   display: flex;
