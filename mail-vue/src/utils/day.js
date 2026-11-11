@@ -84,6 +84,22 @@ export function tzDayjs(time) {
     return dayjs.utc(time).tz(timeZone)
 }
 
+/**
+ * 统一时间展示：本地时区，格式固定为 YYYY-MM-DD HH:mm:ss（不带 T/Z/毫秒）。
+ * 兼容 D1 的 CURRENT_TIMESTAMP（UTC 但不带时区后缀），这种值必须补 Z 再解析，
+ * 否则会被浏览器当成本地时间，整体偏 8 小时。
+ */
+export function formatDateTime(time) {
+    if (!time) return ''
+    const text = String(time).trim()
+    if (!text) return ''
+    const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text)
+        ? text.replace(' ', 'T') + 'Z'
+        : text
+    const d = dayjs(normalized)
+    return d.isValid() ? d.format('YYYY-MM-DD HH:mm:ss') : text
+}
+
 export function toUtc(time) {
     return dayjs(time).utc()
 }
