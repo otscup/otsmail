@@ -4,7 +4,7 @@ import orm from '../entity/orm';
 import user from '../entity/user';
 import perm from '../entity/perm';
 import userPerm from '../entity/user-perm';
-import { and, asc, count, desc, eq, inArray, like, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, like, ne, or, sql } from 'drizzle-orm';
 import { emailConst, isDel, roleConst, settingConst, userConst } from '../const/entity-const';
 import kvConst from '../const/kv-const';
 import KvConst from '../const/kv-const';
@@ -19,6 +19,7 @@ import constant from '../const/constant';
 import { t } from '../i18n/i18n'
 import reqUtils from '../utils/req-utils';
 import {oauth} from "../entity/oauth";
+import {passkey} from "../entity/passkey";
 import oauthService from "./oauth-service";
 import settingService from './setting-service';
 import starService from './star-service';
@@ -56,6 +57,8 @@ const userService = {
 		user.avatar = userRow.avatar || '';
 		user.twoFactor = userRow.twoFactorSwitch === 1;
 		user.twoFactorRequired = userRow.twoFactorRequired === 1;
+		user.recoveryEmail = userRow.recoveryEmail || '';
+		user.disablePasswordLogin = userRow.disablePasswordLogin === 1;
 		user.signature = userRow.signature || '';
 		user.skin = ['paper', 'fresh', 'gala', 'classic'].includes(userRow.skin) ? userRow.skin : 'paper';
 		user.sendOnEnter = ['enter', 'ctrl', 'off'][userRow.sendOnEnter || 0] || 'enter';
@@ -629,6 +632,73 @@ const userService = {
 			.where(eq(user.regKeyId, regKeyId))
 			.orderBy(desc(user.userId))
 			.all();
+	},
+
+	/**
+	 * 绑定或修改辅助安全邮箱（需验证当前登录密码）
+	 */
+	async updateRecoveryEmail(c, params, userId) {
+		const recoveryEmail = String(params?.recoveryEmail || '').trim().toLowerCase();
+		const password = String(params?.password || '');
+
+		if (!password) {
+			throw new BizError('请先输入当前登录密码以验证身份', 400);
+		}
+
+		if (recoveryEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recoveryEmail)) {
+			throw new BizError('辅助邮箱格式不正确', 400);
+		}
+
+		const userRow = await this.selectById(c, userId);
+		if (!userRow) throw new BizError(t('authExpired'), 401);
+
+		if (!await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password)) {
+			throw new BizError(t('IncorrectPwd'), 400);
+		}
+
+		if (recoveryEmail && recoveryEmail === userRow.email.toLowerCase()) {
+			throw new BizError('辅助邮箱不能与当前主邮箱相同', 400);
+		}
+
+		await orm(c).update(user).set({ recoveryEmail }).where(eq(user.userId, userId)).run();
+		return { recoveryEmail };
+	},
+
+	/**
+	 * 切换“关闭密码登录”状态（安全熔断：若要关闭，必须至少绑定一种第三方登录方式）
+	 */
+	async togglePasswordLogin(c, params, userId) {
+		const disable = Boolean(params?.disable);
+		const password = String(params?.password || '');
+		const userRow = await this.selectById(c, userId);
+		if (!userRow) throw new BizError(t('authExpired'), 401);
+
+		if (disable) {
+			// 二次校验当前密码：token 被盗时不能仅凭会话就把账号锁成只能用第三方登录
+			if (!password) {
+				throw new BizError('请先输入当前登录密码以验证身份', 400);
+			}
+			if (!await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password)) {
+				throw new BizError(t('IncorrectPwd'), 400);
+			}
+
+			// 熔断校验：必须有至少一个活跃的 OAuth 第三方账号或 Passkey 凭据
+			const [bindings, passkeys] = await Promise.all([
+				orm(c).select().from(oauth)
+					.where(and(eq(oauth.userId, userId), or(sql`${oauth.active} IS NULL`, ne(oauth.active, 0)))).all(),
+				orm(c).select({ id: passkey.id }).from(passkey).where(eq(passkey.userId, userId)).all()
+			]);
+
+			const totalAuth = (bindings?.length || 0) + (passkeys?.length || 0);
+			if (totalAuth === 0) {
+				throw new BizError('无法关闭密码登录：请至少先绑定一种可用的第三方登录方式（如 GitHub / Google / LinuxDo / OIDC / Passkey），以防账号死锁', 400);
+			}
+		}
+
+		await orm(c).update(user).set({ disablePasswordLogin: disable ? 1 : 0 })
+			.where(eq(user.userId, userId)).run();
+
+		return { disablePasswordLogin: disable };
 	}
 };
 

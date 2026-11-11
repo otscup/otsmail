@@ -223,6 +223,10 @@ const loginService = {
 			throw new BizError(t('isBanUser'));
 		}
 
+		if (!noVerifyPwd && userRow.disablePasswordLogin === 1) {
+			throw new BizError('该账号已关闭密码登录，请使用第三方授权或备用方式登录', 403);
+		}
+
 		if (!await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password) && !noVerifyPwd) {
 			if (await loginGuard.recordFailure(c, email)) {
 				throw new BizError(t('loginLocked'), 429);

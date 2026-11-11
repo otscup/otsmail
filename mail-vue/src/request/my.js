@@ -56,3 +56,11 @@ export function mySessions() {
 export function kickMySession(id) {
     return http.delete(`/my/sessions/${id}`)
 }
+
+export function updateRecoveryEmail(recoveryEmail, password) {
+    return http.put('/my/recoveryEmail', { recoveryEmail, password })
+}
+
+export function togglePasswordLogin(disable, password) {
+    return http.put('/my/togglePasswordLogin', { disable, password })
+}

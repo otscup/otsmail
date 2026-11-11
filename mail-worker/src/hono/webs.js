@@ -27,4 +27,5 @@ import '../api/push-api'
 import '../api/ext-api'
 import '../api/version-api'
 import '../api/proxy-api'
+import '../api/passkey-api'
 export default app;

@@ -1,6 +1,6 @@
 {
 	"name": "otsmail-worker",
-	"version": "0.1.103",
+	"version": "0.2.0",
 	"private": true,
 	"scripts": {
 		"dev": "wrangler dev --config wrangler-dev.toml",
@@ -20,6 +20,7 @@
 		"@block65/webcrypto-web-push": "2.0.0",
 		"@cloudflare/vite-plugin": "1.6.0",
 		"@modelcontextprotocol/sdk": "^1.12.0",
+		"@simplewebauthn/server": "^14.1.0",
 		"dayjs": "^1.11.13",
 		"drizzle-orm": "^0.42.0",
 		"hono": "4.12.16",

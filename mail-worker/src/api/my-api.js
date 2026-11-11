@@ -82,4 +82,14 @@ app.delete('/my/sessions/:id', async (c) => {
 	return c.json(result.ok());
 });
 
+app.put('/my/recoveryEmail', async (c) => {
+	const data = await userService.updateRecoveryEmail(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok(data));
+});
+
+app.put('/my/togglePasswordLogin', async (c) => {
+	const data = await userService.togglePasswordLogin(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok(data));
+});
+
 
