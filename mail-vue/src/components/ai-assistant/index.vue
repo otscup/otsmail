@@ -24,7 +24,7 @@
           @keydown.enter.prevent="togglePanel"
           @keydown.space.prevent="togglePanel"
       >
-        <CreamBun :size="56"/>
+        <CreamBun :size="56" :motion="idleMotion"/>
         <Transition name="ai-bun-bubble">
           <div
               v-if="bubbleVisible"
@@ -169,6 +169,7 @@ import {useI18n} from 'vue-i18n'
 import {Icon} from '@iconify/vue'
 import {ElMessage} from 'element-plus'
 import CreamBun from './cream-bun.vue'
+import {useIdleMotion} from './use-idle-motion.js'
 import {aiCommand, aiPolish, aiReply, aiSummary} from '@/request/ai.js'
 import {useEmailStore} from '@/store/email.js'
 import {useAccountStore} from '@/store/account.js'
@@ -297,6 +298,9 @@ function onBunPointerDown(event) {
   if (event.pointerType === 'mouse' && event.button !== 0) return
   // 用户开始拖/点奶团子时，提示气泡立即收掉，避免挡手
   stopBubbles()
+  // 空闲动作立刻中止，并把下一次动作的计时重新拨到 6～12 分钟后
+  stopIdleMotion()
+  scheduleIdleMotion()
   bunDrag = {
     id: event.pointerId,
     startX: event.clientX,
@@ -630,6 +634,11 @@ function pickBubbleText() {
 
 function showBubble() {
   if (!bubbleOn.value || open.value || bunDragging.value) return
+  // 动作播放期间不出气泡，等动作播完再找机会
+  if (idleMotion.value) {
+    bubbleTimer = setTimeout(showBubble, 30000)
+    return
+  }
   bubbleText.value = pickBubbleText()
   bubbleVisible.value = true
   try {
@@ -656,6 +665,18 @@ function stopBubbles() {
   }
   dismissBubble()
 }
+
+// ---- 奶团子空闲小动作：6～12 分钟随机触发一次，与气泡互斥 ----
+const {
+  motion: idleMotion,
+  schedule: scheduleIdleMotion,
+  stop: stopIdleMotion,
+  bind: bindIdleMotion,
+  unbind: unbindIdleMotion
+} = useIdleMotion({
+  // 气泡可见或正在拖动时不允许开始动作
+  canPlay: () => !bubbleVisible.value && !bunDragging.value
+})
 
 function toggleBubbleTips() {
   bubbleOn.value = !bubbleOn.value
@@ -966,12 +987,14 @@ onMounted(() => {
   document.addEventListener('pointerdown', onDocumentPointerDown)
   watchComposeBox()
   scheduleBubble()
+  bindIdleMotion()
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('otsmail:ai-compose', onComposeAi)
   window.removeEventListener('resize', onWindowResize)
   document.removeEventListener('pointerdown', onDocumentPointerDown)
+  unbindIdleMotion()
   composeResizeObserver?.disconnect()
   composeStyleObserver?.disconnect()
   if (dockRaf) cancelAnimationFrame(dockRaf)
