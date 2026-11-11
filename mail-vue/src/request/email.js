@@ -71,6 +71,14 @@ export function emailSchedule(form, scheduledAt) {
     return http.post('/email/schedule', {...form, scheduledAt})
 }
 
+export function emailScheduledList() {
+    return http.get('/email/scheduled/list')
+}
+
+export function emailScheduledCancel(id) {
+    return http.delete(`/email/scheduled/${id}`)
+}
+
 // 垃圾邮件标记 / 取消（POST body：{emailId}）
 export function emailSpam(emailId) {
     return http.post('/email/spam', {emailId})

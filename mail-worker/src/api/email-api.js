@@ -87,6 +87,16 @@ app.post('/email/schedule', async (c) => {
 	return c.json(result.ok(data));
 });
 
+app.get('/email/scheduled/list', async (c) => {
+	const list = await emailService.listScheduled(c, userContext.getUserId(c));
+	return c.json(result.ok(list));
+});
+
+app.delete('/email/scheduled/:id', async (c) => {
+	await emailService.cancelScheduled(c, c.req.param('id'), userContext.getUserId(c));
+	return c.json(result.ok());
+});
+
 app.post('/email/retry', async (c) => {
 	const { emailId } = await c.req.json();
 	const email = await emailService.retry(c, emailId, userContext.getUserId(c));

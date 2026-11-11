@@ -67,6 +67,11 @@
           <span class="menu-name" style="margin-left: 22px">{{ $t('drafts') }}</span>
           <span class="menu-badge" v-if="counts.drafts">{{ counts.drafts }}</span>
         </el-menu-item>
+        <el-menu-item @click="openScheduledModal" index="scheduled" v-perm="'email:send'">
+          <Icon icon="mdi:clock-time-four-outline" width="19" height="19" />
+          <span class="menu-name" style="margin-left: 21px">{{ $t('scheduledList') }}</span>
+          <span class="menu-badge" v-if="scheduledCount">{{ scheduledCount }}</span>
+        </el-menu-item>
         <el-menu-item @click="router.push({name: 'contacts'})" index="contacts">
           <Icon icon="hugeicons:contact-01" width="20" height="20" />
           <span class="menu-name" style="margin-left: 21px">{{ $t('contacts') }}</span>
@@ -107,6 +112,34 @@
         </template>
       </el-dropdown>
     </div>
+
+    <!-- 定时发送邮件队列弹窗 -->
+    <el-dialog v-model="scheduledModalShow" :title="$t('scheduledList')" width="640px" class="scheduled-dialog">
+      <el-table :data="scheduledList" v-loading="scheduledLoading" style="width: 100%" empty-text="暂无排队中的定时邮件">
+        <el-table-column prop="subject" :label="$t('subject')" min-width="180">
+          <template #default="{ row }">
+            <span style="font-weight: 500;">{{ row.subject || '(无主题)' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="receiveEmail" :label="$t('recipient')" min-width="160">
+          <template #default="{ row }">
+            <span>{{ Array.isArray(row.receiveEmail) ? row.receiveEmail.join(', ') : row.receiveEmail }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="scheduledAt" :label="$t('scheduleTime')" width="170">
+          <template #default="{ row }">
+            <span style="font-size: 13px; color: var(--el-text-color-secondary);">
+              {{ new Date(row.scheduledAt).toLocaleString() }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="80" align="center">
+          <template #default="{ row }">
+            <el-button type="danger" link @click="handleCancelScheduled(row.id)">取消</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </el-scrollbar>
 </template>
 
@@ -120,7 +153,8 @@ import {useUserStore} from "@/store/user.js";
 import {computed} from "vue";
 import {ref, reactive, onMounted, onUnmounted, watch} from "vue";
 import Account from "@/layout/account/index.vue";
-import {emailCounts} from "@/request/email.js";
+import {emailCounts, emailScheduledList, emailScheduledCancel} from "@/request/email.js";
+import {ElMessageBox, ElMessage} from "element-plus";
 import db from "@/db/db.js";
 import {logout} from "@/request/login.js";
 import {clearToken} from "@/utils/token-store.js";
@@ -143,6 +177,45 @@ async function sideUserCommand(command) {
 }
 function openCompose(){ uiStore.writerRef?.open?.() }
 function openHelp(){ window.open('https://github.com/otscup/otsmail','_blank','noopener,noreferrer') }
+
+// 定时发信队列管理
+const scheduledModalShow = ref(false)
+const scheduledLoading = ref(false)
+const scheduledList = ref([])
+const scheduledCount = computed(() => scheduledList.value.length)
+
+async function fetchScheduledList() {
+  scheduledLoading.value = true
+  try {
+    scheduledList.value = await emailScheduledList() || []
+  } catch {
+    scheduledList.value = []
+  } finally {
+    scheduledLoading.value = false
+  }
+}
+
+function openScheduledModal() {
+  scheduledModalShow.value = true
+  fetchScheduledList()
+}
+
+async function handleCancelScheduled(id) {
+  try {
+    await ElMessageBox.confirm('确认取消该定时邮件发送？', '提示', {
+      type: 'warning',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    await emailScheduledCancel(id)
+    ElMessage.success('已取消定时发送')
+    fetchScheduledList()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e.message || '取消失败')
+    }
+  }
+}
 const route = useRoute();
 const counts = reactive({inbox: 0, unread: 0, sent: 0, deleted: 0, spam: 0, starred: 0, drafts: 0});
 let countTimer = null;

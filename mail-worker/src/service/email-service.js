@@ -1517,6 +1517,46 @@ const emailService = {
 			return {id, scheduledAt: payload.scheduledAt};
 		},
 
+		// 获取当前用户的排队定时邮件列表
+		async listScheduled(c, userId) {
+			if (!c.env.kv) return [];
+			const prefix = `scheduled:${userId}:`;
+			const list = [];
+			let cursor;
+			do {
+				const page = await c.env.kv.list({ prefix, limit: 100, cursor });
+				for (const item of page.keys) {
+					if (item.name.endsWith(':sending')) continue;
+					const raw = await c.env.kv.get(item.name);
+					if (!raw) continue;
+					try {
+						const payload = JSON.parse(raw);
+						const id = item.name.slice(prefix.length);
+						list.push({
+							id,
+							accountEmail: payload.accountEmail,
+							receiveEmail: payload.receiveEmail,
+							subject: payload.subject,
+							scheduledAt: payload.scheduledAt,
+							attachmentsCount: Array.isArray(payload.attachments) ? payload.attachments.length : 0
+						});
+					} catch {}
+				}
+				cursor = page.list_complete ? undefined : page.cursor;
+			} while (cursor);
+			return list.sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt));
+		},
+
+		// 取消某条待发送的定时邮件
+		async cancelScheduled(c, id, userId) {
+			if (!c.env.kv) throw new BizError(t('operationFailed'));
+			const key = `scheduled:${userId}:${id}`;
+			const raw = await c.env.kv.get(key);
+			if (!raw) throw new BizError('该定时邮件不存在或已发送', 404);
+			await c.env.kv.delete(key);
+			return true;
+		},
+
 		async sendScheduled(c) {
 			if (!c.env.kv) return;
 			let cursor;
