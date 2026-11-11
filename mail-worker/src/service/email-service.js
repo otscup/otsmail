@@ -185,34 +185,49 @@ const emailService = {
 
 		const listQuery = page > 0 ? query.limit(size).offset((page - 1) * size).all() : query.limit(size).all();
 
-		// 同一筛选的 total 跨分页复用 30 分钟；不发邮件通知、不改计数快照。
-		const totalVersion = await this.totalCacheVersion(c, userId);
-		const searchKey = `${encodeURIComponent(String(text || '').slice(0, 120))}:${searchType || ''}:${startDate || ''}:${endDate || ''}`;
-		const totalCacheKey = `email:total:${userId}:${allReceive ? 1 : 0}:${accountId || 0}:${type ?? ''}:${mailbox || 'inbox'}:${category || 'all'}:${status || 0}:${timeSort ? 1 : 0}:${totalVersion}:${searchKey}`;
-		const cachedTotal = await c.env.kv?.get(totalCacheKey);
-		const totalQuery = cachedTotal !== null && cachedTotal !== undefined
-			? Promise.resolve({ total: Number(cachedTotal) })
-			: orm(c).select({ total: count() }).from(email)
-				.leftJoin(
-					account,
-					eq(account.accountId, email.accountId)
-				)
-				.where(
-					and(
-						allReceive ? eq(1,1) : eq(email.accountId, accountId),
-						eq(email.userId, userId),
-						typeCondition,
-						...mailboxCondition,
-						...categoryCondition,
-						...statusCondition,
-						eq(account.isDel, isDel.NORMAL),
-						...searchConditions
+		// 简单筛选直接读计数表一行，不再 COUNT(*) 全表；带搜索、日期、状态或具体分类的组合
+		// 无法由四个总数列精确表达，保持原 count(*) + KV 缓存路径。
+		const counterColumn = this.totalCounterColumn({ text, startDate, endDate, status, category, mailbox, type });
+		let totalQuery;
+		if (counterColumn) {
+			// 账号软删后列表不再展示其邮件，计数表必须 JOIN account.is_del=0 才能与 count(*) 对齐
+			totalQuery = c.env.db.prepare(`
+				SELECT COALESCE(SUM(ec.${counterColumn}), 0) AS total
+				FROM email_count ec
+				JOIN account a ON a.account_id = ec.account_id AND a.is_del = 0
+				WHERE ec.user_id = ?${allReceive ? '' : ' AND ec.account_id = ?'}
+			`).bind(...(allReceive ? [userId] : [userId, accountId])).first()
+				.then(row => ({ total: Number(row?.total) || 0 }));
+		} else {
+			// 同一筛选的 total 跨分页复用 30 分钟；不发邮件通知、不改计数快照。
+			const totalVersion = await this.totalCacheVersion(c, userId);
+			const searchKey = `${encodeURIComponent(String(text || '').slice(0, 120))}:${searchType || ''}:${startDate || ''}:${endDate || ''}`;
+			const totalCacheKey = `email:total:${userId}:${allReceive ? 1 : 0}:${accountId || 0}:${type ?? ''}:${mailbox || 'inbox'}:${category || 'all'}:${status || 0}:${timeSort ? 1 : 0}:${totalVersion}:${searchKey}`;
+			const cachedTotal = await c.env.kv?.get(totalCacheKey);
+			totalQuery = cachedTotal !== null && cachedTotal !== undefined
+				? Promise.resolve({ total: Number(cachedTotal) })
+				: orm(c).select({ total: count() }).from(email)
+					.leftJoin(
+						account,
+						eq(account.accountId, email.accountId)
 					)
-				).get().then(async row => {
-					// 2–4 小时缓存 + 写事件版本失效；读/星标不会让总数回源。
-					if (totalCacheKey) await c.env.kv?.put(totalCacheKey, String(row.total), { expirationTtl: 14400 });
-					return row;
-				});
+					.where(
+						and(
+							allReceive ? eq(1,1) : eq(email.accountId, accountId),
+							eq(email.userId, userId),
+							typeCondition,
+							...mailboxCondition,
+							...categoryCondition,
+							...statusCondition,
+							eq(account.isDel, isDel.NORMAL),
+							...searchConditions
+						)
+					).get().then(async row => {
+						// 2–4 小时缓存 + 写事件版本失效；读/星标不会让总数回源。
+						if (totalCacheKey) await c.env.kv?.put(totalCacheKey, String(row.total), { expirationTtl: 14400 });
+						return row;
+					});
+		}
 
 		const latestEmailQuery = orm(c).select({
 			emailId: email.emailId,
@@ -1323,6 +1338,23 @@ const emailService = {
 			await this.bumpTotalCache(c, userId);
 		},
 
+	// 列表 total 走计数表的映射：只有 where 条件能被单个总数列精确表达时才返回列名，
+	// 其余（搜索 / 日期范围 / 状态 / 具体分类 / 全部分类）返回 null，继续走 count(*)。
+	totalCounterColumn({ text, startDate, endDate, status, category, mailbox, type }) {
+		if (String(text || '').trim()) return null;
+		if (startDate || endDate) return null;
+		if (status != null && status !== '') return null;
+		if (category && category !== 'all' && category !== 'spam') return null;
+		if (mailbox === 'all') return null;
+		if (mailbox === 'deleted') return 'deleted_total';
+		if (mailbox === 'spam' || category === 'spam') return Number(type) === 0 ? 'spam_total' : null;
+		// inbox 旧列即未读收件数，正好是「未读」视图的口径
+		if (mailbox === 'unread') return Number(type) === 0 ? 'inbox' : null;
+		if (Number(type) === 1) return 'sent_total';
+		if (Number(type) === 0) return 'inbox_total';
+		return null;
+	},
+
 	// 计数由 email 表触发器增量维护，读路径只取一行，不再扫描整表。
 	async totalCacheVersion(c, userId) {
 		return (await c.env.kv?.get(`email:total:v:${userId}`)) || '0';
@@ -1353,13 +1385,15 @@ const emailService = {
 		const n = key => Number(row?.[key]) || 0;
 		const scopeSql = scoped ? ' AND account_id = ?' : '';
 		const scopeBind = scoped ? [userId, accountId] : [userId];
+		// 四个总数由 email 表触发器维护在 email_count 里，这里只取一行，不再 SUM 整张 email。
+		// 口径与旧实现（SUM(CASE ...) FROM email WHERE user_id）完全一致，都不看 account.is_del。
 		const totals = await c.env.db.prepare(`
 			SELECT
-				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 THEN 1 ELSE 0 END),0) AS inbox_total,
-				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=1 THEN 1 ELSE 0 END),0) AS spam_total,
-				COALESCE(SUM(CASE WHEN is_del=0 AND type=1 AND spam=0 THEN 1 ELSE 0 END),0) AS sent_total,
-				COALESCE(SUM(CASE WHEN is_del=1 THEN 1 ELSE 0 END),0) AS deleted_total
-			FROM email WHERE user_id = ?${scopeSql}
+				COALESCE(SUM(inbox_total),0) AS inbox_total,
+				COALESCE(SUM(sent_total),0) AS sent_total,
+				COALESCE(SUM(deleted_total),0) AS deleted_total,
+				COALESCE(SUM(spam_total),0) AS spam_total
+			FROM email_count WHERE user_id = ?${scopeSql}
 		`).bind(...scopeBind).first();
 		const t = key => Number(totals?.[key]) || 0;
 		const starJoin = scoped ? ' JOIN email e ON e.email_id = s.email_id AND e.account_id = ?' : '';
@@ -1370,7 +1404,7 @@ const emailService = {
 			menu: {
 				inbox: t('inbox_total'),
 				unread: n('inbox'),
-				sent: t('sent_total') || n('sent'),
+				sent: t('sent_total'),
 				deleted: t('deleted_total'),
 				spam: t('spam_total'),
 				starred: Number(star?.total) || 0
@@ -1386,7 +1420,7 @@ const emailService = {
 		await c.env.db.prepare(`DELETE FROM email_count ${where}`).bind(...bind).run();
 		await c.env.db.prepare(`
 			INSERT INTO email_count
-			(user_id, account_id, inbox, sent, deleted, spam, primary_c, social, promotion, updates, important, ads)
+			(user_id, account_id, inbox, sent, deleted, spam, primary_c, social, promotion, updates, important, ads, inbox_total, sent_total, deleted_total, spam_total)
 			SELECT user_id, account_id,
 				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND unread=0 THEN 1 ELSE 0 END),0),
 				COALESCE(SUM(CASE WHEN is_del=0 AND spam=0 AND type=1 THEN 1 ELSE 0 END),0),
@@ -1397,7 +1431,11 @@ const emailService = {
 				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='promotion' THEN 1 ELSE 0 END),0),
 				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='updates' THEN 1 ELSE 0 END),0),
 				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='important' THEN 1 ELSE 0 END),0),
-				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='ads' THEN 1 ELSE 0 END),0)
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 AND unread=0 AND category='ads' THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=0 THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND spam=0 AND type=1 THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=1 THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN is_del=0 AND type=0 AND spam=1 THEN 1 ELSE 0 END),0)
 			FROM email ${where} GROUP BY user_id, account_id
 		`).bind(...bind).run();
 	},
