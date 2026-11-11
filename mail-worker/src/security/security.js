@@ -203,12 +203,28 @@ app.use('*', async (c, next) => {
 
 	}
 
+	const now = dayjs();
 	const refreshTime = dayjs(authInfo.refreshTime).startOf('day');
-	const nowTime = dayjs().startOf('day')
+	const nowTime = now.startOf('day');
+	let dirty = false;
 
 	if (!nowTime.isSame(refreshTime)) {
-		authInfo.refreshTime = dayjs().toISOString();
+		authInfo.refreshTime = now.toISOString();
 		await userService.updateUserInfo(c, authInfo.user.userId);
+		dirty = true;
+	}
+
+	// 设备列表的「最近活跃」此前只在 login() 里写一次，长期保持登录就永远停在首次登录那天。
+	// 这里按 5 分钟节流回写当前会话的活跃时间：KV 同一个 key 每秒只能写一次，不能每个请求都写。
+	if (!result.viaMcp && token && authInfo.sessions?.[token]) {
+		const lastActive = dayjs(authInfo.sessions[token].time);
+		if (!lastActive.isValid() || now.diff(lastActive, 'minute') >= 5) {
+			authInfo.sessions[token].time = now.toISOString();
+			dirty = true;
+		}
+	}
+
+	if (dirty) {
 		await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
 	}
 

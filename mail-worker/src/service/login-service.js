@@ -26,6 +26,52 @@ import reqUtils from '../utils/req-utils';
 // 会话上限：同一设备只留一条，所以 20 条足够覆盖多设备，又不会把 App 的 token 挤掉。
 const MAX_SESSIONS = 20;
 
+// 与 JWT 有效期一致：超过这么久没有任何活跃的会话即使留着也登录不了，直接清掉
+const SESSION_IDLE_DAYS = constant.TOKEN_EXPIRE / (60 * 60 * 24);
+
+/**
+ * 归一化 UA 片段：去掉“undefined”和版本号，只保留稳定部分。
+ * 浏览器/系统会自动升级（Chrome 156 → 157、Windows10 → Windows11），
+ * 版本号参与比较会让同一台设备每次升级都多出一条会话。
+ */
+function normalizeUaPart(value, stripVersion = true) {
+	let text = String(value || '').replace(/\bundefined\b/gi, '').trim();
+	if (stripVersion) {
+		text = text
+			.replace(/\s+\d[\d.]*\s*$/, '')
+			.replace(/(\D)\d[\d.]*$/, '$1');
+	}
+	return text
+		.replace(/[()]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.toLowerCase();
+}
+
+/**
+ * 会话去重键：设备 + 系统 + 浏览器，刻意不含 IP。
+ * 移动网络、VPN、宽带重播都会换出口 IP，带上 IP 会让同一台设备每次换网都新增一条会话。
+ * 设备名保留数字（Pixel 8 / SM-G9700），否则同品牌不同型号会被误合并。
+ */
+function sessionFingerprint(meta) {
+	return [
+		normalizeUaPart(meta?.device, false),
+		normalizeUaPart(meta?.os),
+		normalizeUaPart(meta?.browser)
+	].join('|');
+}
+
+function removeSession(authInfo, token) {
+	const index = authInfo.tokens.indexOf(token);
+	if (index !== -1) authInfo.tokens.splice(index, 1);
+	if (authInfo.sessions) delete authInfo.sessions[token];
+}
+
+function timeValue(value) {
+	const parsed = Date.parse(value);
+	return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 const loginService = {
 
 	async register(c, params, oauth = false) {
@@ -278,19 +324,24 @@ const loginService = {
 			time: dayjs().toISOString()
 		};
 		// 同一台机器重复登录只保留最新一条，否则会话列表会被同一设备刷满。
-		const fingerprint = [sessionMeta.ip, sessionMeta.browser, sessionMeta.os, sessionMeta.device].join('|');
+		// 去重键不含 IP 与版本号：换网络、浏览器/系统升级都不应产生新设备。
+		const fingerprint = sessionFingerprint(sessionMeta);
 
 		if (authInfo && (authInfo.user.email === userRow.email)) {
 
 			if (userRow.email === c.env.admin) authInfo.user.type = 0;
 
 			if (!authInfo.sessions) authInfo.sessions = {};
+			const now = dayjs();
 			for (const [oldToken, meta] of Object.entries(authInfo.sessions)) {
-				const oldFingerprint = [meta.ip, meta.browser, meta.os, meta.device].join('|');
-				if (oldFingerprint !== fingerprint) continue;
-				const oldIndex = authInfo.tokens.indexOf(oldToken);
-				if (oldIndex !== -1) authInfo.tokens.splice(oldIndex, 1);
-				delete authInfo.sessions[oldToken];
+				const lastActive = dayjs(meta?.time);
+				// 超过 token 有效期的旧会话不会再被使用，顺手清掉，避免设备列表无限增长
+				if (!lastActive.isValid() || now.diff(lastActive, 'day') >= SESSION_IDLE_DAYS) {
+					removeSession(authInfo, oldToken);
+					continue;
+				}
+				if (sessionFingerprint(meta) !== fingerprint) continue;
+				removeSession(authInfo, oldToken);
 			}
 
 			if (authInfo.tokens.length >= MAX_SESSIONS) {
@@ -338,15 +389,52 @@ const loginService = {
 		const current = await userContext.getToken(c);
 		const tokens = authInfo?.tokens || [];
 		const meta = authInfo?.sessions || {};
-		return tokens.map(token => ({
-			id: token,
-			current: token === current,
-			ip: meta[token]?.ip || '',
-			browser: meta[token]?.browser || '',
-			os: meta[token]?.os || '',
-			device: meta[token]?.device || '',
-			time: meta[token]?.time || ''
-		}));
+
+		// 读时归并：旧版本按「IP+UA 全串」去重，换网络或升级浏览器就会留下多条同一设备的会话。
+		// 按设备指纹只保留最新一条（当前会话优先），同时删掉多余 token，历史脏数据不用等下次登录才消失。
+		const kept = {};
+		const removed = [];
+		for (const token of tokens) {
+			const info = meta[token];
+			if (!info) continue;
+			const key = sessionFingerprint(info);
+			const prev = kept[key];
+			if (!prev) {
+				kept[key] = token;
+				continue;
+			}
+			const thisIsCurrent = token === current;
+			const prevIsCurrent = prev === current;
+			const thisIsNewer = timeValue(info.time) > timeValue(meta[prev]?.time);
+			if ((thisIsCurrent && !prevIsCurrent) || (thisIsCurrent === prevIsCurrent && thisIsNewer)) {
+				removed.push(prev);
+				kept[key] = token;
+			} else {
+				removed.push(token);
+			}
+		}
+
+		if (removed.length) {
+			authInfo.tokens = tokens.filter(token => !removed.includes(token));
+			for (const token of removed) delete authInfo.sessions[token];
+			await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
+		}
+
+		// 当前设备固定排第一，其余按最近活跃时间倒序
+		return (removed.length ? authInfo.tokens : tokens)
+			.map(token => ({
+				id: token,
+				current: token === current,
+				ip: meta[token]?.ip || '',
+				browser: meta[token]?.browser || '',
+				os: meta[token]?.os || '',
+				device: meta[token]?.device || '',
+				time: meta[token]?.time || ''
+			}))
+			.sort((a, b) => {
+				if (a.current !== b.current) return a.current ? -1 : 1;
+				return timeValue(b.time) - timeValue(a.time);
+			});
 	},
 
 	async kickSession(c, userId, sessionId) {
