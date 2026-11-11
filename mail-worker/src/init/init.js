@@ -83,6 +83,7 @@ const dbInit = {
 		await this.otsmail_31DB(c);
 		await this.otsmail_32DB(c);
 		await this.otsmail_33DB(c);
+		await this.otsmail_35DB(c);
 		await this.otsmail_9DB(c);
 		await settingService.refresh(c);
 		await c.env.kv.put('init_done', '1');
@@ -103,6 +104,7 @@ const dbInit = {
 		const addedColumns = await this.otsmail_32DB(c);
 		await this.otsmail_33DB(c);
 		addedColumns.passkey = await this.otsmail_34DB(c);
+		await this.otsmail_35DB(c);
 		await settingService.refresh(c);
 
 		return c.json({ ok: true, addedColumns });
@@ -380,6 +382,20 @@ async otsmail_4DB(c) {
 		]);
 	} catch (e) {
 		console.warn(`跳过字段：${e.message}`);
+	}
+},
+
+// otsmail 迁移：列表页 / latestEmail 复合索引（email_id 直接跟在筛选列之后，才能走索引倒序）
+// 与 otsmail_4DB 的 idx_email_list_user / idx_email_list_account 同目的，但历史库从没跑过 otsmail_4DB，
+// 这里用新名字补齐；init() 与 /init/migrate 都调用同一个方法，新库老库走同一条路径。
+async otsmail_35DB(c) {
+	try {
+		await c.env.db.batch([
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_box_latest ON email(user_id, is_del, type, spam, email_id)`),
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_acct_latest ON email(user_id, account_id, is_del, type, spam, email_id)`)
+		]);
+	} catch (e) {
+		console.warn(`跳过索引：${e.message}`);
 	}
 },
 
