@@ -2,6 +2,22 @@ import settingService from '../service/setting-service';
 import emailUtils from '../utils/email-utils';
 import {emailConst} from "../const/entity-const";
 
+/**
+ * 幂等加列：先查 PRAGMA table_info 判断列是否存在，只对缺失的列执行 ALTER。
+ * 不要用 try/catch 吞异常——那样「列已存在」和「迁移真的失败」无法区分。
+ */
+async function ensureColumns(c, table, columns) {
+	const info = await c.env.db.prepare(`PRAGMA table_info(${table});`).all();
+	const existing = new Set((info?.results || []).map(row => row.name));
+	const added = [];
+	for (const column of columns) {
+		if (existing.has(column.name)) continue;
+		await c.env.db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column.ddl};`).run();
+		added.push(column.name);
+	}
+	return added;
+}
+
 const dbInit = {
 	async init(c) {
 
@@ -65,10 +81,30 @@ const dbInit = {
 		await this.otsmail_29DB(c);
 		await this.otsmail_30DB(c);
 		await this.otsmail_31DB(c);
+		await this.otsmail_32DB(c);
+		await this.otsmail_33DB(c);
 		await this.otsmail_9DB(c);
 		await settingService.refresh(c);
 		await c.env.kv.put('init_done', '1');
 		return c.text('success');
+	},
+
+	/**
+	 * 增量迁移入口：与 init() 的 init_done 门禁解耦。
+	 * 已初始化过的库不会再进 init()，只有这里能补列 / 建表；每条迁移自身幂等，可重复执行。
+	 * 鉴权沿用 x-init-secret，缺失或错误一律 404，不暴露接口存在。
+	 */
+	async migrate(c) {
+		const secret = c.req.header('x-init-secret') || '';
+		if (!c.env.init_secret || secret !== c.env.init_secret) {
+			return new Response('Not Found', { status: 404 });
+		}
+
+		const addedColumns = await this.otsmail_32DB(c);
+		await this.otsmail_33DB(c);
+		await settingService.refresh(c);
+
+		return c.json({ ok: true, addedColumns });
 	},
 
 	// otsmail 迁移：企业 SSO（OIDC）字段，后台界面可配
@@ -1267,6 +1303,40 @@ async otsmail_5DB(c) {
 		} catch (e) {
 			console.warn(`跳过字段：${e.message}`);
 		}
+	},
+
+	// otsmail 迁移：辅助安全邮箱、关闭密码登录、找回密码与系统发信配置
+	// 幂等：列已存在则跳过（PRAGMA 判断），真实失败直接抛出，不再被 catch 吞掉
+	async otsmail_32DB(c) {
+		const userAdded = await ensureColumns(c, 'user', [
+			{ name: 'recovery_email', ddl: `recovery_email TEXT NOT NULL DEFAULT ''` },
+			{ name: 'disable_password_login', ddl: `disable_password_login INTEGER NOT NULL DEFAULT 0` }
+		]);
+
+		const settingAdded = await ensureColumns(c, 'setting', [
+			{ name: 'password_reset_switch', ddl: `password_reset_switch INTEGER NOT NULL DEFAULT 1` },
+			{ name: 'system_sender_email', ddl: `system_sender_email TEXT NOT NULL DEFAULT ''` },
+			{ name: 'password_reset_ip_limit', ddl: `password_reset_ip_limit INTEGER NOT NULL DEFAULT 3` },
+			{ name: 'password_reset_user_limit', ddl: `password_reset_user_limit INTEGER NOT NULL DEFAULT 3` }
+		]);
+
+		return { user: userAdded, setting: settingAdded };
+	},
+
+	// otsmail 迁移：Passkey 通行密钥表（此前只存在于被 gitignore 的 dev/ 目录）
+	// 幂等：建表/索引都用 IF NOT EXISTS，可对已有库重复执行
+	async otsmail_33DB(c) {
+		await c.env.db.prepare(`CREATE TABLE IF NOT EXISTS passkey (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			credential_id TEXT NOT NULL,
+			public_key TEXT NOT NULL,
+			name TEXT DEFAULT 'Passkey',
+			counter INTEGER DEFAULT 0,
+			created_at TEXT DEFAULT CURRENT_TIMESTAMP
+		);`).run();
+		await c.env.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_passkey_credential_id ON passkey (credential_id);`).run();
+		await c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_passkey_user_id ON passkey (user_id);`).run();
 	},
 
 	async otsmail_20DB(c) {

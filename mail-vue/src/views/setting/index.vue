@@ -48,6 +48,21 @@
         </div>
       </div>
       <div class="item wide">
+        <div>{{$t('recoveryEmail')}}</div>
+        <div class="row-flex">
+          <span style="font-size: 13px; color: var(--el-text-color-regular);">{{ userStore.user.recoveryEmail || '未设置' }}</span>
+          <el-button type="primary" @click="openRecoveryEmailDialog">{{ userStore.user.recoveryEmail ? $t('change') : $t('bind') }}</el-button>
+        </div>
+        <span class="row-desc">{{$t('recoveryEmailDesc')}}</span>
+      </div>
+      <div class="item wide">
+        <div>{{$t('disablePasswordLogin')}}</div>
+        <div class="row-flex">
+          <el-switch :model-value="userStore.user.disablePasswordLogin === true" @change="handleTogglePasswordLogin" :loading="togglePwdLoading"/>
+          <span class="row-desc">{{$t('disablePasswordLoginDesc')}}</span>
+        </div>
+      </div>
+      <div class="item wide">
         <div>{{$t('twoFactor')}}</div>
         <div class="row-flex">
           <span>{{ twoFactorEnabled ? $t('enabled') : $t('disabled') }}</span>
@@ -126,6 +141,22 @@
           <el-button v-else type="primary" @click="bindOidc(provider.id)">{{ $t('bindProvider', {name: provider.name || 'SSO'}) }}</el-button>
         </div>
       </div>
+
+      <!-- Passkey (WebAuthn 通行密钥) -->
+      <div class="item oauth-item">
+        <div class="provider-label">
+          <Icon icon="solar:key-minimalistic-square-line-duotone" width="18" height="18"/>
+          <span>Passkey 通行密钥</span>
+        </div>
+        <div class="binding-actions">
+          <template v-if="passkeyList.length">
+            <span class="bound-account">已绑定 {{ passkeyList.length }} 个密钥</span>
+            <el-button link type="primary" @click="addPasskey">添加新密钥</el-button>
+            <el-button link type="danger" @click="clearPasskeys">管理</el-button>
+          </template>
+          <el-button v-else type="primary" :loading="passkeyLoading" @click="addPasskey">添加 Passkey</el-button>
+        </div>
+      </div>
       <div class="item" v-if="!settingStore.settings.githubSwitch && !settingStore.settings.googleSwitch && !settingStore.settings.linuxdoSwitch && enabledOidcProviders.length === 0">
         <div><span>{{ $t('noThirdParty') }}</span></div>
       </div>
@@ -171,34 +202,49 @@
         <el-button type="primary" @click="deleteConfirm">{{$t('deleteUserBtn')}}</el-button>
       </div>
     </div>
-    <el-dialog v-model="pwdShow" :title="$t('changePassword')" width="340">
-      <div class="update-pwd">
+    <el-dialog v-model="pwdShow" :title="$t('changePassword')" width="360" append-to-body class="clean-dialog">
+      <div class="form-col">
         <el-input type="password" :placeholder="$t('oldPassword')" v-model="form.oldPassword" autocomplete="current-password" @keyup.enter="submitPwd"/>
         <el-input type="password" :placeholder="$t('newPassword')" v-model="form.password" autocomplete="new-password" @keyup.enter="submitPwd"/>
         <el-input type="password" :placeholder="$t('confirmPassword')" v-model="form.newPwd" autocomplete="new-password" @keyup.enter="submitPwd"/>
         <el-input v-if="twoFactorEnabled || twoFactorRequired" v-model="form.twoFactorCode" maxlength="6" :placeholder="$t('verifyCode')" @keyup.enter="submitPwd"/>
-        <el-button type="primary" :loading="setPwdLoading" @click="submitPwd">{{$t('save')}}</el-button>
+        <div class="actions">
+          <el-button @click="pwdShow = false">{{$t('cancel')}}</el-button>
+          <el-button type="primary" :loading="setPwdLoading" @click="submitPwd">{{$t('save')}}</el-button>
+        </div>
       </div>
     </el-dialog>
-    <el-dialog v-model="avatarShow" :title="$t('changeAvatar')" width="360">
+
+    <!-- 辅助邮箱设置弹窗 -->
+    <el-dialog v-model="recoveryShow" :title="$t('recoveryEmail')" width="360" append-to-body class="clean-dialog">
       <div class="form-col">
+        <el-input v-model="recoveryEmailDraft" :placeholder="$t('recoveryEmailPlaceholder')"/>
+        <el-input type="password" :placeholder="$t('password') + '（验证身份）'" v-model="recoveryPasswordDraft" autocomplete="current-password" @keyup.enter="submitRecoveryEmail"/>
+        <div class="actions">
+          <el-button @click="recoveryShow = false">{{$t('cancel')}}</el-button>
+          <el-button type="primary" :loading="recoverySaving" @click="submitRecoveryEmail">{{$t('save')}}</el-button>
+        </div>
+      </div>
+    </el-dialog>
+    <el-dialog v-model="avatarShow" :title="$t('changeAvatar')" width="380" append-to-body class="clean-dialog">
+      <div class="form-col" style="gap: 16px;">
         <div class="avatar-center">
-          <el-avatar :size="64" :src="avatarDraft || userStore.user.avatar || undefined" class="avatar-preview">{{ avatarLetter }}</el-avatar>
+          <el-avatar :size="72" :src="avatarDraft || userStore.user.avatar || undefined" class="avatar-preview" style="box-shadow: 0 4px 12px rgba(0,0,0,0.08);">{{ avatarLetter }}</el-avatar>
         </div>
         <el-input v-model="avatarDraft" :placeholder="$t('imageLink')" clearable/>
-        <div class="row-flex row-start">
+        <div class="avatar-upload-row" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
           <input ref="avatarFileRef" type="file" style="display: none"
                  accept="image/png,image/jpeg,image/webp,image/gif" @change="pickAvatarFile"/>
-          <el-button @click="avatarFileRef.click()">{{$t('uploadImage')}}</el-button>
-          <span class="row-desc">{{$t('avatarUploadTip')}}</span>
+          <el-button @click="avatarFileRef.click()" style="flex: none;">{{$t('uploadImage')}}</el-button>
+          <span class="row-desc" style="font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.3;">{{$t('avatarUploadTip')}}</span>
         </div>
-        <div class="actions">
+        <div class="actions" style="margin-top: 8px;">
           <el-button @click="avatarShow = false">{{$t('cancel')}}</el-button>
           <el-button type="primary" :loading="avatarSaving" @click="saveAvatarLink">{{$t('save')}}</el-button>
         </div>
       </div>
     </el-dialog>
-    <el-dialog v-model="twoFactorShow" :title="$t('twoFactor')" width="380">
+    <el-dialog v-model="twoFactorShow" :title="$t('twoFactor')" width="380" append-to-body>
       <div class="form-col">
         <template v-if="!twoFactorEnabled">
           <span class="row-desc">{{$t('twoFactorSetupDesc')}}</span>
@@ -254,7 +300,7 @@ import {oidcConfig, oauthBindings, oauthUnbind, oauthSetBindingActive} from "@/r
 import {createPkce} from "@/utils/pkce.js";
 import {notifyEnabled, enableNotify, disableNotify} from "@/utils/notify.js";
 import {testPush} from "@/request/push.js";
-import {updateMySetting, mySessions, kickMySession} from "@/request/my.js";
+import {updateMySetting, mySessions, kickMySession, updateRecoveryEmail, togglePasswordLogin} from "@/request/my.js";
 
 const { t } = useI18n()
 const accountStore = useAccountStore()
@@ -359,6 +405,7 @@ async function kickDevice(item) {
   }
 }
 onMounted(loadSessions)
+onMounted(loadPasskeys)
 
 // 回调必须落在登录页，登录页才能拿 code；老配置里填站点根的要纠正
 function oidcCallback(url) {
@@ -444,6 +491,84 @@ async function bindOidc(providerId) {
   } catch (e) {
     ElMessage({message: e?.message || t('oidcConfigFailed'), type: 'error', plain: true})
   }
+}
+
+// Passkey (WebAuthn) 管理与注册
+const passkeyList = ref([])
+const passkeyLoading = ref(false)
+
+async function loadPasskeys() {
+  try {
+    const res = await fetch('/api/my/passkey/list', {
+      headers: { Authorization: localStorage.getItem('token') || '' }
+    }).then(r => r.json())
+    if (res.code === 200) {
+      passkeyList.value = res.data || []
+    }
+  } catch {}
+}
+
+async function addPasskey() {
+  if (!window.PublicKeyCredential) {
+    ElMessage.error('当前浏览器或系统不支持 Passkey')
+    return
+  }
+  passkeyLoading.value = true
+  try {
+    const optRes = await fetch('/api/my/passkey/register/options', {
+      method: 'POST',
+      headers: { Authorization: localStorage.getItem('token') || '', 'Content-Type': 'application/json' }
+    }).then(r => r.json())
+    if (optRes.code !== 200) throw new Error(optRes.message || '获取注册挑战失败')
+
+    const options = optRes.data
+    options.challenge = Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))
+    options.user.id = new TextEncoder().encode(options.user.id)
+
+    const credential = await navigator.credentials.create({ publicKey: options })
+    const credentialData = {
+      id: credential.id,
+      rawId: btoa(String.fromCharCode(...new Uint8Array(credential.rawId))),
+      type: credential.type,
+      response: {
+        clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON))),
+        attestationObject: btoa(String.fromCharCode(...new Uint8Array(credential.response.attestationObject)))
+      }
+    }
+
+    const verifyRes = await fetch('/api/my/passkey/register/verify', {
+      method: 'POST',
+      headers: { Authorization: localStorage.getItem('token') || '', 'Content-Type': 'application/json' },
+      body: JSON.stringify(credentialData)
+    }).then(r => r.json())
+
+    if (verifyRes.code === 200) {
+      ElMessage.success('Passkey 添加成功！')
+      loadPasskeys()
+    } else {
+      throw new Error(verifyRes.message || '验证失败')
+    }
+  } catch (e) {
+    if (e.name !== 'NotAllowedError') {
+      ElMessage.error(e.message || '添加 Passkey 失败')
+    }
+  } finally {
+    passkeyLoading.value = false
+  }
+}
+
+async function clearPasskeys() {
+  try {
+    await ElMessageBox.confirm('确定要管理并重置所有已绑定的 Passkey 吗？', '管理 Passkey', { type: 'warning' })
+    for (const item of passkeyList.value) {
+      await fetch(`/api/my/passkey/${item.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: localStorage.getItem('token') || '' }
+      })
+    }
+    ElMessage.success('已清空 Passkey')
+    loadPasskeys()
+  } catch {}
 }
 
 function setName() {
@@ -571,6 +696,70 @@ function submitPwd() {
     setPwdLoading.value = false
   })
 
+}
+
+// ---- 辅助安全邮箱与停用密码登录 ----
+
+const recoveryShow = ref(false)
+const recoveryEmailDraft = ref('')
+const recoveryPasswordDraft = ref('')
+const recoverySaving = ref(false)
+const togglePwdLoading = ref(false)
+
+function openRecoveryEmailDialog() {
+  recoveryEmailDraft.value = userStore.user.recoveryEmail || ''
+  recoveryPasswordDraft.value = ''
+  recoveryShow.value = true
+}
+
+async function submitRecoveryEmail() {
+  if (!recoveryPasswordDraft.value) {
+    ElMessage.error('请输入当前登录密码以验证身份')
+    return
+  }
+  recoverySaving.value = true
+  try {
+    const res = await updateRecoveryEmail(recoveryEmailDraft.value, recoveryPasswordDraft.value)
+    userStore.user.recoveryEmail = res.recoveryEmail
+    ElMessage.success(t('saveSuccessMsg'))
+    recoveryShow.value = false
+  } catch (e) {
+    ElMessage.error(e.message || '保存失败')
+  } finally {
+    recoverySaving.value = false
+  }
+}
+
+async function handleTogglePasswordLogin(disable) {
+  // 关闭密码登录属于高风险操作，需要当前密码二次确认，光有会话 token 不足以执行
+  let password = ''
+  if (disable) {
+    try {
+      const { value } = await ElMessageBox.prompt('请输入当前登录密码以确认停用密码登录', t('disablePasswordLogin'), {
+        inputType: 'password',
+        inputPlaceholder: t('password'),
+        confirmButtonText: t('confirm'),
+        cancelButtonText: t('cancel')
+      })
+      password = value || ''
+    } catch {
+      return
+    }
+    if (!password) {
+      ElMessage.error('请输入当前登录密码以验证身份')
+      return
+    }
+  }
+  togglePwdLoading.value = true
+  try {
+    const res = await togglePasswordLogin(disable, password)
+    userStore.user.disablePasswordLogin = res.disablePasswordLogin
+    ElMessage.success(disable ? '已停用密码登录' : '已恢复密码登录')
+  } catch (e) {
+    ElMessage.error(e.message || '操作失败')
+  } finally {
+    togglePwdLoading.value = false
+  }
 }
 
 // ---- 头像 ----
@@ -1029,6 +1218,39 @@ async function toggleNotify(value) {
     display: flex;
     flex-direction: column;
     gap: 20px;
+  }
+}
+
+:deep(.clean-dialog.el-dialog) {
+  border-radius: 14px !important;
+  background: var(--bg-primary, #ffffff) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.16) !important;
+
+  .el-dialog__header {
+    margin-right: 0 !important;
+    padding: 18px 20px 12px !important;
+    border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.06)) !important;
+  }
+
+  .el-dialog__title {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+  }
+
+  .el-dialog__body {
+    padding: 20px !important;
+    background: transparent !important;
+  }
+
+  .el-input__wrapper {
+    background: transparent !important;
+    border: 1px solid var(--border-color, #dcdfe6) !important;
+    box-shadow: none !important;
+    min-height: 40px !important;
+
+    &.is-focus {
+      border-color: var(--el-color-primary, #409eff) !important;
+    }
   }
 }
 </style>

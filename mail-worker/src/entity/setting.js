@@ -81,6 +81,11 @@ export const setting = sqliteTable('setting', {
 	oidcClientSecret: text('oidc_client_secret').default('').notNull(),
 	oidcScope: text('oidc_scope').default('openid profile email').notNull(),
 	oidcCallbackUrl: text('oidc_callback_url').default('').notNull(),
-	oidcProviders: text('oidc_providers').default('[]').notNull()
+	oidcProviders: text('oidc_providers').default('[]').notNull(),
+	// 密码找回与系统邮件配置
+	passwordResetSwitch: integer('password_reset_switch').default(1).notNull(),
+	systemSenderEmail: text('system_sender_email').default('').notNull(),
+	passwordResetIpLimit: integer('password_reset_ip_limit').default(3).notNull(),
+	passwordResetUserLimit: integer('password_reset_user_limit').default(3).notNull()
 });
 export default setting

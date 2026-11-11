@@ -30,6 +30,19 @@
                 </div>
               </div>
               <div class="setting-item">
+                <div><span>找回密码功能</span></div>
+                <div>
+                  <el-switch @change="change" :before-change="beforeChange" :active-value="1" :inactive-value="0"
+                             v-model="setting.passwordResetSwitch"/>
+                </div>
+              </div>
+              <div class="setting-item">
+                <div><span>系统发信邮箱</span></div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <el-input size="small" style="width: 180px;" v-model="setting.systemSenderEmail" placeholder="例如 noreply@otscup.com" @change="change"/>
+                </div>
+              </div>
+              <div class="setting-item">
                 <div><span>{{ $t('regKey') }}</span></div>
                 <div>
                   <el-select
@@ -475,73 +488,72 @@
               </div>
               <div class="setting-item">
                 <div><span>模型</span></div>
-                <div class="ai-model-row">
+                <div class="ai-model-inline-row" style="display: flex; align-items: center; gap: 8px; width: 100%;">
                   <el-select v-model="setting.aiModel" filterable allow-create clearable placeholder="先拉取模型"
-                             style="width: 240px" @change="changeField('aiModel', $event)">
+                             style="flex: 1;" @change="changeField('aiModel', $event)">
                     <el-option v-for="item in aiModelList" :key="item" :label="item" :value="item"/>
                   </el-select>
-                  <el-button :loading="aiModelsLoading" @click="fetchAiModels">
+                  <el-button :loading="aiModelsLoading" @click="fetchAiModels" style="flex: none; min-width: 88px;">
                     {{ aiModelsLoading ? '拉取中…' : '拉取模型' }}
                   </el-button>
                 </div>
               </div>
               <div class="ai-setting-tip">保存后立即生效；已配置接口时优先走该接口，留空回退 Workers AI。</div>
-              <div class="setting-item">
-                <div>
-                  <span>AI 收件分类</span>
-                  <el-tooltip effect="dark" content="关闭时只按本地规则分类；自动模式收信时调用模型；手动模式只在你点按钮时分类最近 20 封。">
-                    <Icon class="warning" icon="fe:warning" width="18" height="18"/>
-                  </el-tooltip>
+
+              <!-- AI 收件分类与 AI 摘要在一排并列展示 -->
+              <div class="ai-double-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div class="setting-item" style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start;">
+                  <div style="display: flex; align-items: center; gap: 4px;">
+                    <span>AI 收件分类</span>
+                    <el-tooltip effect="dark" content="关闭时只按本地规则分类；自动模式收信时调用模型；手动模式只在你点按钮时分类最近 20 封。">
+                      <Icon class="warning" icon="fe:warning" width="16" height="16"/>
+                    </el-tooltip>
+                  </div>
+                  <div class="ai-classify-row" style="width: 100%; display: flex; gap: 6px;">
+                    <el-select v-model="setting.aiClassifyMode" style="flex: 1;"
+                               @change="changeField('aiClassifyMode', $event)">
+                      <el-option label="关闭（本地规则）" value="off"/>
+                      <el-option label="自动 AI 分类" value="auto"/>
+                      <el-option label="手动 AI 分类" value="manual"/>
+                    </el-select>
+                    <el-button v-if="setting.aiClassifyMode === 'manual'" :loading="aiClassifyLoading"
+                               @click="classifyNow" size="small" style="padding: 0 8px;">分类</el-button>
+                  </div>
                 </div>
-                <div class="ai-classify-row">
-                  <el-select v-model="setting.aiClassifyMode" style="width: 180px"
-                             @change="changeField('aiClassifyMode', $event)">
-                    <el-option label="关闭（本地规则）" value="off"/>
-                    <el-option label="自动 AI 分类" value="auto"/>
-                    <el-option label="手动 AI 分类" value="manual"/>
-                  </el-select>
-                  <el-button v-if="setting.aiClassifyMode === 'manual'" :loading="aiClassifyLoading"
-                             @click="classifyNow">分类最近邮件</el-button>
+
+                <div class="setting-item" style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start;">
+                  <div style="display: flex; align-items: center; gap: 4px;">
+                    <span>AI 摘要</span>
+                    <el-tooltip effect="dark" content="手动：点开邮件后按 AI Brief 生成；自动：打开邮件时自动生成。">
+                      <Icon class="warning" icon="fe:warning" width="16" height="16"/>
+                    </el-tooltip>
+                  </div>
+                  <div style="width: 100%;">
+                    <el-select v-model="setting.aiSummaryMode" style="width: 100%;"
+                               @change="changeField('aiSummaryMode', $event)">
+                      <el-option label="手动生成摘要" value="manual"/>
+                      <el-option label="自动生成摘要" value="auto"/>
+                    </el-select>
+                  </div>
                 </div>
               </div>
-              <div class="setting-item">
-                <div>
-                  <span>AI 摘要</span>
-                  <el-tooltip effect="dark" content="手动：点开邮件后按 AI Brief 生成；自动：打开邮件时自动生成。">
-                    <Icon class="warning" icon="fe:warning" width="18" height="18"/>
-                  </el-tooltip>
-                </div>
-                <div>
-                  <el-select v-model="setting.aiSummaryMode" style="width: 180px"
-                             @change="changeField('aiSummaryMode', $event)">
-                    <el-option label="手动生成摘要" value="manual"/>
-                    <el-option label="自动生成摘要" value="auto"/>
-                  </el-select>
-                </div>
-              </div>
-              <div class="setting-item">
-                <div><span>{{ $t('codeRecognition') }}</span></div>
-                <div>
+
+              <!-- 验证码识别、规则与 Telegram 每日摘要整合在一排 -->
+              <div class="ai-controls-bar" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px; background: var(--fill-quaternary, rgba(0,0,0,0.03)); border-radius: 8px; margin-top: 6px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 13px;">{{ $t('codeRecognition') }}</span>
                   <el-switch @change="changeField('aiCode', $event)" :before-change="beforeChange" :active-value="0" :inactive-value="1"
                              v-model="setting.aiCode"/>
-                </div>
-              </div>
-              <div class="setting-item">
-                <div><span>{{ $t('codeRecognitionRules') }}</span></div>
-                <div class="forward">
-                  <el-button class="opt-button" size="small" type="primary" @click="openAiCodeFilter">
-                    <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
+                  <el-button class="opt-button" size="small" type="primary" @click="openAiCodeFilter" title="设置识别规则" style="margin-left: 4px;">
+                    <Icon icon="fluent:settings-48-regular" width="16" height="16"/>
                   </el-button>
                 </div>
-              </div>
-              <div class="setting-item">
-                <div>
-                  <span>{{ $t('telegramDigest') }}</span>
+
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 13px;">{{ $t('telegramDigest') }}</span>
                   <el-tooltip effect="dark" :content="$t('telegramDigestDesc')">
-                    <Icon class="warning" icon="fe:warning" width="18" height="18"/>
+                    <Icon class="warning" icon="fe:warning" width="16" height="16"/>
                   </el-tooltip>
-                </div>
-                <div>
                   <el-switch v-model="setting.tgDigest" :active-value="1" :inactive-value="0"
                              @change="changeField('tgDigest', $event)"/>
                 </div>

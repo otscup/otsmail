@@ -19,6 +19,7 @@ export function pathMatches(path, prefix) {
 const exclude = [
 	'/login',
 	'/register',
+	'/password/reset',
 	'/oss',
 	'/setting/websiteConfig',
 	'/webhooks',

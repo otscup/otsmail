@@ -95,10 +95,19 @@
                       :placeholder="$t('verifyCode')" autocomplete="one-time-code" @keyup.enter="submit"/>
             <div class="two-factor-hint">{{ $t('twoFactorLoginHint') }}</div>
           </template>
+          <div class="login-action-bar">
+            <el-button class="forgot-pwd-btn" link v-if="settingStore.settings.passwordResetSwitch" @click="openForgotPwd">
+              {{ $t('forgotPassword') }}
+            </el-button>
+            <el-button class="qr-login-btn" link @click="openQr">{{ $t('qrLogin') }}</el-button>
+          </div>
           <el-button class="btn" type="primary" @click="submit" :loading="loginLoading"
           >{{ $t('loginBtn') }}
           </el-button>
-          <el-button class="qr-login-btn" link @click="openQr">{{ $t('qrLogin') }}</el-button>
+          <el-button v-if="supportsPasskey" class="btn passkey-login-btn" style="margin-top: 10px;" :loading="passkeyLoading" @click="passkeyLogin">
+            <Icon icon="solar:key-minimalistic-square-line-duotone" width="18" height="18" style="margin-right: 6px;"/>
+            使用 Passkey 通行密钥登录
+          </el-button>
           <div class="login-divider" v-if="hasAltLogin"><span>{{ $t('or') || '或' }}</span></div>
           <div class="social-row" v-if="hasProviderButtons">
             <el-button class="provider-btn" v-if="settingStore.settings.linuxdoSwitch" @click="linuxDoLogin">
@@ -218,6 +227,31 @@
         <div v-else class="qr-tip">{{ $t('qrScanTip') }}</div>
       </div>
     </el-dialog>
+
+    <!-- 找回密码弹窗 -->
+    <el-dialog v-model="forgotShow" :title="$t('forgotPassword')" width="360" class="forgot-dialog" append-to-body>
+      <div class="forgot-box">
+        <el-input v-model="forgotEmail" :placeholder="$t('emailAccount')" :disabled="forgotStep === 2" style="margin-bottom: 12px;"/>
+        <template v-if="forgotStep === 1">
+          <div class="forgot-tip" style="font-size: 13px; color: var(--text-color-secondary, #64748b); margin-bottom: 16px;">
+            输入您的 OTSMail 邮箱账号，系统将向您绑定的安全辅助邮箱发送 6 位验证码。
+          </div>
+          <el-button type="primary" style="width: 100%;" :loading="forgotLoading" @click="handleSendForgotCode">
+            获取验证码
+          </el-button>
+        </template>
+        <template v-else>
+          <div class="forgot-tip" style="font-size: 13px; color: var(--text-color-secondary, #64748b); margin-bottom: 12px;">
+            验证码已发送至辅助邮箱 <strong style="color: #2563eb;">{{ maskedEmail }}</strong>，请查收（10 分钟内有效）。
+          </div>
+          <el-input v-model="forgotCode" maxlength="6" :placeholder="$t('verifyCode')" style="margin-bottom: 12px;"/>
+          <el-input v-model="forgotNewPwd" type="password" :placeholder="$t('password')" style="margin-bottom: 12px;"/>
+          <el-button type="primary" style="width: 100%;" :loading="forgotLoading" @click="handleConfirmForgot">
+            确认重置密码
+          </el-button>
+        </template>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -226,7 +260,7 @@ import router from "@/router";
 import {computed, nextTick, onBeforeUnmount, onMounted, reactive, ref} from "vue";
 import {login} from "@/request/login.js";
 import {register} from "@/request/login.js";
-import {qrCreate, qrPoll} from "@/request/login.js";
+import {qrCreate, qrPoll, sendPasswordResetCode, confirmPasswordReset} from "@/request/login.js";
 import QRCode from 'qrcode';
 import {versionLatest} from "@/request/version.js";
 import {ElNotification} from "element-plus";
@@ -384,6 +418,105 @@ async function openQr() {
     }, 2000)
   } catch (e) {
     qrStatus.value = 'expired'
+  }
+}
+
+// 找回密码状态与逻辑
+const forgotShow = ref(false)
+const forgotStep = ref(1)
+const forgotLoading = ref(false)
+const forgotEmail = ref('')
+const forgotCode = ref('')
+const forgotNewPwd = ref('')
+const maskedEmail = ref('')
+
+// Passkey (WebAuthn) 免密登录
+const supportsPasskey = computed(() => typeof window !== 'undefined' && !!window.PublicKeyCredential)
+const passkeyLoading = ref(false)
+
+async function passkeyLogin() {
+  passkeyLoading.value = true
+  try {
+    const optRes = await fetch('/api/login/passkey/options', { method: 'POST' }).then(r => r.json())
+    if (optRes.code !== 200) throw new Error(optRes.message || '获取登录凭证失败')
+
+    const options = optRes.data
+    options.challenge = Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))
+
+    const assertion = await navigator.credentials.get({ publicKey: options })
+    const verifyData = {
+      id: assertion.id,
+      rawId: btoa(String.fromCharCode(...new Uint8Array(assertion.rawId))),
+      type: assertion.type,
+      response: {
+        clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(assertion.response.clientDataJSON))),
+        authenticatorData: btoa(String.fromCharCode(...new Uint8Array(assertion.response.authenticatorData))),
+        signature: btoa(String.fromCharCode(...new Uint8Array(assertion.response.signature)))
+      }
+    }
+
+    const verifyRes = await fetch('/api/login/passkey/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(verifyData)
+    }).then(r => r.json())
+
+    if (verifyRes.code === 200 && verifyRes.data?.token) {
+      ElNotification({ type: 'success', message: 'Passkey 登录成功！' })
+      await saveToken(verifyRes.data.token)
+    } else {
+      throw new Error(verifyRes.message || 'Passkey 验证失败')
+    }
+  } catch (e) {
+    if (e.name !== 'NotAllowedError') {
+      ElNotification({ type: 'error', message: e.message || 'Passkey 登录失败' })
+    }
+  } finally {
+    passkeyLoading.value = false
+  }
+}
+
+function openForgotPwd() {
+  forgotEmail.value = form.email ? getFullEmail(form.email) : ''
+  forgotCode.value = ''
+  forgotNewPwd.value = ''
+  forgotStep.value = 1
+  forgotShow.value = true
+}
+
+async function handleSendForgotCode() {
+  if (!forgotEmail.value) {
+    ElNotification({ type: 'warning', message: '请输入邮箱账号' })
+    return
+  }
+  forgotLoading.value = true
+  try {
+    const res = await sendPasswordResetCode(forgotEmail.value)
+    maskedEmail.value = res.maskedRecoveryEmail
+    forgotStep.value = 2
+    ElNotification({ type: 'success', message: '验证码已发送至辅助邮箱' })
+  } catch (e) {
+    ElNotification({ type: 'error', message: e.message || '获取验证码失败' })
+  } finally {
+    forgotLoading.value = false
+  }
+}
+
+async function handleConfirmForgot() {
+  if (!forgotCode.value || !forgotNewPwd.value) {
+    ElNotification({ type: 'warning', message: '请输入验证码和新密码' })
+    return
+  }
+  forgotLoading.value = true
+  try {
+    await confirmPasswordReset(forgotEmail.value, forgotCode.value, forgotNewPwd.value)
+    ElNotification({ type: 'success', message: '密码重置成功，请使用新密码登录' })
+    forgotShow.value = false
+    form.password = ''
+  } catch (e) {
+    ElNotification({ type: 'error', message: e.message || '重置密码失败' })
+  } finally {
+    forgotLoading.value = false
   }
 }
 
@@ -970,11 +1103,19 @@ function submitRegister() {
     border-radius: 6px;
   }
 
-  .qr-login-btn {
+  .login-action-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     width: 100%;
-    margin: 6px 0 0 !important;
-    font-size: 12px;
-    color: var(--rd-muted) !important;
+    margin: 4px 0 8px;
+
+    .forgot-pwd-btn, .qr-login-btn {
+      margin: 0 !important;
+      padding: 0;
+      font-size: 12px;
+      color: var(--rd-muted) !important;
+    }
   }
 
   .qr-box {

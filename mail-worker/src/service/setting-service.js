@@ -1,5 +1,5 @@
 import KvConst from '../const/kv-const';
-import setting from '../entity/setting';
+import settingTable from '../entity/setting';
 import orm from '../entity/orm';
 import {verifyRecordType} from '../const/entity-const';
 import fileUtils from '../utils/file-utils';
@@ -16,7 +16,7 @@ import {getTableColumns} from 'drizzle-orm';
 const settingService = {
 
 	async refresh(c) {
-		const settingRow = await orm(c).select().from(setting).get();
+		const settingRow = await orm(c).select().from(settingTable).get();
 		settingRow.resendTokens = JSON.parse(settingRow.resendTokens);
 		settingRow.oidcProviders = this.parseOidcProviders(settingRow);
 		c.set('setting', settingRow);
@@ -98,7 +98,16 @@ const settingService = {
 			return cached;
 		}
 
-		const setting = await c.env.kv.get(KvConst.SETTING, { type: 'json' });
+		let setting = await c.env.kv.get(KvConst.SETTING, { type: 'json' });
+
+		if (!setting) {
+			// KV 缓存丢失时自动从 D1 回填，避免直接抛错阻断整个站点
+			const row = await orm(c).select().from(settingTable).get();
+			if (row) {
+				await this.refresh(c);
+				setting = await c.env.kv.get(KvConst.SETTING, { type: 'json' });
+			}
+		}
 
 		if (!setting) {
 			throw new BizError('数据库未初始化 Database not initialized.');
@@ -319,11 +328,11 @@ const settingService = {
 
 		params.resendTokens = JSON.stringify(resendTokens);
 		// 只接受 setting 表真实存在的列，避免任意字段/未知列进入 UPDATE。
-		const columns = getTableColumns(setting);
+		const columns = getTableColumns(settingTable);
 		Object.keys(params).forEach(key => {
 			if (!(key in columns)) delete params[key];
 		});
-		await orm(c).update(setting).set({ ...params }).returning().get();
+		await orm(c).update(settingTable).set({ ...params }).returning().get();
 		await this.refresh(c);
 	},
 
@@ -334,14 +343,14 @@ const settingService = {
 		if (!background) return
 
 		if (background.startsWith('http')) {
-			await orm(c).update(setting).set({ [key]: '' }).run();
+			await orm(c).update(settingTable).set({ [key]: '' }).run();
 			await this.refresh(c)
 			return;
 		}
 
 		if (background) {
 			await r2Service.delete(c,background)
-			await orm(c).update(setting).set({ [key]: '' }).run();
+			await orm(c).update(settingTable).set({ [key]: '' }).run();
 			await this.refresh(c)
 		}
 	},
@@ -370,7 +379,7 @@ const settingService = {
 
 		}
 
-		await orm(c).update(setting).set({ [key]: background }).run();
+		await orm(c).update(settingTable).set({ [key]: background }).run();
 		await this.refresh(c);
 		return background;
 	},
@@ -378,7 +387,7 @@ const settingService = {
 
 	async setBlacklist(c, params) {
 		const { blackSubject, blackContent, blackFrom  } = params
-		await orm(c).update(setting).set({ blackSubject, blackContent, blackFrom }).run();
+		await orm(c).update(settingTable).set({ blackSubject, blackContent, blackFrom }).run();
 		await this.refresh(c);
 		return this.get(c);
 	},
@@ -437,6 +446,7 @@ const settingService = {
 			oidcCallbackUrl: settingRow.oidcCallbackUrl,
 			oidcScope: settingRow.oidcScope,
 			oidcProviders: this.enabledOidcProviders(settingRow).map(item => ({ id: item.id, name: item.name, icon: item.icon || '' })),
+			passwordResetSwitch: settingRow.passwordResetSwitch !== 0,
 			minEmailPrefix: settingRow.minEmailPrefix,
 			projectLink: settingRow.projectLink
 		};

@@ -24,3 +24,11 @@ export function qrPoll(id) {
 export function qrConfirm(id) {
     return http.post('/my/qr/confirm', {id})
 }
+
+export function sendPasswordResetCode(email) {
+    return http.post('/password/reset/send-code', { email })
+}
+
+export function confirmPasswordReset(email, code, newPassword) {
+    return http.post('/password/reset/confirm', { email, code, newPassword })
+}

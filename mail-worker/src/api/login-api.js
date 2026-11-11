@@ -1,5 +1,6 @@
 import app from '../hono/hono';
 import loginService from '../service/login-service';
+import passwordRecoveryService from '../service/password-recovery-service';
 import result from '../model/result';
 import userContext from '../security/user-context';
 
@@ -31,5 +32,16 @@ app.post('/my/qr/confirm', async (c) => {
 	const body = await c.req.json();
 	const origin = await loginService.confirmQr(c, userContext.getUserId(c), body.id);
 	return c.json(result.ok(origin));
+});
+
+// 找回密码（基于辅助安全邮箱 + Resend 发送验证码）
+app.post('/password/reset/send-code', async (c) => {
+	const res = await passwordRecoveryService.sendResetCode(c, await c.req.json());
+	return c.json(result.ok(res));
+});
+
+app.post('/password/reset/confirm', async (c) => {
+	await passwordRecoveryService.confirmReset(c, await c.req.json());
+	return c.json(result.ok());
 });
 
