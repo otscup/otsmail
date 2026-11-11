@@ -192,10 +192,15 @@ const passkeyService = {
 			id: passkey.id,
 			name: passkey.name,
 			credentialId: passkey.credentialId,
-			createdAt: passkey.createdAt
+			createdAt: passkey.createdAt,
+			lastUsedAt: passkey.lastUsedAt
 		}).from(passkey).where(eq(passkey.userId, userId)).all();
 		// createdAt 是 D1 的 UTC 裸时间，统一补上时区标识再返回，避免前端按本地时间误读
-		return rows.map(row => ({ ...row, createdAt: toIsoUtc(row.createdAt) }));
+		return rows.map(row => ({
+			...row,
+			createdAt: toIsoUtc(row.createdAt),
+			lastUsedAt: toIsoUtc(row.lastUsedAt)
+		}));
 	},
 
 	// 删除某个 Passkey（限定本人，避免越权删除他人凭据）
@@ -293,7 +298,11 @@ const passkeyService = {
 
 		await orm(c)
 			.update(passkey)
-			.set({ counter: verification.authenticationInfo.newCounter })
+			.set({
+				counter: verification.authenticationInfo.newCounter,
+				// 记录最后一次成功登录时间，列表里据此判断凭据是否还在用
+				lastUsedAt: new Date().toISOString()
+			})
 			.where(eq(passkey.id, row.id))
 			.run();
 

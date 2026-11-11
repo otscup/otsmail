@@ -102,6 +102,7 @@ const dbInit = {
 
 		const addedColumns = await this.otsmail_32DB(c);
 		await this.otsmail_33DB(c);
+		addedColumns.passkey = await this.otsmail_34DB(c);
 		await settingService.refresh(c);
 
 		return c.json({ ok: true, addedColumns });
@@ -1337,6 +1338,13 @@ async otsmail_5DB(c) {
 		);`).run();
 		await c.env.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_passkey_credential_id ON passkey (credential_id);`).run();
 		await c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_passkey_user_id ON passkey (user_id);`).run();
+	},
+
+	// otsmail 迁移：Passkey 最后使用时间（登录验签成功时回写，历史凭据为 NULL）
+	async otsmail_34DB(c) {
+		return await ensureColumns(c, 'passkey', [
+			{ name: 'last_used_at', ddl: `last_used_at TEXT` }
+		]);
 	},
 
 	async otsmail_20DB(c) {

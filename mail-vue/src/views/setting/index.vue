@@ -165,6 +165,7 @@
             <div class="device-main">
               <div class="device-name">{{ item.name || 'Passkey' }}</div>
               <div class="device-meta">创建时间：{{ formatPasskeyTime(item.createdAt) }}（北京时间）</div>
+              <div class="device-meta">最后使用：{{ item.lastUsedAt ? formatPasskeyTime(item.lastUsedAt) + '（北京时间）' : '从未使用' }}</div>
               <div class="device-meta">凭据 ID：{{ credentialPrefix(item.credentialId) }}… · 来源：未记录（服务端未保存创建来源）</div>
             </div>
             <button type="button" class="device-kick" @click="removePasskey(item)">删除</button>
