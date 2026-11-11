@@ -99,6 +99,9 @@ bucket_name = "$bucket"
 [ai]
 binding = "ai"
 
+[triggers]
+crons = ["*/5 * * * *"]
+
 [vars]
 pwd_iterations = 8000
 domain = [$domainToml]

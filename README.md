@@ -173,7 +173,8 @@ FCM 的 service account 私钥只放 Secret，不要写进 `fcm-service.js` 或 
 
 系统设置 → “关于与版本” 可查看当前版本和最新 Web Release。更新检查读取 GitHub Releases 中 `web-v*` 标签，使用 30 分钟全局 KV 缓存；不会自动部署，也不会执行自更新。发布 Web 版本时建议：
 
-- 构建时设置 `WEB_VERSION`
+- 同步 Worker 环境变量 `WEB_VERSION`（“关于与版本”和更新检查比较用的就是这个值，根 `wrangler.toml` 与生产配置各有一份）
+- 前端构建读取的是 `VITE_WEB_VERSION`，不是 `WEB_VERSION`；两者别混用
 - 打 `web-vX.Y.Z` 标签并创建 GitHub Release
 - 部署后在页面点一次“检查更新”（缓存会短暂保留）
 

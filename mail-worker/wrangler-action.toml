@@ -32,7 +32,8 @@ not_found_handling = "single-page-application"
 run_worker_first = true
 
 [triggers]
-crons = ["0 16 * * *"]
+# 必须与生产 cron 保持一致：scheduled 依赖具体分钟窗口（:00/:30 刷缓存、UTC 00:00 日报、16:00-16:05 日任务）
+crons = ["*/5 * * * *"]
 
 
 [vars]
