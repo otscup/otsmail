@@ -5,6 +5,7 @@ import KvConst from '../const/kv-const';
 import dayjs from 'dayjs';
 import userService from '../service/user-service';
 import authCache from '../service/auth-cache';
+import sessionService from '../service/session-service';
 import permService from '../service/perm-service';
 import { t } from '../i18n/i18n'
 import mcpService from '../service/mcp-service';
@@ -208,6 +209,8 @@ app.use('*', async (c, next) => {
 	const refreshTime = dayjs(authInfo.refreshTime).startOf('day');
 	const nowTime = now.startOf('day');
 	let dirty = false;
+	// 心跳是否更新了会话活跃时间；只有它需要双写 user_session
+	let sessionTouched = false;
 
 	if (!nowTime.isSame(refreshTime)) {
 		authInfo.refreshTime = now.toISOString();
@@ -222,12 +225,18 @@ app.use('*', async (c, next) => {
 		if (!lastActive.isValid() || now.diff(lastActive, 'minute') >= 5) {
 			authInfo.sessions[token].time = now.toISOString();
 			dirty = true;
+			sessionTouched = true;
 		}
 	}
 
 	if (dirty) {
 		await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
 		authCache.put(c, userId, authInfo);
+	}
+
+	// 阶段一双写：会话活跃时间镜像到 D1；行不存在时顺带补建，历史会话靠心跳自然补齐
+	if (sessionTouched) {
+		await sessionService.upsert(c, userId, token, authInfo.sessions[token]);
 	}
 
 	c.set('user',authInfo.user)

@@ -21,6 +21,7 @@ import { t } from '../i18n/i18n.js';
 import verifyRecordService from './verify-record-service';
 import totpUtils from '../utils/totp-utils';
 import authCache from './auth-cache';
+import sessionService from './session-service';
 import loginGuard from './login-guard';
 import reqUtils from '../utils/req-utils';
 
@@ -315,6 +316,8 @@ const loginService = {
 		const jwt = await JwtUtils.generateToken(c, { userId: userRow.userId, token: uuid }, constant.TOKEN_EXPIRE);
 
 		let authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userRow.userId, { type: 'json' });
+		// 本次登录会淘汰同设备旧会话 / 超上限会话，双写时要把这些行从 D1 一并删掉
+		const previousTokens = Array.isArray(authInfo?.tokens) ? [...authInfo.tokens] : [];
 
 		const ua = reqUtils.getUserAgent(c);
 		const sessionMeta = {
@@ -372,6 +375,9 @@ const loginService = {
 
 		await c.env.kv.put(KvConst.AUTH_INFO + userRow.userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
 		authCache.put(c, userRow.userId, authInfo);
+		// 阶段一双写：KV 仍是唯一读源，D1 只做镜像
+		await sessionService.upsert(c, userRow.userId, uuid, sessionMeta);
+		await sessionService.removeMany(c, userRow.userId, previousTokens.filter(t => !authInfo.tokens.includes(t)));
 		return jwt;
 	},
 
@@ -385,6 +391,7 @@ const loginService = {
 		if (authInfo.sessions) delete authInfo.sessions[token];
 		await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
 		authCache.clear(userId);
+		await sessionService.remove(c, userId, token);
 	},
 
 	async sessions(c, userId) {
@@ -422,6 +429,7 @@ const loginService = {
 			for (const token of removed) delete authInfo.sessions[token];
 			await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
 			authCache.clear(userId);
+			await sessionService.removeMany(c, userId, removed);
 		}
 
 		// 当前设备固定排第一，其余按最近活跃时间倒序
@@ -450,6 +458,7 @@ const loginService = {
 		if (authInfo.sessions) delete authInfo.sessions[sessionId];
 		await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
 		authCache.clear(userId);
+		await sessionService.remove(c, userId, sessionId);
 	},
 
 	// 扫码登录：网页拿 id 轮询，App 登录后确认，网页凭 id 换一次 token。

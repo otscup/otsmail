@@ -85,6 +85,7 @@ const dbInit = {
 		await this.otsmail_33DB(c);
 		await this.otsmail_35DB(c);
 		await this.otsmail_36DB(c);
+		await this.otsmail_37DB(c);
 		await this.otsmail_9DB(c);
 		await settingService.refresh(c);
 		await c.env.kv.put('init_done', '1');
@@ -107,6 +108,7 @@ const dbInit = {
 		addedColumns.passkey = await this.otsmail_34DB(c);
 		await this.otsmail_35DB(c);
 		addedColumns.emailCountTotals = await this.otsmail_36DB(c);
+		await this.otsmail_37DB(c);
 		await settingService.refresh(c);
 
 		return c.json({ ok: true, addedColumns });
@@ -506,6 +508,25 @@ async otsmail_35DB(c) {
 			spam_total=(SELECT COUNT(*) FROM email e WHERE e.user_id=email_count.user_id AND e.account_id=email_count.account_id AND e.is_del=0 AND e.type=0 AND e.spam=1)`).run();
 
 		return added;
+	},
+
+	// otsmail 迁移：会话表 user_session（KV 会话镜像，阶段一双写用）
+	// 与 migrations/2026-11-12-04-user-session.sql 同一份 DDL，init() 与 /init/migrate 都会执行。
+	async otsmail_37DB(c) {
+		await c.env.db.batch([
+			c.env.db.prepare(`CREATE TABLE IF NOT EXISTS user_session (
+				user_id INTEGER NOT NULL,
+				token TEXT NOT NULL,
+				ip TEXT NOT NULL DEFAULT '',
+				browser TEXT NOT NULL DEFAULT '',
+				os TEXT NOT NULL DEFAULT '',
+				device TEXT NOT NULL DEFAULT '',
+				time TEXT NOT NULL DEFAULT '',
+				active_time TEXT NOT NULL DEFAULT '',
+				PRIMARY KEY (user_id, token)
+			)`),
+			c.env.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_session_token ON user_session(token)`)
+		]);
 	},
 
 // otsmail 迁移：oauth 表新增 provider 列（v1.4，区分 github/google/linuxdo 防跨平台撞号）
