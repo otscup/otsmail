@@ -33,6 +33,10 @@ function rowToMeta(row) {
 	};
 }
 
+const TOUCH_INTERVAL_MS = 5 * 60 * 1000;
+// 心跳节流：同一 token 5 分钟内只写一次 D1，避免每个请求都产生一次写
+const touched = new Map();
+
 const sessionService = {
 
 	/**
@@ -78,6 +82,35 @@ const sessionService = {
 				.bind(userId, ...tokens).run();
 		} catch (e) {
 			console.warn(`user_session 批量删除失败：${e.message}`);
+		}
+	},
+
+	/**
+	 * 心跳：只更新 D1 的活跃时间。行不存在时不补建（登录会建行，历史行由 /my/sessions 回填）。
+	 * 同一 token 5 分钟内只写一次；写失败删掉节流记录，下次请求重试。
+	 */
+	async touch(c, userId, token, iso, nowMs = Date.now()) {
+		const key = `${userId}|${token}`;
+		const last = touched.get(key);
+		if (last && nowMs - last < TOUCH_INTERVAL_MS) return false;
+
+		if (touched.size > 5000) {
+			for (const [k, t] of touched) {
+				if (nowMs - t >= TOUCH_INTERVAL_MS) touched.delete(k);
+			}
+			if (touched.size > 5000) touched.clear();
+		}
+		touched.set(key, nowMs);
+
+		try {
+			await c.env.db.prepare(
+				`UPDATE user_session SET active_time = ? WHERE user_id = ? AND token = ?`
+			).bind(iso, userId, token).run();
+			return true;
+		} catch (e) {
+			touched.delete(key);
+			console.warn(`user_session 活跃时间更新失败：${e.message}`);
+			return false;
 		}
 	},
 

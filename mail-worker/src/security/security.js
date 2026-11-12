@@ -5,7 +5,7 @@ import KvConst from '../const/kv-const';
 import dayjs from 'dayjs';
 import userService from '../service/user-service';
 import authCache from '../service/auth-cache';
-import sessionService from '../service/session-service';
+import sessionHeartbeat from '../service/session-heartbeat';
 import permService from '../service/perm-service';
 import { t } from '../i18n/i18n'
 import mcpService from '../service/mcp-service';
@@ -206,38 +206,10 @@ app.use('*', async (c, next) => {
 	}
 
 	const now = dayjs();
-	const refreshTime = dayjs(authInfo.refreshTime).startOf('day');
-	const nowTime = now.startOf('day');
-	let dirty = false;
-	// 心跳是否更新了会话活跃时间；只有它需要双写 user_session
-	let sessionTouched = false;
-
-	if (!nowTime.isSame(refreshTime)) {
-		authInfo.refreshTime = now.toISOString();
-		await userService.updateUserInfo(c, authInfo.user.userId);
-		dirty = true;
-	}
-
-	// 设备列表的「最近活跃」此前只在 login() 里写一次，长期保持登录就永远停在首次登录那天。
-	// 这里按 5 分钟节流回写当前会话的活跃时间：KV 同一个 key 每秒只能写一次，不能每个请求都写。
-	if (!result.viaMcp && token && authInfo.sessions?.[token]) {
-		const lastActive = dayjs(authInfo.sessions[token].time);
-		if (!lastActive.isValid() || now.diff(lastActive, 'minute') >= 5) {
-			authInfo.sessions[token].time = now.toISOString();
-			dirty = true;
-			sessionTouched = true;
-		}
-	}
-
-	if (dirty) {
-		await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
-		authCache.put(c, userId, authInfo);
-	}
-
-	// 阶段一双写：会话活跃时间镜像到 D1；行不存在时顺带补建，历史会话靠心跳自然补齐
-	if (sessionTouched) {
-		await sessionService.upsert(c, userId, token, authInfo.sessions[token]);
-	}
+	// 心跳：默认只更新 D1 active_time，不再为了活跃时间回写 KV。
+	// 跨天刷新 refreshTime / 用户级活跃信息仍在 apply 里写一次 KV。
+	// 回滚：heartbeat_write_kv_switch=1 退回老行为（活跃时间照旧写 KV + D1 补建行）。
+	await sessionHeartbeat.apply(c, authInfo, userId, result.viaMcp ? null : token, now);
 
 	c.set('user',authInfo.user)
 
