@@ -21,7 +21,7 @@ import { t } from '../i18n/i18n.js';
 import verifyRecordService from './verify-record-service';
 import totpUtils from '../utils/totp-utils';
 import authCache from './auth-cache';
-import sessionService from './session-service';
+import sessionService, { rowToMeta } from './session-service';
 import loginGuard from './login-guard';
 import reqUtils from '../utils/req-utils';
 
@@ -397,8 +397,32 @@ const loginService = {
 	async sessions(c, userId) {
 		const authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userId, { type: 'json' });
 		const current = await userContext.getToken(c);
+		// token 列表仍以 KV 为准：它决定哪些会话还有效，D1 只提供设备信息
 		const tokens = authInfo?.tokens || [];
-		const meta = authInfo?.sessions || {};
+		const kvMeta = authInfo?.sessions || {};
+
+		// 阶段二：设备列表 D1 优先。list() 返回 null（开关关闭/查询异常）时整体退回 KV，
+		// D1 抖动不会让会话列表接口失败。
+		const rows = await sessionService.list(c, userId);
+		let meta = kvMeta;
+		if (rows) {
+			const byToken = new Map(rows.map(row => [row.token, row]));
+			meta = {};
+			for (const token of tokens) {
+				const row = byToken.get(token);
+				if (row) {
+					const info = rowToMeta(row);
+					// 全空行（历史 token 一直没有设备信息）不参与去重：否则多个空行指纹相同，
+					// 会被当成同一设备而删掉 token，等于把用户踢下线。
+					if (info.ip || info.browser || info.os || info.device || info.time) meta[token] = info;
+					continue;
+				}
+				if (kvMeta[token]) {
+					meta[token] = kvMeta[token];
+					await sessionService.backfill(c, userId, token, kvMeta[token]);
+				}
+			}
+		}
 
 		// 读时归并：旧版本按「IP+UA 全串」去重，换网络或升级浏览器就会留下多条同一设备的会话。
 		// 按设备指纹只保留最新一条（当前会话优先），同时删掉多余 token，历史脏数据不用等下次登录才消失。
@@ -426,7 +450,7 @@ const loginService = {
 
 		if (removed.length) {
 			authInfo.tokens = tokens.filter(token => !removed.includes(token));
-			for (const token of removed) delete authInfo.sessions[token];
+			for (const token of removed) delete authInfo.sessions?.[token];
 			await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
 			authCache.clear(userId);
 			await sessionService.removeMany(c, userId, removed);
