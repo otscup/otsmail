@@ -17,10 +17,14 @@ import KvConst from '../const/kv-const';
 import totpUtils from '../utils/totp-utils';
 import loginGuard from './login-guard';
 
+// LIKE 里 % 和 _ 是通配符：公共 token 接口必须转义，否则过滤值传 "%" 就能分页导出全库
+function escapeLike(value) {
+	return String(value).replace(/[\\%_]/g, match => '\\' + match);
+}
+
 const publicService = {
 
 	async emailList(c, params) {
-
 		let { toEmail, content, subject, sendName, sendEmail, timeSort, num, size, type , isDel } = params
 
 		// 公共 token 不能变成全库导出接口：必须带过滤条件，分页最多 100 条。
@@ -58,23 +62,23 @@ const publicService = {
 		let conditions = []
 
 		if (toEmail) {
-			conditions.push(sql`${email.toEmail} COLLATE NOCASE LIKE ${toEmail}`)
+			conditions.push(sql`${email.toEmail} COLLATE NOCASE LIKE ${escapeLike(toEmail)} ESCAPE '\\'`)
 		}
 
 		if (sendEmail) {
-			conditions.push(sql`${email.sendEmail} COLLATE NOCASE LIKE ${sendEmail}`)
+			conditions.push(sql`${email.sendEmail} COLLATE NOCASE LIKE ${escapeLike(sendEmail)} ESCAPE '\\'`)
 		}
 
 		if (sendName) {
-			conditions.push(sql`${email.name} COLLATE NOCASE LIKE ${sendName}`)
+			conditions.push(sql`${email.name} COLLATE NOCASE LIKE ${escapeLike(sendName)} ESCAPE '\\'`)
 		}
 
 		if (subject) {
-			conditions.push(sql`${email.subject} COLLATE NOCASE LIKE ${subject}`)
+			conditions.push(sql`${email.subject} COLLATE NOCASE LIKE ${escapeLike(subject)} ESCAPE '\\'`)
 		}
 
 		if (content) {
-			conditions.push(sql`${email.content} COLLATE NOCASE LIKE ${content}`)
+			conditions.push(sql`${email.content} COLLATE NOCASE LIKE ${escapeLike(content)} ESCAPE '\\'`)
 		}
 
 		if (type || type === 0) {
@@ -104,7 +108,11 @@ const publicService = {
 	async addUser(c, params) {
 		const { list } = params;
 
-		if (list.length === 0) return;
+		if (!Array.isArray(list) || list.length === 0) return;
+		// 公共接口每请求都要逐条 bcrypt，必须限制单次数量，避免一次请求打满 CPU。
+		if (list.length > 50) {
+			throw new BizError('单次批量创建账号不能超过 50 个', 400);
+		}
 
 		for (const emailRow of list) {
 			if (!verifyUtils.isEmail(emailRow.email)) {

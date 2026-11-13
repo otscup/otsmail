@@ -16,8 +16,10 @@ import { parseHTML } from 'linkedom';
  */
 
 // 直接删除（连内容一起）的标签
+// style 必须整体删除：其中的 @import / url() 会发起外部请求，:host 规则还能改掉宿主样式、
+// 甚至用 position:fixed 覆盖整个页面；邮件正文的样式只保留内联 style 属性。
 const FORBIDDEN_TAGS = [
-	'script', 'iframe', 'object', 'embed', 'form', 'input', 'button',
+	'script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'button',
 	'textarea', 'select', 'option', 'base', 'link', 'meta', 'template',
 	'noscript', 'frame', 'frameset', 'applet', 'audio', 'video', 'source',
 	'title'
@@ -34,12 +36,13 @@ const FORBIDDEN_ATTRS = ['srcdoc', 'ping', 'formaction', 'http-equiv'];
 
 function cleanStyleAttr(value) {
 	if (!value) return '';
-	// 挡掉 CSS 里能发起请求 / 执行代码的写法
+	// 挡掉 CSS 里能发起请求 / 执行代码 / 覆盖页面的写法
 	return value
 		.replace(/expression\s*\(/gi, 'none(')
 		.replace(/url\s*\(\s*['"]?\s*javascript:/gi, 'url(about:blank')
 		.replace(/behavior\s*:/gi, 'x-behavior:')
-		.replace(/-moz-binding\s*:/gi, 'x-binding:');
+		.replace(/-moz-binding\s*:/gi, 'x-binding:')
+		.replace(/(?:^|;)\s*position\s*:\s*(?:fixed|sticky)\b[^;]*/gi, '');
 }
 
 /**

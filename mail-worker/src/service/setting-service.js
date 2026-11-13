@@ -282,6 +282,17 @@ const settingService = {
 			throw new BizError('Invalid AI summary mode', 400);
 		}
 
+		// 换 AI 接口地址时必须丢弃旧 Key：否则持有 setting:set 的人可把 baseUrl 指向自己的服务器，
+		// 再调 /ai/models 用空 body 让服务端把存量 Key 发过去。传入新 Key 时以新 Key 为准。
+		if (typeof params.aiBaseUrl === 'string') {
+			const nextBase = params.aiBaseUrl.trim().replace(/\/+$/, '');
+			const oldBase = String(settingData?.aiBaseUrl || '').trim().replace(/\/+$/, '');
+			const incomingKey = String(params.aiApiKey || '');
+			if (nextBase !== oldBase && (!incomingKey || incomingKey.includes('******'))) {
+				params.aiApiKey = '';
+			}
+		}
+
 		// 脱敏字段：前端回传含 ****** 的占位值说明未修改，剔除以免覆盖真实 key
 		['deeplKey', 'secretKey', 'tgBotToken', 's3AccessKey', 's3SecretKey', 'oidcClientSecret', 'aiApiKey'].forEach(k => {
 			if (typeof params[k] === 'string' && params[k].includes('******')) delete params[k];

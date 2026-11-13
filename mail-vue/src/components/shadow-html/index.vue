@@ -37,9 +37,12 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
     node.setAttribute('rel', 'noopener noreferrer')
   }
   // 邮件里的 style/color 经常把白色文字写死；主题色必须优先。
+  // 同时剔除 position:fixed/sticky，避免正文把固定定位元素盖到整个应用界面上。
   if (node.hasAttribute('style')) {
     const cleaned = node.getAttribute('style')
       .replace(/(?:^|;)\s*(?:color|background(?:-color|-image)?)\s*:[^;]*/gi, '')
+      .replace(/(?:^|;)\s*position\s*:\s*(?:fixed|sticky)\b[^;]*/gi, '')
+      .replace(/expression\s*\(/gi, 'none(')
       .trim()
     if (cleaned) node.setAttribute('style', cleaned)
     else node.removeAttribute('style')
@@ -49,7 +52,8 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
 })
 
 const PURIFY_CONFIG = {
-  FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button',
+  // style 整体禁用：@import / url() 会外发请求，:host 规则还能改写宿主、覆盖整个应用
+  FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'button',
                 'textarea', 'select', 'base', 'link', 'meta'],
   FORBID_ATTR: ['srcdoc', 'formaction', 'ping'],
   ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|cid|tel):|data:image\/(?:png|jpe?g|gif|webp|bmp|svg\+xml);base64,|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
@@ -65,6 +69,7 @@ function sanitizeInlineStyle(style) {
   return style
     .replace(/[<>{}@;]/g, ' ')
     .replace(/(?:^|\s)(?:color|background(?:-color|-image)?)\s*:[^;]*/gi, '')
+    .replace(/(?:^|\s)position\s*:\s*(?:fixed|sticky)\b[^;]*/gi, '')
     .replace(/url\s*\(/gi, 'none(')
     .replace(/expression\s*\(/gi, 'none(')
     .slice(0, 500)
@@ -91,6 +96,8 @@ function updateContent() {
         all: initial;
         width: 100%;
         height: 100%;
+        /* 建立包含块：即使正文里有 position:fixed，也被限制在阅读区内，盖不住应用界面 */
+        transform: translateZ(0);
         font-family: -apple-system, Inter, BlinkMacSystemFont,
                     'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
         font-size: 15px;

@@ -50,7 +50,10 @@ export default function emailHtmlTemplate(html, domain) {
             // 提取 <body> 的 style 属性
             const bodyStyleRegex = /<body[^>]*style="([^"]*)"[^>]*>/i;
             const bodyStyleMatch = html.match(bodyStyleRegex);
-            const bodyStyle = bodyStyleMatch ? bodyStyleMatch[1] : '';
+            // 这段样式会被拼进 <style>，必须先剔除 {} @ ; 等结构字符，避免注入任意 CSS 规则
+            const bodyStyle = bodyStyleMatch
+                ? bodyStyleMatch[1].replace(/[<>{}@;]/g, ' ').replace(/(?:^|\\s)position\\s*:\\s*(?:fixed|sticky)\\b[^;]*/gi, '').replace(/url\\s*\\(/gi, 'none(').replace(/expression\\s*\\(/gi, 'none(').slice(0, 500)
+                : '';
 
             // 移除 <body> 标签
             const cleanedHtml = html.replace(/<\\/?body[^>]*>/gi, '');
@@ -62,6 +65,8 @@ export default function emailHtmlTemplate(html, domain) {
                         all: initial;
                         width: 100%;
                         height: 100%;
+                        /* 建立包含块：残留的 fixed 定位也被限制在阅读区内 */
+                        transform: translateZ(0);
                         font-family: Inter, -apple-system, BlinkMacSystemFont,
                                     'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
                         font-size: 14px;
