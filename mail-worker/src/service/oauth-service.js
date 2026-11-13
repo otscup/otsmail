@@ -1,7 +1,8 @@
 import BizError from "../error/biz-error";
 import orm from "../entity/orm";
 import {oauth} from "../entity/oauth";
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, lt } from 'drizzle-orm';
+import dayjs from 'dayjs';
 import userService from "./user-service";
 import loginService from "./login-service";
 import settingService from "./setting-service";
@@ -642,8 +643,10 @@ const oauthService = {
 	},
 
 	//定时任务凌晨清除未绑定邮箱的oauth用户
+	//只清超过 10 分钟仍未绑定的：绑定票据窗口内 userId 也是 0，直接清会打断正在进行的绑定
 	async clearNoBindOathUser(c) {
-		await orm(c).delete(oauth).where(eq(oauth.userId, 0)).run();
+		const cutoff = dayjs().subtract(10, 'minute').format('YYYY-MM-DD HH:mm:ss');
+		await orm(c).delete(oauth).where(and(eq(oauth.userId, 0), lt(oauth.createTime, cutoff))).run();
 	},
 
 }

@@ -13,10 +13,8 @@ const verifyRecordService = {
 	},
 
 	async clearRecord(c) {
-		// 仅 UTC 0 点执行，便于配合每小时 cron
-		if (new Date().getUTCHours() !== 0) {
-			return;
-		}
+		// 调用方（index.js 的定时任务）已限定每天 UTC 16:00 执行一次；
+		// 这里不能再要求 getUTCHours()===0，否则与调度时间永远对不上，记录永远不会清。
 		await orm(c).delete(verifyRecord).run();
 	},
 

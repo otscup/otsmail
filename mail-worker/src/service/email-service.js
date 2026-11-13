@@ -18,6 +18,7 @@ import starService from './star-service';
 import dayjs from 'dayjs';
 import kvConst from '../const/kv-const';
 import { t } from '../i18n/i18n'
+import { sanitizeHeaderValue } from '../utils/header-utils';
 import domainUtils from '../utils/domain-uitls';
 import account from "../entity/account";
 import { att } from '../entity/att';
@@ -413,7 +414,7 @@ const emailService = {
 		//如果是回复邮件
 		if (sendType === 'reply') {
 
-			emailRow = await this.selectById(c, emailId);
+			emailRow = await this.selectById(c, emailId, userId);
 
 			if (!emailRow) {
 				throw new BizError(t('notExistEmailReply'));
@@ -506,9 +507,13 @@ const emailService = {
 			emailData.relation = emailRow.messageId;
 		}
 
-		//如果权限有发送次数增加用户发送次数
+		//如果权限有发送次数增加用户发送次数（条件自增，配额不足时直接拒绝，避免并发超发）
 		if (roleRow.sendCount && roleRow.sendType !== 'internal') {
-			await userService.incrUserSendCount(c, recipients.length, userId);
+			const increased = await userService.incrUserSendCount(c, recipients.length, userId, roleRow.sendCount);
+			if (!increased) {
+				if (roleRow.sendType === 'day') throw new BizError(t('daySendLack'), 403);
+				if (roleRow.sendType === 'count') throw new BizError(t('totalSendLack'), 403);
+			}
 		}
 
 		//保存到数据库并返回结果
@@ -576,9 +581,10 @@ const emailService = {
 		}
 
 		if (params.sendType === 'reply' && params.messageId) {
+			const messageId = sanitizeHeaderValue(params.messageId);
 			sendForm.headers = {
-				'in-reply-to': params.messageId,
-				'references': params.messageId
+				'in-reply-to': messageId,
+				'references': messageId
 			};
 		}
 
@@ -612,9 +618,10 @@ const emailService = {
 		}
 
 		if (params.sendType === 'reply') {
+			const messageId = sanitizeHeaderValue(params.messageId);
 			sendForm.headers = {
-				'in-reply-to': params.messageId,
-				'references': params.messageId
+				'in-reply-to': messageId,
+				'references': messageId
 			};
 		}
 
@@ -894,11 +901,11 @@ const emailService = {
 		return document.toString();
 	},
 
-	selectById(c, emailId) {
-		return orm(c).select().from(email).where(
-			and(eq(email.emailId, emailId),
-				eq(email.isDel, isDel.NORMAL)))
-			.get();
+	selectById(c, emailId, userId) {
+		const conditions = [eq(email.emailId, emailId), eq(email.isDel, isDel.NORMAL)];
+		// 传 userId 时限定本人：回复只能引用自己的邮件，避免跨账号读取
+		if (userId !== undefined) conditions.push(eq(email.userId, userId));
+		return orm(c).select().from(email).where(and(...conditions)).get();
 	},
 
 	async latest(c, params, userId) {
