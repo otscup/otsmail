@@ -22,6 +22,7 @@ import reqUtils from '../utils/req-utils';
 import {oauth} from "../entity/oauth";
 import {passkey} from "../entity/passkey";
 import oauthService from "./oauth-service";
+import mcpService from './mcp-service';
 import settingService from './setting-service';
 import starService from './star-service';
 import r2Service from './r2-service';
@@ -174,11 +175,22 @@ const userService = {
 
 	async physicsDelete(c, params) {
 		let { userIds } = params;
-		userIds = userIds.split(',').map(Number);
+		userIds = String(userIds || '').split(',').map(Number).filter(Number.isInteger);
+		if (!userIds.length) throw new BizError(t('userNotExist'));
+		// 即使是物理删除也必须逐个过管理员保护，避免 user:delete 直接删掉超级管理员。
+		for (const userId of userIds) {
+			await this.assertManageableUser(c, userId);
+		}
 		await starService.removeByUserIds(c, userIds);
 		await accountService.physicsDeleteByUserIds(c, userIds);
 		await oauthService.deleteByUserIds(c, userIds);
+		// 账号已不存在，必须同步清掉 MCP 令牌与 OAuth 客户端，否则它们还能继续用到 30 天有效期末。
+		await mcpService.deleteByUserIds(c, userIds);
 		await orm(c).delete(user).where(inArray(user.userId, userIds)).run();
+		for (const userId of userIds) {
+			await c.env.kv.delete(KvConst.AUTH_INFO + userId);
+			authCache.clear(userId);
+		}
 	},
 
 	async list(c, params) {
@@ -353,10 +365,15 @@ const userService = {
 		authCache.clear(userId);
 	},
 
-	async setType(c, params) {
+	async setType(c, params, callerUserId) {
 
 		const { type, userId } = params;
 		await this.assertManageableUser(c, userId);
+
+		// 不允许把角色改成自己的角色：持有 user:set-type 的委托者不能给自己换更大的角色。
+		if (Number(userId) === Number(callerUserId)) {
+			throw new BizError(t('notAllowed'));
+		}
 
 		const roleRow = await roleService.selectById(c, type);
 
@@ -382,11 +399,14 @@ const userService = {
 		return rows;
 	},
 
-	async setPerms(c, params) {
+	async setPerms(c, params, callerUserId) {
 		const userId = Number(params.userId);
-		const target = await orm(c).select({ type: user.type }).from(user).where(eq(user.userId, userId)).get();
+		// 不允许给自己改权限：否则持有 user:set-type 的委托者可自我提权。
+		if (userId === Number(callerUserId)) throw new BizError(t('notAllowed'));
+		const target = await orm(c).select({ type: user.type, email: user.email }).from(user).where(eq(user.userId, userId)).get();
 		if (!target) throw new BizError(t('userNotExist'));
-		if (target.type === 0) throw new BizError(t('notAllowed'));
+		// 与 assertManageableUser 对齐：管理员不仅 type=0 不可改，邮箱命中 env.admin 的也不可改。
+		if (Number(target.type) === 0 || target.email === c.env.admin) throw new BizError(t('notAllowed'));
 		const incoming = Array.isArray(params.overrides) ? params.overrides : [];
 		const permIds = [...new Set(incoming.map(item => Number(item.permId)).filter(Boolean))];
 		const valid = permIds.length ? await orm(c).select({ permId: perm.permId }).from(perm)
@@ -399,12 +419,16 @@ const userService = {
 		if (rows.length) await orm(c).insert(userPerm).values(rows).run();
 	},
 
-	async incrUserSendCount(c, quantity, userId) {
-		await orm(c).update(user).set({
-			sendCount: sql`${user.sendCount}
-	  +
-	  ${quantity}`
-		}).where(eq(user.userId, userId)).run();
+	// limit 不为空时做条件自增：把配额判断和写入放进同一条 UPDATE，避免先查后加的并发超发
+	async incrUserSendCount(c, quantity, userId, limit = 0) {
+		const conditions = [eq(user.userId, userId)];
+		if (limit) {
+			conditions.push(sql`COALESCE(${user.sendCount}, 0) + ${quantity} <= ${limit}`);
+		}
+		const result = await orm(c).update(user).set({
+			sendCount: sql`COALESCE(${user.sendCount}, 0) + ${quantity}`
+		}).where(and(...conditions)).run();
+		return !limit || (result?.meta?.changes || 0) > 0;
 	},
 
 	async updateAllUserType(c, type, curType) {

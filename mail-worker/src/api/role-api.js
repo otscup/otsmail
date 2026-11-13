@@ -10,12 +10,12 @@ app.post('/role/add', async (c) => {
 });
 
 app.put('/role/setDefault', async (c) => {
-	await roleService.setDefault(c, await c.req.json());
+	await roleService.setDefault(c, await c.req.json(), userContext.getUserId(c));
 	return c.json(result.ok());
 });
 
 app.put('/role/set', async (c) => {
-	await roleService.setRole(c, await c.req.json());
+	await roleService.setRole(c, await c.req.json(), userContext.getUserId(c));
 	return c.json(result.ok());
 });
 

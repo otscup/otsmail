@@ -1,7 +1,7 @@
 import orm from '../entity/orm';
 import mcpToken from '../entity/mcp-token';
 import mcpClient from '../entity/mcp-client';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import BizError from '../error/biz-error';
 import cryptoUtils from '../utils/crypto-utils';
 
@@ -63,6 +63,13 @@ const mcpService = {
 			.orderBy(desc(mcpToken.tokenId))
 			.all();
 		return rows.map(publicToken);
+	},
+
+	// 账号被物理删除时同步清理其 MCP 令牌与 OAuth 客户端，避免令牌在有效期内继续可用。
+	async deleteByUserIds(c, userIds) {
+		if (!userIds?.length) return;
+		await orm(c).delete(mcpToken).where(inArray(mcpToken.userId, userIds)).run();
+		await orm(c).delete(mcpClient).where(inArray(mcpClient.userId, userIds)).run();
 	},
 
 	async deleteToken(c, params, userId) {

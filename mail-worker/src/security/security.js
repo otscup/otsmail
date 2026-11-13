@@ -112,7 +112,7 @@ const premKey = {
 	'all-email:delete': ['/allEmail/delete','/allEmail/batchDelete'],
 	'setting:query': ['/setting/query'],
 	'setting:set': ['/setting/set', '/setting/setBackground','/setting/deleteBackground','/setting/setBlacklist','/setting/webhookTest','/setting/tgWebhook','/setting/aiModels'],
-	'analysis:query': ['/analysis/echarts', '/analysis/usage', '/analysis/cloudflare'],
+	'analysis:query': ['/analysis/echarts', '/analysis/usage', '/analysis/cloudflare', '/analysis/insight'],
 	'reg-key:add': ['/regKey/add'],
 	'reg-key:query': ['/regKey/list','/regKey/history'],
 	'reg-key:delete': ['/regKey/delete','/regKey/clearNotUse'],
@@ -140,7 +140,12 @@ app.use('*', async (c, next) => {
 
 		const userPublicToken = await c.env.kv.get(KvConst.PUBLIC_KEY);
 		const publicToken = c.req.header(constant.TOKEN_HEADER);
-		if (!constantTimeEqual(publicToken || '', userPublicToken || '')) {
+		// KV 里没有公共 token（从未签发 / 30 天过期 / 被删）时必须直接拒绝：
+		// 否则 null 与缺失请求头都会被归一成空串，constantTimeEqual('', '') 会放行所有请求。
+		if (!userPublicToken) {
+			throw new BizError(t('publicTokenFail'), 401);
+		}
+		if (!constantTimeEqual(publicToken || '', userPublicToken)) {
 			throw new BizError(t('publicTokenFail'), 401);
 		}
 		return await next();
@@ -156,7 +161,9 @@ app.use('*', async (c, next) => {
 	if (mcpAuth) {
 		const mcpOn = c.env.mcp_switch === true || String(c.env.mcp_switch).toLowerCase() === 'true';
 		if (!mcpOn) throw new BizError('MCP is disabled', 401);
-		if (!pathMatches(path, '/mcp')) throw new BizError('MCP token only valid for /mcp', 403);
+		// 只允许 mcp_ 令牌访问 MCP 端点本身（POST/GET/DELETE /mcp）：
+		// 前缀匹配会让令牌顺带访问 /mcp/token/*、/mcp/client/*，从而自我复制或改绑定。
+		if (path !== '/mcp' && path !== '/mcp/') throw new BizError('MCP token only valid for /mcp', 403);
 	}
 
 	const result = mcpAuth ? { userId: mcpAuth.userId, token: null, viaMcp: true } : await jwtUtils.verifyToken(c, jwt);

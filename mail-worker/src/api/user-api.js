@@ -20,7 +20,7 @@ app.put('/user/setStatus', async (c) => {
 });
 
 app.put('/user/setType', async (c) => {
-	await userService.setType(c, await c.req.json());
+	await userService.setType(c, await c.req.json(), userContext.getUserId(c));
 	return c.json(result.ok());
 });
 
@@ -29,7 +29,7 @@ app.get('/user/permList', async (c) => {
 });
 
 app.put('/user/permSet', async (c) => {
-	await userService.setPerms(c, await c.req.json());
+	await userService.setPerms(c, await c.req.json(), userContext.getUserId(c));
 	return c.json(result.ok());
 });
 
@@ -59,6 +59,11 @@ app.get('/user/allAccount', async (c) => {
 });
 
 app.delete('/user/deleteAccount', async (c) => {
+	// 先解析邮箱账号归属，再走与用户删除相同的管理员保护，避免直接删掉管理员的收件账号。
+	const account = await accountService.selectById(c, c.req.query('accountId'));
+	if (account) {
+		await userService.assertManageableUser(c, account.userId);
+	}
 	await accountService.physicsDelete(c, c.req.query());
 	return c.json(result.ok());
 });

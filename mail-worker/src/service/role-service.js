@@ -13,6 +13,24 @@ import emailUtils from '../utils/email-utils';
 
 const roleService = {
 
+	// 超级管理员判定：D1 里 type=0，或邮箱命中 env.admin（type=0 从不写库，只能靠邮箱兜底）
+	async isAdmin(c, userId) {
+		const caller = await userService.selectById(c, userId);
+		return !!caller && (Number(caller.type) === 0 || caller.email === c.env.admin);
+	},
+
+	// permIds 必须存在且是 BUTTON 权限，避免把任意 id 塞进 role_perm
+	async validPermIds(c, permIds) {
+		const ids = [...new Set((Array.isArray(permIds) ? permIds : []).map(Number).filter(Number.isInteger))];
+		if (!ids.length) return [];
+		const rows = await orm(c).select({ permId: perm.permId }).from(perm)
+			.where(and(inArray(perm.permId, ids), eq(perm.type, permConst.type.BUTTON))).all();
+		if (rows.length !== ids.length) {
+			throw new BizError(t('notAllowed'));
+		}
+		return ids;
+	},
+
 	async add(c, params, userId) {
 
 		let { name, permIds, banEmail, availDomain } = params;
@@ -20,6 +38,9 @@ const roleService = {
 		if (!name) {
 			throw new BizError(t('emptyRoleName'));
 		}
+
+		banEmail = Array.isArray(banEmail) ? banEmail : [];
+		availDomain = Array.isArray(availDomain) ? availDomain : [];
 
 		let roleRow = await orm(c).select().from(role).where(eq(role.name, name)).get();
 
@@ -33,7 +54,23 @@ const roleService = {
 
 		availDomain = availDomain.join(',');
 
-		roleRow = await orm(c).insert(role).values({...params, banEmail, availDomain, userId}).returning().get();
+		permIds = await this.validPermIds(c, permIds);
+
+		// 只接受白名单字段，isDefault 一律为 0：默认角色只能通过 setDefault 指定。
+		roleRow = await orm(c).insert(role).values({
+			name,
+			key: params.key,
+			description: params.description,
+			banEmailType: params.banEmailType,
+			sort: params.sort,
+			sendType: params.sendType,
+			sendCount: params.sendCount,
+			accountCount: params.accountCount,
+			banEmail,
+			availDomain,
+			isDefault: 0,
+			userId
+		}).returning().get();
 
 		if (permIds.length === 0) {
 			return;
@@ -62,7 +99,7 @@ const roleService = {
 		return roleList;
 	},
 
-	async setRole(c, params) {
+	async setRole(c, params, callerUserId) {
 
 		let { name, permIds, roleId, banEmail, availDomain } = params;
 
@@ -70,7 +107,21 @@ const roleService = {
 			throw new BizError(t('emptyRoleName'));
 		}
 
-		delete params.isDefault
+		const roleRow = await orm(c).select().from(role).where(eq(role.roleId, roleId)).get();
+		if (!roleRow) {
+			throw new BizError(t('roleNotExist'));
+		}
+
+		// 非超级管理员不能改默认角色，也不能改自己所属的角色（否则可自我加权限）。
+		if (!await this.isAdmin(c, callerUserId)) {
+			const caller = await userService.selectById(c, callerUserId);
+			if (Number(roleRow.roleId) === Number(caller?.type) || Number(roleRow.isDefault) === 1) {
+				throw new BizError(t('notAllowed'));
+			}
+		}
+
+		banEmail = Array.isArray(banEmail) ? banEmail : [];
+		availDomain = Array.isArray(availDomain) ? availDomain : [];
 
 		const notEmailIndex = banEmail.findIndex(item => (!verifyUtils.isEmail(item) && !verifyUtils.isDomain(item)) && item !== "*")
 
@@ -82,7 +133,19 @@ const roleService = {
 
 		availDomain = availDomain.join(',')
 
-		await orm(c).update(role).set({...params, banEmail, availDomain}).where(eq(role.roleId, roleId)).run();
+		permIds = await this.validPermIds(c, permIds);
+
+		await orm(c).update(role).set({
+			name,
+			description: params.description,
+			banEmailType: params.banEmailType,
+			sort: params.sort,
+			sendType: params.sendType,
+			sendCount: params.sendCount,
+			accountCount: params.accountCount,
+			banEmail,
+			availDomain
+		}).where(eq(role.roleId, roleId)).run();
 		await orm(c).delete(rolePerm).where(eq(rolePerm.roleId, roleId)).run();
 
 		if (permIds.length > 0) {
@@ -123,7 +186,11 @@ const roleService = {
 		return await orm(c).select().from(role).where(eq(role.isDefault, roleConst.isDefault.OPEN)).get();
 	},
 
-	async setDefault(c, params) {
+	async setDefault(c, params, callerUserId) {
+		// 默认角色决定新用户的初始权限，只允许超级管理员切换。
+		if (!await this.isAdmin(c, callerUserId)) {
+			throw new BizError(t('notAllowed'));
+		}
 		const roleRow = await orm(c).select().from(role).where(eq(role.roleId, params.roleId)).get();
 		if (!roleRow) {
 			throw new BizError(t('roleNotExist'));
