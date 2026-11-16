@@ -27,6 +27,8 @@ import settingService from './setting-service';
 import starService from './star-service';
 import r2Service from './r2-service';
 import totpUtils from '../utils/totp-utils';
+import backupCodeService from './backup-code-service';
+import twoFactorService from './two-factor-service';
 import fileUtils from '../utils/file-utils';
 import domainUtils from '../utils/domain-uitls';
 import attService from './att-service';
@@ -78,7 +80,7 @@ const userService = {
 	// 管理员 setPwd 走 skipVerify=true，但仍由 setPwd 再删一次 KV。
 	async resetPassword(c, params, userId, skipVerify = false) {
 
-		const { password, oldPassword, twoFactorCode } = params;
+		const { password, oldPassword, twoFactorCode, backupCode } = params;
 
 		if (!password || password.length < 6) {
 			throw new BizError(t('pwdMinLength'));
@@ -94,8 +96,10 @@ const userService = {
 				throw new BizError(t('IncorrectPwd'));
 			}
 			if (userRow.twoFactorSwitch === 1 || userRow.twoFactorRequired === 1) {
-				if (!twoFactorCode) throw new BizError(t('needTwoFactorCode'), 428);
-				if (!await totpUtils.verify(userRow.twoFactorSecret, twoFactorCode)) {
+				const code = String(twoFactorCode || backupCode || '').trim();
+				if (!code) throw new BizError(t('needTwoFactorCode'), 428);
+				// 改密属于敏感操作，允许备用码替代 TOTP（验证器丢失时仍能改密）
+				if (!await twoFactorService.verifyLoginFactor(c, userRow, code)) {
 					throw new BizError(t('twoFactorCodeInvalid'), 428);
 				}
 			}
@@ -605,7 +609,11 @@ const userService = {
 
 	async twoFactorStatus(c, userId) {
 		const userRow = await this.selectById(c, userId);
-		return { enabled: userRow?.twoFactorSwitch === 1, required: userRow?.twoFactorRequired === 1 };
+		return {
+			enabled: userRow?.twoFactorSwitch === 1,
+			required: userRow?.twoFactorRequired === 1,
+			backupCode: await backupCodeService.meta(c, userId)
+		};
 	},
 
 	// 密码登录是否强制两步验证；没开 2FA 时不允许打开，避免把自己锁在门外
@@ -640,19 +648,48 @@ const userService = {
 			throw new BizError(t('twoFactorCodeInvalid'));
 		}
 		await orm(c).update(user).set({ twoFactorSwitch: 1 }).where(eq(user.userId, userId)).run();
+		// 首次开启自动发一批备用码：用户拿到验证器的当下就能把恢复码存好
+		const meta = await backupCodeService.meta(c, userId);
+		const backupCodes = meta.total === 0 ? await backupCodeService.generate(c, userId) : [];
+		await twoFactorService.audit(c, userId, 'enable');
+		return { backupCodes };
 	},
 
-	// 关闭 2FA 只认验证码；登录密码不能替代，否则改密即可绕过 2FA。
+	// 关闭 2FA：密码 / TOTP / 备用码任一即可（丢了验证器也能靠备用码救回来）
 	async twoFactorDisable(c, params, userId) {
 		const userRow = await this.selectById(c, userId);
 		if (userRow.twoFactorSwitch !== 1) {
 			return;
 		}
-		if (!await totpUtils.verify(userRow.twoFactorSecret, params.code)) {
-			throw new BizError(t('twoFactorCodeInvalid'));
+		await twoFactorService.disable(c, userRow, params);
+	},
+
+	// 生成/重新生成备用码：必须再验证密码或当前 TOTP，不接受备用码本身
+	async twoFactorGenerateBackupCodes(c, params, userId) {
+		const userRow = await this.selectById(c, userId);
+		if (userRow?.twoFactorSwitch !== 1) {
+			throw new BizError(t('twoFactorNotOpen'), 400);
 		}
-		await orm(c).update(user).set({ twoFactorSwitch: 0, twoFactorSecret: '', twoFactorRequired: 0 })
-			.where(eq(user.userId, userId)).run();
+		await twoFactorService.reauth(c, userRow, params, { allowBackupCode: false });
+		const codes = await backupCodeService.generate(c, userId);
+		await twoFactorService.audit(c, userId, 'backup_code_generate');
+		return { codes };
+	},
+
+	async twoFactorBackupCodeMeta(c, userId) {
+		return backupCodeService.meta(c, userId);
+	},
+
+	async twoFactorRebindStart(c, params, userId) {
+		const userRow = await this.selectById(c, userId);
+		if (!userRow) throw new BizError(t('authExpired'), 401);
+		return twoFactorService.startRebind(c, userRow, params);
+	},
+
+	async twoFactorRebindConfirm(c, params, userId) {
+		const userRow = await this.selectById(c, userId);
+		if (!userRow) throw new BizError(t('authExpired'), 401);
+		return twoFactorService.confirmRebind(c, userRow, params);
 	},
 
 	listByRegKeyId(c, regKeyId) {

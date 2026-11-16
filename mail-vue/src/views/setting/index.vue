@@ -44,7 +44,7 @@
       <div class="item">
         <div>{{$t('password')}}</div>
         <div>
-          <el-button type="primary" @click="pwdShow = true">{{$t('changePwdBtn')}}</el-button>
+          <el-button type="primary" @click="openPwdDialog">{{$t('changePwdBtn')}}</el-button>
         </div>
       </div>
       <div class="item wide">
@@ -67,6 +67,13 @@
         <div class="row-flex">
           <span>{{ twoFactorEnabled ? $t('enabled') : $t('disabled') }}</span>
           <el-button type="primary" @click="openTwoFactor">{{ twoFactorEnabled ? $t('disable') : $t('enable') }}</el-button>
+        </div>
+      </div>
+      <div class="item wide" v-if="twoFactorEnabled">
+        <div>{{$t('backupCodes')}}</div>
+        <div class="row-flex">
+          <span>{{ $t('backupCodesRemaining', { remaining: backupCodeMeta.remaining, total: backupCodeMeta.total }) }}</span>
+          <el-button type="primary" @click="openBackupCodes">{{$t('manageBackupCodes')}}</el-button>
         </div>
       </div>
       <div class="item wide">
@@ -222,7 +229,14 @@
         <el-input type="password" :placeholder="$t('oldPassword')" v-model="form.oldPassword" autocomplete="current-password" @keyup.enter="submitPwd"/>
         <el-input type="password" :placeholder="$t('newPassword')" v-model="form.password" autocomplete="new-password" @keyup.enter="submitPwd"/>
         <el-input type="password" :placeholder="$t('confirmPassword')" v-model="form.newPwd" autocomplete="new-password" @keyup.enter="submitPwd"/>
-        <el-input v-if="twoFactorEnabled || twoFactorRequired" v-model="form.twoFactorCode" maxlength="6" :placeholder="$t('verifyCode')" @keyup.enter="submitPwd"/>
+        <template v-if="twoFactorEnabled || twoFactorRequired">
+          <el-input v-model="form.twoFactorCode" :maxlength="pwdBackupMode ? 11 : 6"
+                    :placeholder="pwdBackupMode ? $t('backupCodePlaceholder') : $t('verifyCode')"
+                    :inputmode="pwdBackupMode ? 'text' : 'numeric'" @keyup.enter="submitPwd"/>
+          <span class="edit-name" @click="pwdBackupMode = !pwdBackupMode">
+            {{ pwdBackupMode ? $t('useAuthenticatorCode') : $t('useBackupCode') }}
+          </span>
+        </template>
         <div class="actions">
           <el-button @click="pwdShow = false">{{$t('cancel')}}</el-button>
           <el-button type="primary" :loading="setPwdLoading" @click="submitPwd">{{$t('save')}}</el-button>
@@ -279,12 +293,41 @@
         </template>
         <template v-else>
           <span class="row-desc">{{$t('twoFactorDisableDesc')}}</span>
-          <el-input v-model="twoFactorCode" maxlength="6" :placeholder="$t('verifyCode')" @keyup.enter="disableTwoFactor"/>
+          <el-input v-model="twoFactorCode" :maxlength="twoFactorBackupMode ? 11 : 6"
+                    :placeholder="twoFactorBackupMode ? $t('backupCodePlaceholder') : $t('verifyCode')"
+                    :inputmode="twoFactorBackupMode ? 'text' : 'numeric'" @keyup.enter="disableTwoFactor"/>
+          <span class="edit-name" @click="twoFactorBackupMode = !twoFactorBackupMode">
+            {{ twoFactorBackupMode ? $t('useAuthenticatorCode') : $t('useBackupCode') }}
+          </span>
           <div class="actions">
             <el-button @click="twoFactorShow = false">{{$t('cancel')}}</el-button>
             <el-button type="primary" :loading="twoFactorLoading" @click="disableTwoFactor">{{$t('disable')}}</el-button>
           </div>
         </template>
+      </div>
+    </el-dialog>
+    <el-dialog v-model="backupShow" :title="$t('backupCodes')" width="440" append-to-body>
+      <div class="form-col">
+        <span class="row-desc">{{$t('backupCodesDesc')}}</span>
+        <template v-if="backupCodes.length === 0">
+          <el-input v-model="backupPassword" type="password" :placeholder="$t('backupReauthPassword')" autocomplete="current-password"/>
+          <el-input v-model="backupCodeInput" maxlength="6" :placeholder="$t('backupReauthCode')" inputmode="numeric"/>
+          <div class="row-desc">{{$t('backupReauthHint')}}</div>
+        </template>
+        <template v-else>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;font-family:ui-monospace,Menlo,Consolas,monospace;">
+            <span v-for="code in backupCodes" :key="code" class="secret-value">{{ code }}</span>
+          </div>
+          <div class="row-desc">{{$t('backupCodesOnce')}}</div>
+          <div class="row-flex">
+            <el-button @click="copyBackupCodes">{{$t('copy')}}</el-button>
+            <el-button @click="downloadBackupCodes">{{$t('downloadBackupCodes')}}</el-button>
+          </div>
+        </template>
+        <div class="actions">
+          <el-button @click="backupShow = false">{{$t('cancel')}}</el-button>
+          <el-button v-if="backupCodes.length === 0" type="primary" :loading="backupLoading" @click="generateBackupCodes">{{$t('generateBackupCodes')}}</el-button>
+        </div>
       </div>
     </el-dialog>
   </div>
@@ -300,6 +343,8 @@ import {
   twoFactorSetup,
   twoFactorEnable,
   twoFactorDisable,
+  twoFactorBackupCodeMeta,
+  generateTwoFactorBackupCodes,
   setTwoFactorRequired
 } from "@/request/my.js";
 import {useUserStore} from "@/store/user.js";
@@ -418,6 +463,7 @@ async function kickDevice(item) {
 }
 onMounted(loadSessions)
 onMounted(loadPasskeys)
+onMounted(loadBackupCodeMeta)
 
 // 回调必须落在登录页，登录页才能拿 code；老配置里填站点根的要纠正
 function oidcCallback(url) {
@@ -734,8 +780,25 @@ function submitPwd() {
     return
   }
 
+  if (twoFactorEnabled.value || twoFactorRequired.value) {
+    const code = String(form.twoFactorCode || '').trim()
+    if (!pwdBackupMode.value && !/^\d{6}$/.test(code)) {
+      ElMessage({message: t('verifyCodeInvalid'), type: 'error', plain: true})
+      return
+    }
+    if (pwdBackupMode.value && !code) {
+      ElMessage({message: t('backupCodePlaceholder'), type: 'error', plain: true})
+      return
+    }
+  }
+
   setPwdLoading.value = true
-  resetPassword(form.oldPassword, form.password, form.twoFactorCode).then(() => {
+  resetPassword(
+      form.oldPassword,
+      form.password,
+      pwdBackupMode.value ? '' : form.twoFactorCode,
+      pwdBackupMode.value ? form.twoFactorCode : ''
+  ).then(() => {
     ElMessage({
       message: t('saveSuccessMsg'),
       type: 'success',
@@ -876,11 +939,82 @@ const twoFactorSecret = ref('')
 const twoFactorUrl = ref('')
 const twoFactorCode = ref('')
 const twoFactorLoading = ref(false)
+const twoFactorBackupMode = ref(false)
+const pwdBackupMode = ref(false)
+
+// ---- 备用码 ----
+const backupShow = ref(false)
+const backupCodes = ref([])
+const backupPassword = ref('')
+const backupCodeInput = ref('')
+const backupLoading = ref(false)
+const backupCodeMeta = ref({ total: 0, remaining: 0, generatedAt: null, lastUsedAt: null })
+
+function openPwdDialog() {
+  pwdBackupMode.value = false
+  form.twoFactorCode = ''
+  pwdShow.value = true
+}
+
+async function loadBackupCodeMeta() {
+  try {
+    backupCodeMeta.value = await twoFactorBackupCodeMeta()
+  } catch (e) {}
+}
+
+function openBackupCodes() {
+  backupCodes.value = []
+  backupPassword.value = ''
+  backupCodeInput.value = ''
+  backupShow.value = true
+  loadBackupCodeMeta()
+}
+
+async function generateBackupCodes() {
+  if (backupLoading.value) return
+  if (!backupPassword.value && !/^\d{6}$/.test(backupCodeInput.value)) {
+    ElMessage({message: t('backupReauthHint'), type: 'error', plain: true})
+    return
+  }
+  backupLoading.value = true
+  try {
+    const res = await generateTwoFactorBackupCodes({
+      password: backupPassword.value,
+      twoFactorCode: backupCodeInput.value
+    })
+    backupCodes.value = res?.codes || []
+    backupPassword.value = ''
+    backupCodeInput.value = ''
+    await loadBackupCodeMeta()
+    ElMessage({message: t('saveSuccessMsg'), type: 'success', plain: true})
+  } catch (e) {} finally {
+    backupLoading.value = false
+  }
+}
+
+function copyBackupCodes() {
+  if (backupCodes.value.length === 0) return
+  navigator.clipboard.writeText(backupCodes.value.join('\n')).then(() => {
+    ElMessage({message: t('copySuccessMsg'), type: 'success', plain: true})
+  }).catch(() => {})
+}
+
+function downloadBackupCodes() {
+  if (backupCodes.value.length === 0) return
+  const content = `otsmail 备用码\n生成时间：${new Date().toISOString()}\n每个备用码只能使用一次\n\n${backupCodes.value.join('\n')}\n`
+  const url = URL.createObjectURL(new Blob([content], {type: 'text/plain;charset=utf-8'}))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'otsmail-backup-codes.txt'
+  link.click()
+  URL.revokeObjectURL(url)
+}
 
 function openTwoFactor() {
   twoFactorCode.value = ''
   twoFactorSecret.value = ''
   twoFactorUrl.value = ''
+  twoFactorBackupMode.value = false
   twoFactorShow.value = true
   if (twoFactorEnabled.value) return
   twoFactorSetup().then(res => {
@@ -902,22 +1036,35 @@ function checkCode() {
 function confirmTwoFactor() {
   if (!checkCode() || twoFactorLoading.value) return
   twoFactorLoading.value = true
-  twoFactorEnable(twoFactorCode.value).then(() => {
+  twoFactorEnable(twoFactorCode.value).then(res => {
     ElMessage({message: t('saveSuccessMsg'), type: 'success', plain: true})
     userStore.refreshUserInfo()
     twoFactorShow.value = false
+    // 首次开启时服务端会顺手发一批备用码，只在这里显示一次
+    if (res?.backupCodes?.length) {
+      backupCodes.value = res.backupCodes
+      backupShow.value = true
+      loadBackupCodeMeta()
+    }
   }).catch(() => {}).finally(() => {
     twoFactorLoading.value = false
   })
 }
 
 function disableTwoFactor() {
-  if (!checkCode() || twoFactorLoading.value) return
+  if (twoFactorLoading.value) return
+  if (!twoFactorBackupMode.value && !checkCode()) return
+  if (twoFactorBackupMode.value && !twoFactorCode.value.trim()) {
+    ElMessage({message: t('backupCodePlaceholder'), type: 'error', plain: true})
+    return
+  }
   twoFactorLoading.value = true
-  twoFactorDisable({code: twoFactorCode.value}).then(() => {
+  const payload = twoFactorBackupMode.value ? {backupCode: twoFactorCode.value} : {code: twoFactorCode.value}
+  twoFactorDisable(payload).then(() => {
     ElMessage({message: t('saveSuccessMsg'), type: 'success', plain: true})
     userStore.refreshUserInfo()
     twoFactorShow.value = false
+    loadBackupCodeMeta()
   }).catch(() => {}).finally(() => {
     twoFactorLoading.value = false
   })
@@ -1302,6 +1449,75 @@ async function toggleNotify(value) {
     &.is-focus {
       border-color: var(--el-color-primary, #409eff) !important;
     }
+  }
+}
+
+/* ---- 手机端适配 ---- */
+@media (max-width: 767px) {
+  .box {
+    padding: 12px 12px 28px;
+  }
+
+  .box .container {
+    display: flex !important;
+    flex-direction: column;
+    gap: 0;
+    padding: 14px !important;
+    border-radius: 14px;
+    margin-bottom: 14px !important;
+  }
+
+  /* 行宽占满卡片；标签与操作区按内容分配，避免固定列把按钮挤出可视区 */
+  /* 第三方绑定：按钮完整显示，长账号可换行 */
+  .box .container .item.oauth-item {
+    .provider-label {
+      min-width: 0;
+
+      span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    .binding-actions {
+      justify-content: flex-end !important;
+      flex-wrap: wrap;
+      overflow: visible !important;
+      white-space: normal !important;
+
+      .el-button {
+        margin-left: 0 !important;
+      }
+    }
+
+    .bound-account {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  .row-flex {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .signature-editor {
+    width: 100%;
+
+    .el-button {
+      width: 100%;
+      margin-top: 8px;
+    }
+  }
+
+  .device-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .language .language-select {
+    width: 100% !important;
   }
 }
 </style>

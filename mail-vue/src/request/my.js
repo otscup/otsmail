@@ -4,8 +4,8 @@ export function loginUserInfo() {
     return http.get('/my/loginUserInfo')
 }
 
-export function resetPassword(oldPassword, password, twoFactorCode) {
-    return http.put('/my/resetPassword', {oldPassword, password, twoFactorCode})
+export function resetPassword(oldPassword, password, twoFactorCode, backupCode) {
+    return http.put('/my/resetPassword', {oldPassword, password, twoFactorCode, backupCode})
 }
 
 export function userDelete() {
@@ -34,6 +34,22 @@ export function twoFactorEnable(code) {
 
 export function twoFactorDisable(data) {
     return http.post('/my/2fa/disable', data)
+}
+
+export function twoFactorBackupCodeMeta() {
+    return http.get('/my/2fa/backup-codes')
+}
+
+export function generateTwoFactorBackupCodes(data) {
+    return http.post('/my/2fa/backup-codes', data)
+}
+
+export function twoFactorRebindStart(data) {
+    return http.post('/my/2fa/rebind/start', data)
+}
+
+export function twoFactorRebindConfirm(data) {
+    return http.post('/my/2fa/rebind/confirm', data)
 }
 
 export function setTwoFactorRequired(required) {

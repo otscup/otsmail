@@ -19,8 +19,8 @@ import dayjs from 'dayjs';
 import { toUtc } from '../utils/date-uitil';
 import { t } from '../i18n/i18n.js';
 import verifyRecordService from './verify-record-service';
-import totpUtils from '../utils/totp-utils';
 import authCache from './auth-cache';
+import twoFactorService from './two-factor-service';
 import sessionService, { rowToMeta } from './session-service';
 import loginGuard from './login-guard';
 import reqUtils from '../utils/req-utils';
@@ -247,39 +247,51 @@ const loginService = {
 
 	async login(c, params, noVerifyPwd = false) {
 
-		const { email, password, twoFactorCode } = params;
+		const { email, password, twoFactorCode, turnstileToken } = params;
+
+		// 网页密码登录会显式带上 turnstileToken（未完成时为空串），必须真实校验。
+		// App 的旧版请求没有此字段，保持原登录流程；OAuth、Passkey、扫码也不经过这里。
+		if (!noVerifyPwd && Object.prototype.hasOwnProperty.call(params, 'turnstileToken')) {
+			try {
+				await turnstileService.verify(c, turnstileToken);
+			} catch (error) {
+				error.errorCode = 'LOGIN_TURNSTILE';
+				throw error;
+			}
+		}
 
 		if ((!email || !password) && !noVerifyPwd) {
-			throw new BizError(t('emailAndPwdEmpty'));
+			throw new BizError(t('emailAndPwdEmpty'), null, 'LOGIN_CREDENTIALS');
 		}
 
 		if (!noVerifyPwd && await loginGuard.lockRemaining(c, email)) {
-			throw new BizError(t('loginLocked'), 429);
+			throw new BizError(t('loginLocked'), 429, 'LOGIN_RATE_LIMITED');
 		}
 
 		const userRow = await userService.selectByEmailIncludeDel(c, email);
 
 		if (!userRow) {
-			throw new BizError(t('notExistUser'));
+			// 与密码错误共用同一个错误码：文案一致，避免通过提示差异探测邮箱是否注册
+			throw new BizError(t('notExistUser'), null, 'LOGIN_CREDENTIALS');
 		}
 
 		if(userRow.isDel === isDel.DELETE) {
-			throw new BizError(t('isDelUser'));
+			throw new BizError(t('isDelUser'), null, 'LOGIN_ACCOUNT_UNAVAILABLE');
 		}
 
 		if(userRow.status === userConst.status.BAN) {
-			throw new BizError(t('isBanUser'));
+			throw new BizError(t('isBanUser'), null, 'LOGIN_ACCOUNT_UNAVAILABLE');
 		}
 
 		if (!noVerifyPwd && userRow.disablePasswordLogin === 1) {
-			throw new BizError('该账号已关闭密码登录，请使用第三方授权或备用方式登录', 403);
+			throw new BizError('该账号已关闭密码登录，请使用第三方授权或备用方式登录', 403, 'LOGIN_PASSWORD_DISABLED');
 		}
 
 		if (!await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password) && !noVerifyPwd) {
 			if (await loginGuard.recordFailure(c, email)) {
-				throw new BizError(t('loginLocked'), 429);
+				throw new BizError(t('loginLocked'), 429, 'LOGIN_RATE_LIMITED');
 			}
-			throw new BizError(t('IncorrectPwd'));
+			throw new BizError(t('IncorrectPwd'), null, 'LOGIN_CREDENTIALS');
 		}
 
 		// 口令哈希平滑升级：旧库里的单轮 SHA-256 在本次登录成功后就地换成
@@ -294,16 +306,18 @@ const loginService = {
 		}
 
 		// 两步验证：密码通过后还要一次性验证码；twoFactorRequired 让密码登录强制走验证码。
+		// 先按 TOTP 校验，不匹配再试一次性备用码；两种都失败才计入登录锁定。
 		// 缺码/错码都回 428，前端据此弹输入框重提；OAuth 登录（noVerifyPwd）不走这里。
 		if (!noVerifyPwd && (userRow.twoFactorSwitch === 1 || userRow.twoFactorRequired === 1)) {
-			if (!twoFactorCode) {
-				throw new BizError(t('needTwoFactorCode'), 428);
+			const code = String(twoFactorCode || params?.backupCode || '').trim();
+			if (!code) {
+				throw new BizError(t('needTwoFactorCode'), 428, 'LOGIN_2FA_REQUIRED');
 			}
-			if (!await totpUtils.verify(userRow.twoFactorSecret, twoFactorCode)) {
+			if (!await twoFactorService.verifyLoginFactor(c, userRow, code)) {
 				if (await loginGuard.recordFailure(c, email)) {
-					throw new BizError(t('loginLocked'), 429);
+					throw new BizError(t('loginLocked'), 429, 'LOGIN_RATE_LIMITED');
 				}
-				throw new BizError(t('twoFactorCodeInvalid'), 428);
+				throw new BizError(t('twoFactorCodeInvalid'), 428, 'LOGIN_2FA_INVALID');
 			}
 		}
 
@@ -318,6 +332,17 @@ const loginService = {
 		let authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userRow.userId, { type: 'json' });
 		// 本次登录会淘汰同设备旧会话 / 超上限会话，双写时要把这些行从 D1 一并删掉
 		const previousTokens = Array.isArray(authInfo?.tokens) ? [...authInfo.tokens] : [];
+
+		// AUTH_INFO 是会话缓存，不能顺手把口令哈希/盐/两步验证密钥写进去
+		const stripSecrets = row => {
+			if (!row) return row;
+			delete row.password;
+			delete row.salt;
+			delete row.twoFactorSecret;
+			delete row.twoFactorPendingSecret;
+			return row;
+		};
+		stripSecrets(authInfo?.user);
 
 		const ua = reqUtils.getUserAgent(c);
 		const sessionMeta = {
@@ -359,7 +384,7 @@ const loginService = {
 
 			authInfo = {
 				tokens: [],
-				user: userRow,
+				user: stripSecrets({ ...userRow }),
 				refreshTime: dayjs().toISOString()
 			};
 

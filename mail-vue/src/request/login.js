@@ -1,7 +1,8 @@
 import http from '@/axios/index.js';
 
-export function login(email, password, twoFactorCode) {
-    return http.post('/login', {email, password, twoFactorCode})
+export function login(email, password, twoFactorCode, backupCode, turnstileToken) {
+    // 失败文案由登录页统一映射（见 utils/login-error.js），这里不让拦截器直接弹服务端原文
+    return http.post('/login', {email, password, twoFactorCode, backupCode, turnstileToken}, {noMsg: true})
 }
 
 export function logout() {

@@ -58,8 +58,27 @@ app.post('/my/2fa/setup', async (c) => {
 });
 
 app.post('/my/2fa/enable', async (c) => {
-	await userService.twoFactorEnable(c, await c.req.json(), userContext.getUserId(c));
-	return c.json(result.ok());
+	const data = await userService.twoFactorEnable(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok(data));
+});
+
+app.get('/my/2fa/backup-codes', async (c) => {
+	return c.json(result.ok(await userService.twoFactorBackupCodeMeta(c, userContext.getUserId(c))));
+});
+
+app.post('/my/2fa/backup-codes', async (c) => {
+	const data = await userService.twoFactorGenerateBackupCodes(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok(data));
+});
+
+app.post('/my/2fa/rebind/start', async (c) => {
+	const data = await userService.twoFactorRebindStart(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok(data));
+});
+
+app.post('/my/2fa/rebind/confirm', async (c) => {
+	const data = await userService.twoFactorRebindConfirm(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok(data));
 });
 
 app.post('/my/2fa/disable', async (c) => {

@@ -1,15 +1,18 @@
 import http from '@/axios/index.js';
 
+// 登录类请求统一 noMsg：失败文案由登录页按 errorCode 映射，避免把服务端原文抛给用户
+const silent = {noMsg: true}
+
 export function oauthLinuxDoLogin(code, state, nonce) {
-    return http.post('/oauth/linuxDo/login',{code, state, nonce})
+    return http.post('/oauth/linuxDo/login',{code, state, nonce}, silent)
 }
 
 export function oauthGithubLogin(code, state, nonce) {
-    return http.post('/oauth/github/login',{code, state, nonce})
+    return http.post('/oauth/github/login',{code, state, nonce}, silent)
 }
 
 export function oauthGoogleLogin(code, state, nonce) {
-    return http.post('/oauth/google/login',{code, state, nonce})
+    return http.post('/oauth/google/login',{code, state, nonce}, silent)
 }
 
 // 企业 SSO（OIDC）：provider 为空时后端取第一个启用的服务商
@@ -18,11 +21,11 @@ export function oidcConfig(providerId) {
 }
 
 export function oauthOidcLogin(code, state, provider, codeVerifier, nonce) {
-    return http.post('/oauth/oidc/login', {code, state, provider, codeVerifier, nonce})
+    return http.post('/oauth/oidc/login', {code, state, provider, codeVerifier, nonce}, silent)
 }
 
 export function oauthBindUser(form) {
-    return http.put('/oauth/bindUser', form)
+    return http.put('/oauth/bindUser', form, silent)
 }
 
 // v1.3 登录态绑定（大网站模式）：已登录用户把当前 OAuth 授权绑到自己的站内账号

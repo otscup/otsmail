@@ -20,6 +20,8 @@ export const user = sqliteTable('user', {
 	avatar: text('avatar').default(''),
 	twoFactorSwitch: integer('two_factor_switch').default(0),
 	twoFactorSecret: text('two_factor_secret').default(''),
+	// 重新绑定的暂存密钥：确认新码之前旧 secret 仍然有效
+	twoFactorPendingSecret: text('two_factor_pending_secret').default('').notNull(),
 	twoFactorRequired: integer('two_factor_required').default(0).notNull(),
 	// 安全增强：辅助找回邮箱、关闭密码登录
 	recoveryEmail: text('recovery_email').default('').notNull(),

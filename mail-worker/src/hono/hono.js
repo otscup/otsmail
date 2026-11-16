@@ -129,7 +129,10 @@ app.onError(async (err, c) => {
 		return c.json(result.fail('Internal error', 500));
 	}
 
-	return c.json(result.fail(err.message, err.code));
+	const body = result.fail(err.message, err.code);
+	// 只对显式声明了 errorCode 的业务错误透出稳定错误码，前端据此决定展示文案
+	if (err.errorCode) body.errorCode = err.errorCode;
+	return c.json(body);
 });
 
 export default app;

@@ -2,12 +2,15 @@ import orm from '../entity/orm';
 import { user } from '../entity/user';
 import { eq } from 'drizzle-orm';
 import settingService from './setting-service';
-import emailService from './email-service';
+import sendRouterService from './send-router-service';
+import senderProviderConfig from './sender-provider-config';
 import cryptoUtils from '../utils/crypto-utils';
 import BizError from '../error/biz-error';
 import constant from '../const/constant';
 import KvConst from '../const/kv-const';
 import authCache from './auth-cache';
+import backupCodeService from './backup-code-service';
+import twoFactorService from './two-factor-service';
 
 const CODE_EXPIRE_SECONDS = 10 * 60; // 验证码 10 分钟有效
 const IP_WINDOW_SECONDS = 60 * 60; // IP 1 小时窗口
@@ -130,22 +133,26 @@ const passwordRecoveryService = {
 				return { maskedRecoveryEmail: NEUTRAL_MASK };
 			}
 
-			// 获取 Resend 发信 Token 与发信人地址
+			// 系统发信与用户发信走同一套渠道轮换，不再只认 Resend
 			const resendTokens = settings.resendTokens || {};
+			const providerConfigs = senderProviderConfig.parse(settings.senderProviders, settings);
+			const accountDomain = Object.values(providerConfigs)
+				.flatMap(config => config.accounts || [])
+				.map(account => account.domain)
+				.find(Boolean);
 			let senderEmail = String(settings.systemSenderEmail || '').trim();
-			let token = '';
 
-			if (senderEmail && senderEmail.includes('@')) {
-				const senderDomain = senderEmail.split('@')[1];
-				token = resendTokens[senderDomain] || Object.values(resendTokens)[0];
-			} else {
-				const firstDomain = Object.keys(resendTokens)[0];
-				token = resendTokens[firstDomain];
-				senderEmail = firstDomain ? `noreply@${firstDomain}` : (settings.admin || 'noreply@example.com');
+			if (!senderEmail || !senderEmail.includes('@')) {
+				const firstDomain = Object.keys(resendTokens)[0]
+					|| accountDomain
+					|| (settings.domainList || []).map(item => String(item).replace(/^@/, ''))[0]
+					|| '';
+				senderEmail = firstDomain ? `noreply@${firstDomain}` : String(c.env.admin || '').trim();
 			}
 
-			if (!token) {
-				console.error('[passwordRecovery] 未配置 Resend Token，无法发送重置邮件');
+			const senderDomain = senderEmail.includes('@') ? senderEmail.split('@')[1] : '';
+			if (!senderDomain || !senderProviderConfig.hasAnyConfigured(settings, senderDomain)) {
+				console.error('[passwordRecovery] 未配置可用的发信渠道，无法发送重置邮件');
 				throw new BizError('发信服务未配置，请联系系统管理员', 500);
 			}
 
@@ -183,15 +190,16 @@ const passwordRecoveryService = {
 				</div>
 			`;
 
-			// 调 Resend 发送
-			await emailService.sendByResend(token, {
+			// 走多渠道路由（Resend 仍是优先级 1）
+			await sendRouterService.send(c, {
 				name: siteTitle,
 				accountEmail: senderEmail,
 				receiveEmail: [recoveryEmail],
 				subject,
 				text: `您的重置密码验证码为 ${code}，10 分钟内有效。`,
-				html
-			});
+				html,
+				attachments: []
+			}, { units: 1 });
 
 			return {
 				maskedRecoveryEmail: maskEmail(recoveryEmail)
@@ -275,6 +283,19 @@ const passwordRecoveryService = {
 			password: hash,
 			salt
 		}).where(eq(user.userId, userRow.userId)).run();
+
+		// 邮箱是账号所有权的最终凭证：能收信重置密码，就说明用户还掌控账号。
+		// 这里必须清掉 2FA 与备用码，否则「验证器 + 备用码都丢了」的用户会永久锁死。
+		if (userRow.twoFactorSwitch === 1 || userRow.twoFactorSecret) {
+			await orm(c).update(user).set({
+				twoFactorSwitch: 0,
+				twoFactorSecret: '',
+				twoFactorPendingSecret: '',
+				twoFactorRequired: 0
+			}).where(eq(user.userId, userRow.userId)).run();
+			await backupCodeService.removeAll(c, userRow.userId);
+			await twoFactorService.audit(c, userRow.userId, 'recovery_reset', 'password reset via email; 2FA cleared');
+		}
 
 		// 清除历史会话 / tokens，强制下线
 		await c.env.kv.delete(KvConst.AUTH_INFO + userRow.userId);

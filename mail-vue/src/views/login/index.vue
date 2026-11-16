@@ -91,10 +91,24 @@
           <el-input v-model="form.password" :placeholder="$t('password')" type="password" autocomplete="off" @keyup.enter="submit">
           </el-input>
           <template v-if="twoFactorShow">
-            <el-input v-model="twoFactorCode" maxlength="6" inputmode="numeric"
-                      :placeholder="$t('verifyCode')" autocomplete="one-time-code" @keyup.enter="submit"/>
-            <div class="two-factor-hint">{{ $t('twoFactorLoginHint') }}</div>
+            <el-input v-model="twoFactorCode" :maxlength="twoFactorBackupMode ? 11 : 6"
+                      :inputmode="twoFactorBackupMode ? 'text' : 'numeric'"
+                      :placeholder="twoFactorBackupMode ? $t('backupCodePlaceholder') : $t('verifyCode')"
+                      autocomplete="one-time-code" @keyup.enter="submit"/>
+            <div class="two-factor-hint">
+              {{ twoFactorBackupMode ? $t('backupCodeLoginHint') : $t('twoFactorLoginHint') }}
+              <a href="javascript:;" @click="twoFactorBackupMode = !twoFactorBackupMode">
+                {{ twoFactorBackupMode ? $t('useAuthenticatorCode') : $t('useBackupCode') }}
+              </a>
+            </div>
           </template>
+          <div v-if="turnstileEnabled" class="auth-turnstile">
+            <div ref="loginTurnstileRef" class="login-turnstile"></div>
+            <div v-if="loginTurnstile.error" class="turnstile-load-error">
+              <span>{{ $t('verifyModuleFailed') }}</span>
+              <el-button link type="primary" @click="retryTurnstile('login')">{{ $t('retry') }}</el-button>
+            </div>
+          </div>
           <div class="login-action-bar">
             <el-button class="forgot-pwd-btn" link v-if="settingStore.settings.passwordResetSwitch" @click="openForgotPwd">
               {{ $t('forgotPassword') }}
@@ -158,15 +172,12 @@
                     type="text" autocomplete="off" @keyup.enter="submitRegister"/>
           <el-input v-if="settingStore.settings.regKey === 2" v-model="registerForm.code"
                     :placeholder="$t('regKeyOptional')" type="text" autocomplete="off" @keyup.enter="submitRegister"/>
-          <div v-show="verifyShow"
-               class="register-turnstile"
-               :data-sitekey="settingStore.settings.siteKey"
-               data-callback="onTurnstileSuccess"
-               data-error-callback="onTurnstileError"
-               data-after-interactive-callback="loadAfter"
-               data-before-interactive-callback="loadBefore"
-          >
-            <span style="font-size: 12px;color: #F56C6C" v-if="botJsError">{{ $t('verifyModuleFailed') }}</span>
+          <div v-if="registerVerifyEnabled" class="auth-turnstile">
+            <div ref="registerTurnstileRef" class="register-turnstile"></div>
+            <div v-if="registerTurnstile.error" class="turnstile-load-error">
+              <span>{{ $t('verifyModuleFailed') }}</span>
+              <el-button link type="primary" @click="retryTurnstile('register')">{{ $t('retry') }}</el-button>
+            </div>
           </div>
           <el-button class="btn" style="margin: 0" type="primary" @click="submitRegister" :loading="registerLoading"
           >{{ $t('regBtn') }}
@@ -257,7 +268,7 @@
 
 <script setup>
 import router from "@/router";
-import {computed, nextTick, onBeforeUnmount, onMounted, reactive, ref} from "vue";
+import {computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch} from "vue";
 import {login} from "@/request/login.js";
 import {register} from "@/request/login.js";
 import {qrCreate, qrPoll, sendPasswordResetCode, confirmPasswordReset} from "@/request/login.js";
@@ -288,6 +299,8 @@ import {setToken} from "@/utils/token-store.js";
 import {createPkce, takePkce} from "@/utils/pkce.js";
 import {normalizeLoginTheme, DEFAULT_LOGIN_THEME} from './themes.js';
 import {applySkin, getSavedSkin, getStoredSkin, loginThemeForSkin} from '@/utils/appearance.js';
+import {loginErrorMessage} from '@/utils/login-error.js';
+import {loadTurnstileScript} from '@/utils/turnstile-script.js';
 
 const {t} = useI18n();
 const accountStore = useAccountStore();
@@ -305,6 +318,7 @@ const hasProviderButtons = computed(() =>
 const hasAltLogin = computed(() => hasProviderButtons.value || oidcProviders.value.length > 0);
 const loginLoading = ref(false)
 const twoFactorShow = ref(false)
+const twoFactorBackupMode = ref(false)
 const twoFactorCode = ref('')
 const bindLoading = ref(false)
 const oauthLoading = ref(false);
@@ -367,14 +381,17 @@ async function checkLatestVersion() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener('click', handleClickOutside)
   checkLatestVersion()
+  await nextTick()
+  syncTurnstile()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
   stopQrPoll()
+  Object.keys(turnstileStates).forEach(removeTurnstile)
 })
 
 // 扫码登录：网页只负责展示二维码和轮询，App 用已登录会话确认。
@@ -469,7 +486,8 @@ async function passkeyLogin() {
     }
   } catch (e) {
     if (e.name !== 'NotAllowedError') {
-      ElNotification({ type: 'error', message: e.message || 'Passkey 登录失败' })
+      // 通行密钥失败文案统一，不展示服务端原文
+      ElMessage({ type: 'error', message: t('loginFailPasskey'), plain: true })
     }
   } finally {
     passkeyLoading.value = false
@@ -529,40 +547,119 @@ const registerForm = reactive({
 const domainList = settingStore.domainList;
 const registerLoading = ref(false)
 suffix.value = domainList[0]
-const verifyShow = ref(false)
-let verifyToken = ''
-let turnstileId = null
-let botJsError = ref(false)
-let verifyErrorCount = 0
+const turnstileEnabled = computed(() =>
+    Boolean(settingStore.settings.turnstileEnabled && settingStore.settings.siteKey)
+)
+const registerVerifyEnabled = computed(() => turnstileEnabled.value && (
+    settingStore.settings.registerVerify === 0 ||
+    (settingStore.settings.registerVerify === 2 && settingStore.settings.regVerifyOpen)
+))
+const loginTurnstileRef = ref(null)
+const registerTurnstileRef = ref(null)
+const loginTurnstile = reactive({id: null, token: '', error: false})
+const registerTurnstile = reactive({id: null, token: '', error: false})
+const turnstileStates = {login: loginTurnstile, register: registerTurnstile}
+const turnstileRefs = {login: loginTurnstileRef, register: registerTurnstileRef}
+const turnstileRenderPromises = {login: null, register: null}
 
-window.onTurnstileSuccess = (token) => {
-  verifyToken = token;
-};
-
-window.onTurnstileError = (e) => {
-  if (verifyErrorCount >= 4) {
-    return
+function syncTurnstile() {
+  if (show.value === 'login' && turnstileEnabled.value) {
+    renderTurnstile('login')
+  } else if (show.value !== 'login' && registerVerifyEnabled.value) {
+    renderTurnstile('register')
   }
-  verifyErrorCount++
-  console.warn('人机验加载失败', e)
-  setTimeout(() => {
-    nextTick(() => {
-      if (!turnstileId) {
-        turnstileId = window.turnstile.render('.register-turnstile')
-      } else {
-        window.turnstile.reset(turnstileId);
-      }
-    })
-  }, 1500)
-};
-
-window.loadAfter = (e) => {
-  console.log('loadAfter')
 }
 
-window.loadBefore = (e) => {
-  console.log('loadBefore')
+function removeTurnstile(type) {
+  const state = turnstileStates[type]
+  if (state.id !== null && window.turnstile?.remove) {
+    try {
+      window.turnstile.remove(state.id)
+    } catch (error) {
+      console.warn('人机验证组件清理失败', error)
+    }
+  }
+  state.id = null
+  state.token = ''
+  state.error = false
+  if (turnstileRefs[type].value) turnstileRefs[type].value.innerHTML = ''
 }
+
+async function renderTurnstile(type) {
+  const state = turnstileStates[type]
+  if (!turnstileRefs[type].value || state.id !== null || state.error) return
+  if (turnstileRenderPromises[type]) return turnstileRenderPromises[type]
+
+  const promise = (async () => {
+    try {
+      const turnstile = await loadTurnstileScript()
+      const element = turnstileRefs[type].value
+      const isActive = type === 'login'
+          ? show.value === 'login' && turnstileEnabled.value
+          : show.value !== 'login' && registerVerifyEnabled.value
+      if (!isActive || !element?.isConnected || state.id !== null) return
+
+      state.id = turnstile.render(element, {
+        sitekey: settingStore.settings.siteKey,
+        callback: token => {
+          state.token = token
+          state.error = false
+        },
+        'expired-callback': () => resetTurnstile(type),
+        'error-callback': () => {
+          state.token = ''
+          state.error = true
+        },
+        'timeout-callback': () => {
+          state.token = ''
+          state.error = true
+        }
+      })
+    } catch (error) {
+      state.token = ''
+      state.error = true
+      console.warn('人机验证模块加载失败', error)
+    }
+  })()
+
+  turnstileRenderPromises[type] = promise
+  try {
+    await promise
+  } finally {
+    if (turnstileRenderPromises[type] === promise) turnstileRenderPromises[type] = null
+  }
+}
+
+async function retryTurnstile(type) {
+  removeTurnstile(type)
+  await nextTick()
+  return renderTurnstile(type)
+}
+
+function resetTurnstile(type) {
+  const state = turnstileStates[type]
+  state.token = ''
+  if (state.error) return
+  if (state.id !== null && window.turnstile?.reset) {
+    try {
+      window.turnstile.reset(state.id)
+    } catch (error) {
+      retryTurnstile(type)
+    }
+  } else {
+    nextTick(() => renderTurnstile(type))
+  }
+}
+
+watch([show, turnstileEnabled, registerVerifyEnabled], async () => {
+  const loginActive = show.value === 'login' && turnstileEnabled.value
+  const registerActive = show.value !== 'login' && registerVerifyEnabled.value
+  // 页签切换会销毁旧 DOM；必须先清掉对应 widget，否则返回时会被旧 id 阻止渲染。
+  if (!loginActive) removeTurnstile('login')
+  if (!registerActive) removeTurnstile('register')
+  await nextTick()
+  syncTurnstile()
+}, {flush: 'sync'})
 
 const loginOpacity = computed(() => {
   const opacity = settingStore.settings.loginOpacity
@@ -642,7 +739,7 @@ async function oidcLogin(providerId) {
     })
     window.location.href = config.authorizationEndpoint + '?' + params.toString()
   } catch (e) {
-    ElMessage({message: e?.message || 'OIDC 配置读取失败', type: 'error', plain: true})
+    ElMessage({message: t('loginFailOauth'), type: 'error', plain: true})
   }
 }
 
@@ -684,7 +781,9 @@ async function oauthGetUser() {
   }
 
   if (!code && oauthError) {
-    ElMessage({message: oauthError, type: 'error', plain: true, duration: 6000})
+    // IdP 的 error_description 属于服务端原始错误，只进控制台，界面统一提示
+    console.warn('OAuth provider error:', oauthError)
+    ElMessage({message: t('loginFailOauth'), type: 'error', plain: true, duration: 6000})
   }
 
   if (code) {
@@ -717,8 +816,9 @@ async function oauthGetUser() {
         }).finally(() => {
           oauthLoading.value = false
         })
-      }).catch(() => {
+      }).catch(e => {
         oauthLoading.value = false
+        ElMessage({message: loginErrorMessage(e, 'loginFailOauth'), type: 'error', plain: true})
         router.replace('/settings')
       })
       return
@@ -744,8 +844,9 @@ async function oauthGetUser() {
       }
 
       saveToken(data.token);
-    }).catch(() => {
+    }).catch(e => {
       oauthLoading.value = false
+      ElMessage({message: loginErrorMessage(e, 'loginFailOauth'), type: 'error', plain: true})
     })
   }
 
@@ -807,7 +908,8 @@ function bind() {
   bindLoading.value = true
   oauthBindUser(form).then(data => {
     saveToken(data.token)
-  }).catch(() => {
+  }).catch(e => {
+    ElMessage({message: loginErrorMessage(e, 'loginFailOauth'), type: 'error', plain: true})
     bindLoading.value = false
   })
 }
@@ -845,19 +947,45 @@ const submit = () => {
     return
   }
 
+  if (turnstileEnabled.value && !loginTurnstile.token) {
+    ElMessage({message: t('botVerifyMsg'), type: 'error', plain: true})
+    if (loginTurnstile.error) {
+      retryTurnstile('login')
+    } else {
+      renderTurnstile('login')
+    }
+    return
+  }
+
   loginLoading.value = true
-  login(email, form.password, twoFactorCode.value).then(async data => {
+  login(
+      email,
+      form.password,
+      twoFactorBackupMode.value ? '' : twoFactorCode.value,
+      twoFactorBackupMode.value ? twoFactorCode.value : '',
+      turnstileEnabled.value ? loginTurnstile.token : undefined
+  ).then(async data => {
     await saveToken(data.token)
   }).catch(e => {
-    if (e?.code === 428) {
+    // Turnstile token 只能校验一次；包括进入两步验证时，下次提交都必须换新 token。
+    resetTurnstile('login')
+    // 两步验证是登录流程的正常分支：继续展示验证码输入框，不当作错误
+    if (e?.code === 428 || e?.errorCode === 'LOGIN_2FA_REQUIRED' || e?.errorCode === 'LOGIN_2FA_INVALID') {
       twoFactorShow.value = true
       twoFactorCode.value = ''
       ElMessage({
-        message: e.message || t('twoFactorLoginHint'),
+        message: e?.errorCode === 'LOGIN_2FA_INVALID' ? t('loginFailTwoFactorInvalid') : t('twoFactorLoginHint'),
         type: 'warning',
         plain: true
       })
+      return
     }
+    ElMessage({
+      message: loginErrorMessage(e),
+      type: 'error',
+      plain: true,
+      grouping: true
+    })
   }).finally(() => {
     loginLoading.value = false
   })
@@ -972,29 +1100,14 @@ function submitRegister() {
 
   }
 
-  if (!verifyToken && (settingStore.settings.registerVerify === 0 || (settingStore.settings.registerVerify === 2 && settingStore.settings.regVerifyOpen))) {
-    if (!verifyShow.value) {
-      verifyShow.value = true
-      nextTick(() => {
-        if (!turnstileId) {
-          try {
-            turnstileId = window.turnstile.render('.register-turnstile')
-          } catch (e) {
-            botJsError.value = true
-            console.log('人机验证js加载失败')
-          }
-        } else {
-          window.turnstile.reset('.register-turnstile')
-        }
-      })
-    } else if (!botJsError.value) {
-      ElMessage({
-        message: t('botVerifyMsg'),
-        type: "error",
-        plain: true
-      })
+  if (registerVerifyEnabled.value && !registerTurnstile.token) {
+    ElMessage({message: t('botVerifyMsg'), type: 'error', plain: true})
+    if (registerTurnstile.error) {
+      retryTurnstile('register')
+    } else {
+      renderTurnstile('register')
     }
-    return;
+    return
   }
 
   registerLoading.value = true
@@ -1002,7 +1115,7 @@ function submitRegister() {
   const form = {
     email,
     password: registerForm.password,
-    token: verifyToken,
+    token: registerVerifyEnabled.value ? registerTurnstile.token : undefined,
     code: registerForm.code
   }
 
@@ -1013,9 +1126,8 @@ function submitRegister() {
     registerForm.confirmPassword = ''
     registerForm.code = ''
     registerLoading.value = false
-    verifyToken = ''
     settingStore.settings.regVerifyOpen = regVerifyOpen
-    verifyShow.value = false
+    resetTurnstile('register')
     ElMessage({
       message: t('regSuccessMsg'),
       type: 'success',
@@ -1025,18 +1137,9 @@ function submitRegister() {
 
     registerLoading.value = false
 
-    if (res.code === 400) {
-      verifyToken = ''
+    if (res.code === 400 && turnstileEnabled.value) {
       settingStore.settings.regVerifyOpen = true
-      if (turnstileId) {
-        window.turnstile.reset(turnstileId)
-      } else {
-        nextTick(() => {
-          turnstileId = window.turnstile.render('.register-turnstile')
-        })
-      }
-      verifyShow.value = true
-
+      resetTurnstile('register')
     }
   });
 }
@@ -1235,8 +1338,17 @@ function submitRegister() {
   margin: 0;
 }
 
-.register-turnstile {
+.auth-turnstile {
+  min-height: 65px;
   margin-bottom: 18px;
+}
+
+.turnstile-load-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--el-color-danger);
+  font-size: 12px;
 }
 
 .custom-style {
