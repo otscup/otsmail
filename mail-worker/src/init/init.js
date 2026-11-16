@@ -86,6 +86,9 @@ const dbInit = {
 		await this.otsmail_35DB(c);
 		await this.otsmail_36DB(c);
 		await this.otsmail_37DB(c);
+		await this.otsmail_38DB(c);
+		await this.otsmail_39DB(c);
+		await this.otsmail_40DB(c);
 		await this.otsmail_9DB(c);
 		await settingService.refresh(c);
 		await c.env.kv.put('init_done', '1');
@@ -109,6 +112,9 @@ const dbInit = {
 		await this.otsmail_35DB(c);
 		addedColumns.emailCountTotals = await this.otsmail_36DB(c);
 		await this.otsmail_37DB(c);
+		addedColumns.twoFactorPendingSecret = await this.otsmail_38DB(c);
+		addedColumns.sendProvider = await this.otsmail_39DB(c);
+		addedColumns.roleSendDomain = await this.otsmail_40DB(c);
 		await settingService.refresh(c);
 
 		return c.json({ ok: true, addedColumns });
@@ -526,6 +532,67 @@ async otsmail_35DB(c) {
 				PRIMARY KEY (user_id, token)
 			)`),
 			c.env.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_session_token ON user_session(token)`)
+		]);
+	},
+
+	// otsmail 迁移：一次性备用码 + 两步验证审计 + 重新绑定的暂存密钥
+	async otsmail_38DB(c) {
+		const added = await ensureColumns(c, 'user', [
+			{ name: 'two_factor_pending_secret', ddl: `two_factor_pending_secret TEXT NOT NULL DEFAULT ''` }
+		]);
+		await c.env.db.batch([
+			c.env.db.prepare(`CREATE TABLE IF NOT EXISTS backup_code (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				user_id INTEGER NOT NULL,
+				code_hash TEXT NOT NULL,
+				batch_id TEXT NOT NULL,
+				used INTEGER NOT NULL DEFAULT 0,
+				created_at TEXT NOT NULL,
+				used_at TEXT,
+				used_ip TEXT,
+				used_ua TEXT
+			)`),
+			c.env.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS uk_backup_code_user_hash ON backup_code(user_id, code_hash)`),
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_backup_code_user ON backup_code(user_id, used)`),
+			c.env.db.prepare(`CREATE TABLE IF NOT EXISTS two_factor_audit (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				user_id INTEGER NOT NULL,
+				action TEXT NOT NULL,
+				detail TEXT NOT NULL DEFAULT '',
+				ip TEXT NOT NULL DEFAULT '',
+				ua TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL
+			)`),
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_2fa_audit_user ON two_factor_audit(user_id, id)`)
+		]);
+		return added;
+	},
+
+	// otsmail 迁移：多渠道发信——邮件记录渠道 + 设置存渠道配置 + 每渠道周期用量
+	async otsmail_39DB(c) {
+		const emailAdded = await ensureColumns(c, 'email', [
+			{ name: 'send_provider', ddl: `send_provider TEXT NOT NULL DEFAULT ''` }
+		]);
+		const settingAdded = await ensureColumns(c, 'setting', [
+			{ name: 'sender_providers', ddl: `sender_providers TEXT NOT NULL DEFAULT '{}'` }
+		]);
+		await c.env.db.batch([
+			c.env.db.prepare(`CREATE TABLE IF NOT EXISTS send_quota (
+				provider TEXT NOT NULL,
+				period TEXT NOT NULL,
+				used INTEGER NOT NULL DEFAULT 0,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				PRIMARY KEY (provider, period)
+			)`),
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_send_quota_period ON send_quota(period)`)
+		]);
+		return { email: emailAdded, setting: settingAdded };
+	},
+
+	// otsmail 迁移：权限身份新增「发送域名」，限制用户组可用的发件域名
+	async otsmail_40DB(c) {
+		return await ensureColumns(c, 'role', [
+			{ name: 'send_domain', ddl: `send_domain TEXT DEFAULT ''` }
 		]);
 	},
 
