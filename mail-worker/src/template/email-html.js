@@ -3,10 +3,14 @@ import { sanitizeEmailHtml } from '../utils/html-sanitize';
 
 export default function emailHtmlTemplate(html, domain) {
 
+	// {{domain}} 必须在消毒前替换：消毒按 URL 协议白名单过滤属性，
+	// src="{{domain}}xxx.png" 会被当成非法协议，整条 src 被删掉（图片永远加载不出来）。
+	const ossBase = domainUtils.toOssDomain(domain);
+	if (ossBase) html = html.replace(/{{domain}}/g, ossBase + '/');
+
 	// 邮件正文不可信：先做完整消毒（删危险标签 + on* 事件 + 危险协议），
 	// 再交给下面的页面渲染。上游只删 <script>，无法挡住 onerror / javascript: 等。
 	html = sanitizeEmailHtml(html);
-	html = html.replace(/{{domain}}/g, domainUtils.toOssDomain(domain) + '/');
 	const safeHtmlJson = JSON.stringify(html).replace(/</g, '\\u003C');
 
 	return `<!DOCTYPE html>

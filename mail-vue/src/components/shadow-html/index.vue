@@ -31,6 +31,41 @@ let themeObserver = null
 //  - 只允许 http / https / mailto / cid / data:image 这几类 URL，
 //    显式挡掉 javascript: 与 data:text/html
 //  - 外链统一加 target=_blank + rel=noopener noreferrer，避免 tabnabbing
+// 邮件为了兼容窄屏客户端，普遍把版面写死成 600px：<table width="600">、style="width:600px"，
+// 或者 <div style="max-width:600px;margin:0 auto">。阅读区比这个版面宽时，邮件自带的
+// align="center" / margin:0 auto 会以阅读区为基准把整块正文居中，右移 (阅读区宽 - 版面宽) / 2；
+// 而表头 logo 是整宽左对齐，看起来就像整封邮件斜着错开。消毒会整块删除 <style>，邮件原本
+// 用来覆盖这个居中的规则（例如 td.layout{text-align:left}）也没了，偏移就重新出现。
+// 这里只去掉"版面级"的居中：承载 >=360px 版面的单元格/表格不再 align=center，宽版面包装
+// 不再用 auto 外边距。版面宽度本身不动，按钮、图标这类小尺寸居中不受影响。
+const FIXED_WIDTH_MIN = 360
+
+function declaredWidth(node) {
+  const attr = parseInt(node.getAttribute('width'), 10)
+  if (Number.isFinite(attr)) return attr
+  const m = (node.getAttribute('style') || '').match(/(?:^|;)\s*(?:max-)?width\s*:\s*(\d{2,4})\s*px/i)
+  return m ? Number(m[1]) : 0
+}
+
+function normalizeLayoutWidth(node, style) {
+  const wide = declaredWidth(node) >= FIXED_WIDTH_MIN
+
+  // 宽度自适应的居中包装（margin:0 auto）同样会把整块正文推到右边
+  if (wide && /\bauto\b/i.test(style)) {
+    style = style.replace(/(?:^|;)\s*margin(?:-(?:left|right))?\s*:[^;]*\bauto\b[^;]*/gi, '')
+  }
+
+  // 承载宽版面的单元格：align="center" 只是把整版居中，去掉后版面贴左
+  if (/^(TD|TH)$/.test(node.tagName) && /^center$/i.test(node.getAttribute('align') || '')) {
+    const kids = Array.from(node.children || [])
+    if (kids.some(k => k.tagName === 'TABLE' && declaredWidth(k) >= FIXED_WIDTH_MIN)) node.removeAttribute('align')
+  }
+  if (node.tagName === 'TABLE' && wide && /^center$/i.test(node.getAttribute('align') || '')) {
+    node.removeAttribute('align')
+  }
+  return style
+}
+
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   if (node.tagName === 'A') {
     node.setAttribute('target', '_blank')
@@ -39,13 +74,15 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   // 邮件里的 style/color 经常把白色文字写死；主题色必须优先。
   // 同时剔除 position:fixed/sticky，避免正文把固定定位元素盖到整个应用界面上。
   if (node.hasAttribute('style')) {
-    const cleaned = node.getAttribute('style')
+    const cleaned = normalizeLayoutWidth(node, node.getAttribute('style') || '')
       .replace(/(?:^|;)\s*(?:color|background(?:-color|-image)?)\s*:[^;]*/gi, '')
       .replace(/(?:^|;)\s*position\s*:\s*(?:fixed|sticky)\b[^;]*/gi, '')
       .replace(/expression\s*\(/gi, 'none(')
       .trim()
     if (cleaned) node.setAttribute('style', cleaned)
     else node.removeAttribute('style')
+  } else {
+    normalizeLayoutWidth(node, '')
   }
   node.removeAttribute('bgcolor')
   if (node.tagName === 'FONT') node.removeAttribute('color')

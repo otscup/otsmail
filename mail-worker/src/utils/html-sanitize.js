@@ -45,6 +45,44 @@ function cleanStyleAttr(value) {
 		.replace(/(?:^|;)\s*position\s*:\s*(?:fixed|sticky)\b[^;]*/gi, '');
 }
 
+// 邮件为了兼容窄屏客户端会把版面写死成 600px：<table width="600">、style="width:600px"，
+// 或者 <div style="max-width:600px;margin:0 auto">。上面的 <style> 整体删除后，邮件原本用来
+// 覆盖 align="center" 的规则（例如 td.layout{text-align:left}）也一并没了，版面级居中重新生效：
+// 阅读区比版面宽时整块正文右移 (阅读区宽 - 版面宽) / 2，而表头 logo 是整宽左对齐，看起来就错开。
+// 这里只去掉版面级居中，版面宽度和按钮、图标这类小尺寸居中都不动。
+const FIXED_WIDTH_MIN = 360;
+
+function declaredWidth(el) {
+	const attr = parseInt(el.getAttribute('width'), 10);
+	if (Number.isFinite(attr)) return attr;
+	const match = (el.getAttribute('style') || '').match(/(?:^|;)\s*(?:max-)?width\s*:\s*(\d{2,4})\s*px/i);
+	return match ? Number(match[1]) : 0;
+}
+
+function normalizeLayoutCentering(el) {
+	const wide = declaredWidth(el) >= FIXED_WIDTH_MIN;
+
+	// 宽度自适应的居中包装（margin:0 auto）同样会把整块正文推到右边
+	if (wide) {
+		const style = el.getAttribute('style');
+		if (style && /\bauto\b/i.test(style)) {
+			el.setAttribute('style', style.replace(/(?:^|;)\s*margin(?:-(?:left|right))?\s*:[^;]*\bauto\b[^;]*/gi, ''));
+		}
+	}
+
+	const align = el.getAttribute('align');
+	if (!align || !/^center$/i.test(align)) return;
+
+	if (el.tagName === 'TD' || el.tagName === 'TH') {
+		// 承载宽版面的单元格：align="center" 只是把整版居中，去掉后版面贴左
+		const hasWideTable = Array.from(el.children || [])
+			.some(child => child.tagName === 'TABLE' && declaredWidth(child) >= FIXED_WIDTH_MIN);
+		if (hasWideTable) el.removeAttribute('align');
+	} else if (el.tagName === 'TABLE' && wide) {
+		el.removeAttribute('align');
+	}
+}
+
 /**
  * @param {string} html 不可信的邮件 HTML
  * @returns {string} 消毒后的 HTML 片段
@@ -101,6 +139,9 @@ export function sanitizeEmailHtml(html) {
 			el.setAttribute('target', '_blank');
 			el.setAttribute('rel', 'noopener noreferrer');
 		}
+
+		// 去掉版面级居中（只处理 >=360px 的版面，见 normalizeLayoutCentering）
+		normalizeLayoutCentering(el);
 	});
 
 	return document.body.innerHTML;

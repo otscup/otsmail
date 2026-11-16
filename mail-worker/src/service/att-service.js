@@ -9,7 +9,7 @@ import { parseHTML } from 'linkedom';
 import { v4 as uuidv4 } from 'uuid';
 import domainUtils from '../utils/domain-uitls';
 import settingService from "./setting-service";
-import proxyService from './proxy-service';
+import proxyService, { SIGN_TTL } from './proxy-service';
 
 function unsafeInline(filename, mime) {
 	const ext = String(filename || '').split('.').pop().toLowerCase();
@@ -60,10 +60,13 @@ async function cleanupOrphanObjects(c, keys) {
 	}
 }
 
-// 附件/正文图片用短时签名 URL，避免 /attachments 变成可枚举的公开桶。
+// 附件/正文图片用签名 URL，避免 /attachments 变成可枚举的公开桶。
+// 有效期与图片代理同一口径：客户端会把整封正文（含这些地址）缓存 7 天且不回源，
+// 短签名会让正文里的 {{domain}}attachments/*.png 在缓存期内直接 403。
+// 鉴权方式不变：HMAC 仍然绑定「路径 + 用户 + 到期时间」，到期即失效，只是窗口变长。
 async function signKey(c, key, userId) {
 	const bare = String(key).replace(/^attachments\//, '');
-	const exp = Math.floor(Date.now() / 1000) + 60 * 60;
+	const exp = Math.floor(Date.now() / 1000) + SIGN_TTL;
 	const data = `${bare}|${userId}|${exp}`;
 	const cryptoKey = await crypto.subtle.importKey('raw', encoder.encode(c.env.jwt_secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 	const sig = b64url(await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(data)));

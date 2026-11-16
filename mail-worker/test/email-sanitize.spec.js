@@ -42,8 +42,7 @@ describe('邮件正文 CSS / 脚本消毒', () => {
 		expect(out).toContain('<p>ok</p>');
 	});
 
-	it('body style 注入无法闭合模板里的 CSS 规则', () => {
-		const html = '<body style="} body{display:none} .x{position:fixed">hi</body>';
+	it('body style 注入无法闭合模板里的 CSS 规则', () => {		const html = '<body style="} body{display:none} .x{position:fixed">hi</body>';
 		const page = emailHtmlTemplate(html, 'example.com');
 		// payload 只能以 JSON 转义后的字符串进入脚本，不会成为真实的 <body> 标签
 		expect(page).toContain('\\u003Cbody');
@@ -59,6 +58,55 @@ describe('邮件正文 CSS / 脚本消毒', () => {
 			.replace(/url\s*\(/gi, 'none(');
 		expect(bodyStyle).not.toMatch(/[{};]/);
 		expect(bodyStyle).not.toMatch(/position\s*:/i);
+	});
+
+});
+
+describe('{{domain}} 占位', () => {
+
+	it('图片 src 里的占位先替换再消毒，src 不会被整条删掉', () => {
+		const page = emailHtmlTemplate(
+			'<img src="{{domain}}attachments/a.png" width="120"><img src="https://cdn.example/b.png">',
+			'mail.example.com');
+		expect(page).toContain('https://mail.example.com/attachments/a.png');
+		expect(page).not.toContain('{{domain}}');
+	});
+
+	it('占位替换不影响消毒：javascript: 链接仍然被清掉', () => {
+		const page = emailHtmlTemplate(
+			'<a href="javascript:alert(1)">x</a><img src="{{domain}}attachments/a.png">',
+			'mail.example.com');
+		expect(page).not.toContain('javascript:alert');
+	});
+
+});
+
+describe('版面级居中', () => {
+
+	it('承载 600px 版面的居中单元格被改成贴左，版面宽度不变', () => {
+		const input = '<table width="100%"><tr><td align="center">'
+			+ '<table width="600" style="width:600px"><tr><td><p>正文</p></td></tr></table>'
+			+ '</td></tr></table>';
+		const out = sanitizeEmailHtml(input);
+		expect(out).not.toMatch(/align="center"/i);
+		expect(out).toContain('width="600"');
+		expect(out).toContain('width:600px');
+	});
+
+	it('小尺寸居中（200px 按钮）保持不动', () => {
+		const input = '<table width="600"><tr><td align="center">'
+			+ '<table width="200" style="margin:0 auto"><tr><td>立即确认</td></tr></table>'
+			+ '</td></tr></table>';
+		const out = sanitizeEmailHtml(input);
+		expect(out).toMatch(/align="center"/i);
+		expect(out).toMatch(/margin:0 auto/i);
+	});
+
+	it('宽版面包装的 margin:0 auto 被去掉，max-width 保留', () => {
+		const input = '<div style="margin:0 auto;max-width:600px;"><table width="100%"><tr><td>x</td></tr></table></div>';
+		const out = sanitizeEmailHtml(input);
+		expect(out).not.toMatch(/margin\s*:\s*0\s+auto/i);
+		expect(out).toContain('max-width:600px');
 	});
 
 });

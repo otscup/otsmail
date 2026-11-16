@@ -3,6 +3,14 @@ import BizError from '../error/biz-error';
 const encoder = new TextEncoder();
 const MAX_BYTES = 5 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
+/**
+ * 图片/CSS 签名有效期。
+ * 签名地址会被客户端随正文一起缓存：安卓 MailCache 对「打开过的正文」保留 7 天且不回源，
+ * 网页端把正文（含签名地址）写进 localStorage 后先渲染再拉详情。1 小时的签名在这些缓存里
+ * 一过期，整封邮件的图片就全部 403（App 端直接显示“图片加载失败”占位）。
+ * 这里与客户端正文保留期对齐并多留 1 天；签名仍然绑定 uid+url，到期即失效，不放开可执行面。
+ */
+export const SIGN_TTL = 8 * 24 * 60 * 60;
 const ALLOWED_PORTS = new Set(['', '80', '443']);
 const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))
 	.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -76,7 +84,7 @@ function sniffImage(bytes) {
 	return '';
 }
 
-async function signPath(c, url, userId, path, ttl = 3600) {
+async function signPath(c, url, userId, path, ttl = SIGN_TTL) {
 	const exp = Math.floor(Date.now() / 1000) + ttl;
 	const payload = `${userId}|${exp}|${url}`;
 	const key = await crypto.subtle.importKey('raw', encoder.encode(c.env.jwt_secret || ''),
@@ -85,11 +93,11 @@ async function signPath(c, url, userId, path, ttl = 3600) {
 	return `${path}?url=${encodeURIComponent(url)}&uid=${userId}&exp=${exp}&sig=${sig}`;
 }
 
-async function sign(c, url, userId, ttl = 3600) {
+async function sign(c, url, userId, ttl = SIGN_TTL) {
 	return signPath(c, url, userId, '/api/proxy/image', ttl);
 }
 
-async function signCss(c, url, userId, ttl = 3600) {
+async function signCss(c, url, userId, ttl = SIGN_TTL) {
 	return signPath(c, url, userId, '/api/proxy/css', ttl);
 }
 

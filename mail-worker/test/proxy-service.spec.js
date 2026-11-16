@@ -34,6 +34,23 @@ describe('image proxy', () => {
 		expect(await proxyService.verify(c, url, '8', exp, sig)).toBe(false);
 	});
 
+	it('签名有效期覆盖客户端 7 天的正文缓存', async () => {
+		const c = { env: { jwt_secret: 'test-secret' } };
+		const signed = await proxyService.sign(c, 'https://example.com/a.png', 7);
+		const exp = Number(new URL(signed, 'https://mail.example.com').searchParams.get('exp'));
+		// 安卓 MailCache 对打开过的正文保留 7 天且不回源；签名比它短，缓存里的图就全 403
+		expect(exp - Math.floor(Date.now() / 1000)).toBeGreaterThan(7 * 24 * 3600);
+	});
+
+	it('过期签名一律拒绝（缓存正文里的旧地址命中这里）', async () => {
+		const c = { env: { jwt_secret: 'test-secret' } };
+		const url = 'https://example.com/a.png';
+		const parsed = new URL(await proxyService.sign(c, url, 7, -60), 'https://mail.example.com');
+		const exp = parsed.searchParams.get('exp');
+		const sig = parsed.searchParams.get('sig');
+		expect(await proxyService.verify(c, url, '7', exp, sig)).toBe(false);
+	});
+
 	it('rewrites img src, srcset, style url and background attr', async () => {
 		const c = { env: { jwt_secret: 'test-secret' } };
 		const html = `<link rel="stylesheet" href="https://css.example/mail.css">
