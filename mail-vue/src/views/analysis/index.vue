@@ -9,7 +9,7 @@
         <div class="number-item">
           <div class="top">
             <div class="left">
-              <div>{{ $t('totalReceived') }}</div>
+              <div>{{ $t('totalReceived') }}<span class="metric-tag">{{ $t('cfCumulative') }}</span></div>
               <div>
                 <el-statistic :formatter="value => Math.round(value)" :value="receiveData"/>
               </div>
@@ -28,7 +28,7 @@
         <div class="number-item">
           <div class="top">
             <div class="left">
-              <div>{{ $t('totalSent') }}</div>
+              <div>{{ $t('totalSent') }}<span class="metric-tag">{{ $t('cfCumulative') }}</span></div>
               <div>
                 <el-statistic :formatter="value => Math.round(value)" :value="sendData"/>
               </div>
@@ -47,7 +47,7 @@
         <div class="number-item">
           <div class="top">
             <div class="left">
-              <div>{{ $t('totalMailboxes') }}</div>
+              <div>{{ $t('totalMailboxes') }}<span class="metric-tag">{{ $t('cfCumulative') }}</span></div>
               <div>
                 <el-statistic :formatter="value => Math.round(value)" :value="accountData"/>
               </div>
@@ -66,7 +66,7 @@
         <div class="number-item">
           <div class="top">
             <div class="left">
-              <div>{{ $t('totalUsers') }}</div>
+              <div>{{ $t('totalUsers') }}<span class="metric-tag">{{ $t('cfCumulative') }}</span></div>
               <div>
                 <el-statistic :formatter="value => Math.round(value)" :value="userData"/>
               </div>
@@ -135,19 +135,30 @@
             <div class="cf-total">
               <span class="cf-total-icon"><Icon icon="mdi:chart-line" width="18"/></span>
               <div>
-                <small>{{ requestsLabel }}</small>
+                <el-tooltip :content="workersTip" placement="top">
+                  <small class="cf-total-label">{{ requestsLabel }}</small>
+                </el-tooltip>
+                <span class="cf-total-sub">{{ requestsSubLabel }}</span>
                 <strong>{{ formatNumber(workersUsed) }}</strong>
                 <em>{{ quotaText(workersUsed, workersLimit) }}</em>
+                <em v-if="!isPaid && otsmailToday !== null" class="cf-total-note">
+                  {{ $t('cfOtsmailToday', {count: formatNumber(otsmailToday), share: otsmailTodayShare}) }}
+                </em>
               </div>
             </div>
             <div class="cf-total">
               <span class="cf-total-icon"><Icon icon="mdi:alert-circle-outline" width="18"/></span>
-              <div><small>{{ errorsLabel }}</small><strong>{{ formatNumber(errorsUsed) }}</strong></div>
+              <div>
+                <small class="cf-total-label">{{ errorsLabel }}</small>
+                <span class="cf-total-sub">{{ errorsSubLabel }}</span>
+                <strong>{{ formatNumber(errorsUsed) }}</strong>
+              </div>
             </div>
             <div class="cf-total">
               <span class="cf-total-icon"><Icon icon="mdi:database-outline" width="18"/></span>
               <div>
-                <small>{{ d1Label }}</small>
+                <small class="cf-total-label">{{ d1Label }}</small>
+                <span class="cf-total-sub">{{ d1SubLabel }}</span>
                 <strong>{{ d1TotalUsed }}</strong>
                 <em>{{ d1QuotaText }}</em>
               </div>
@@ -155,7 +166,8 @@
             <div class="cf-total">
               <span class="cf-total-icon"><Icon icon="mdi:cloud-outline" width="18"/></span>
               <div>
-                <small>{{ $t('cfR2Storage') }}</small>
+                <small class="cf-total-label">{{ $t('cfR2Storage') }}</small>
+                <span class="cf-total-sub">{{ $t('cfCurrentSnapshot') }}</span>
                 <strong>{{ cloudflare.r2 ? formatBytes(cloudflare.r2.bytes) : '—' }}</strong>
                 <em>{{ r2QuotaText }}</em>
               </div>
@@ -163,9 +175,10 @@
             <div class="cf-total">
               <span class="cf-total-icon"><Icon icon="mdi:memory" width="18"/></span>
               <div>
-                <small>{{ doLabel }}</small>
+                <small class="cf-total-label">{{ doLabel }}</small>
+                <span class="cf-total-sub">{{ doSubLabel }}</span>
                 <strong>{{ doWindow ? formatNumber(doUsed) : '—' }}</strong>
-                <em v-if="doWindow">{{ doQuotaText }} · {{ $t('cfDoCpu') }} {{ formatDuration(doWindow.cpuTime) }}</em>
+                <em v-if="doWindow">{{ doQuotaText }} · {{ $t('cfDoCpu') }} {{ formatDuration(doWindow.cpuTime) }} · {{ doCpuWindowLabel }}</em>
                 <em v-else-if="cloudflare.doError" class="cf-quota-error">{{ cloudflare.doError }}</em>
               </div>
             </div>
@@ -179,8 +192,8 @@
                 <div class="cf-legend">
                   <div v-for="item in cfD1Items" :key="item.key" class="cf-legend-item" :title="item.sub || item.name">
                     <i :style="{background:item.color}"></i>
-                    <span class="cf-legend-name">{{ item.name }}<small v-if="item.sub">{{ item.sub }}</small></span>
-                    <strong>{{ formatCompact(item.value) }}</strong>
+                    <span class="cf-legend-name">{{ item.name }}<span v-if="item.share > 0.5" class="cf-heavy">{{ $t('cfHeavyUse') }}</span><small v-if="item.sub">{{ item.sub }}</small></span>
+                    <strong>{{ formatNumber(item.value) }}</strong>
                     <em>{{ item.shareText }}</em>
                   </div>
                 </div>
@@ -195,8 +208,8 @@
                 <div class="cf-legend">
                   <div v-for="item in cfDoItems" :key="item.key" class="cf-legend-item" :title="item.name">
                     <i :style="{background:item.color}"></i>
-                    <span class="cf-legend-name">{{ item.name }}</span>
-                    <strong>{{ formatCompact(item.value) }}</strong>
+                    <span class="cf-legend-name">{{ item.name }}<span v-if="item.share > 0.5" class="cf-heavy">{{ $t('cfHeavyUse') }}</span></span>
+                    <strong>{{ formatNumber(item.value) }}</strong>
                     <em>{{ item.shareText }}</em>
                   </div>
                 </div>
@@ -205,11 +218,11 @@
             </section>
 
             <section class="cf-viz-card cf-kv-card">
-              <div class="cf-viz-head"><span>{{ $t('cfKvUsage') }}</span><small>{{ $t('cfToday') }}</small></div>
+              <div class="cf-viz-head"><span>{{ $t('cfKvUsage') }}</span><small>{{ kvWindowLabel }}</small></div>
               <div class="cf-kv-actions" v-if="cloudflare.kv">
                 <div v-for="action in kvActions" :key="action.key">
                   <span>{{ action.label }}</span>
-                  <strong>{{ formatNumber(action.used) }}</strong>
+                  <strong>{{ action.usedText }} / {{ action.limitText }}</strong>
                   <em>{{ action.percentText }}</em>
                 </div>
               </div>
@@ -219,7 +232,7 @@
                   <div v-for="item in cfKvItems" :key="item.key" class="cf-legend-item" :title="item.sub || item.name">
                     <i :style="{background:item.color}"></i>
                     <span class="cf-legend-name">{{ item.name }}<small v-if="item.sub">{{ item.sub }}</small></span>
-                    <strong>{{ formatCompact(item.value) }}</strong>
+                    <strong>{{ formatNumber(item.value) }}</strong>
                     <em>{{ item.shareText }}</em>
                   </div>
                 </div>
@@ -230,20 +243,49 @@
             <section class="cf-viz-card cf-apps-card">
               <div class="cf-viz-head"><span>{{ $t('cfApps') }}</span><small>{{ $t('cfAppsHint') }}</small></div>
               <div class="cf-app-list">
-                <div v-for="app in cfTopApps" :key="app.key" class="cf-app-row">
+                <div v-for="app in cfPrimaryApps" :key="app.key" class="cf-app-row">
                   <span class="cf-app-icon" :class="{primary: app.otsmail}">
                     <Icon :icon="app.otsmail ? 'hugeicons:mail-01' : 'mdi:application-outline'" width="17"/>
                   </span>
-                  <span class="cf-app-name" :title="app.name">{{ app.name }}</span>
+                  <span class="cf-app-name" :title="app.name">{{ app.name }}<span v-if="app.share > 0.5" class="cf-heavy">{{ $t('cfHeavyUse') }}</span></span>
                   <strong>{{ formatNumber(app.requests) }}</strong>
                   <em>{{ app.shareText }}</em>
                   <div class="cf-app-bar"><span :style="{width: app.barPct + '%'}"></span></div>
+                </div>
+                <div v-if="cfOtherApps.length" class="cf-app-row cf-app-row-toggle" role="button" tabindex="0"
+                     @click="showOtherApps = !showOtherApps" @keyup.enter="showOtherApps = !showOtherApps">
+                  <span class="cf-app-icon"><Icon icon="mdi:application-outline" width="17"/></span>
+                  <span class="cf-app-name">
+                    {{ $t('cfOther') }}（{{ cfOtherApps.length }}）
+                    <Icon class="cf-app-caret" :class="{open: showOtherApps}" icon="mdi:chevron-down" width="14"/>
+                  </span>
+                  <strong>{{ formatNumber(cfOtherRow.requests) }}</strong>
+                  <em>{{ cfOtherRow.shareText }}</em>
+                  <div class="cf-app-bar"><span :style="{width: cfOtherRow.barPct + '%'}"></span></div>
+                </div>
+                <template v-if="showOtherApps">
+                  <div v-for="app in cfOtherApps" :key="app.key" class="cf-app-row cf-app-row-sub">
+                    <span class="cf-app-icon"><Icon icon="mdi:application-outline" width="17"/></span>
+                    <span class="cf-app-name" :title="app.name">{{ app.name }}<span v-if="app.share > 0.5" class="cf-heavy">{{ $t('cfHeavyUse') }}</span></span>
+                    <strong>{{ formatNumber(app.requests) }}</strong>
+                    <em>{{ app.shareText }}</em>
+                    <div class="cf-app-bar"><span :style="{width: app.barPct + '%'}"></span></div>
+                  </div>
+                </template>
+                <div class="cf-app-total">
+                  <span>{{ $t('cfAppsTotal') }}</span>
+                  <strong>{{ formatNumber(cloudflare.totalRequests) }}</strong>
+                  <em>{{ cfMonthRangeText }}</em>
                 </div>
               </div>
             </section>
           </div>
         </div>
         <div v-else class="cf-empty">{{ $t('cfLoading') }}</div>
+        <div class="cf-footnotes">
+          <div>{{ $t('cfFootnoteUtc') }}</div>
+          <div>{{ $t('cfFootnoteSource') }}</div>
+        </div>
       </div>
       <div class="picture">
         <div class="picture-item">
@@ -275,6 +317,7 @@
         <div class="picture-cs-item">
           <div class="title">{{ $t('sentToday') }}</div>
           <div class="send-count"></div>
+          <div class="send-gauge-note">{{ $t('cfSendGaugeNote', {used: daySendTotal, limit: 100}) }}</div>
         </div>
       </div>
     </div>
@@ -374,6 +417,30 @@ const fetchedAtText = computed(() => {
 const cfPeriodLabel = computed(() =>
   isPaid.value ? cloudflare.period : `${new Date().toISOString().slice(0, 10)} UTC`
 )
+const requestsSubLabel = computed(() => t(isPaid.value ? 'cfWorkersSubMonth' : 'cfWorkersSubToday'))
+const errorsSubLabel = computed(() => t(isPaid.value ? 'cfErrorsSubMonth' : 'cfErrorsSubToday'))
+const d1SubLabel = computed(() => t(isPaid.value ? 'cfD1SubMonth' : 'cfD1SubToday'))
+const doSubLabel = computed(() => t(isPaid.value ? 'cfDoSubMonth' : 'cfDoSubToday'))
+const doCpuWindowLabel = computed(() => t(isPaid.value ? 'cfWindowMonth' : 'cfWindowToday'))
+const kvWindowLabel = computed(() => t(isPaid.value ? 'cfKvPaidQuotaHint' : 'cfToday'))
+const otsmailToday = computed(() => {
+  const app = (cloudflare.todayApps || []).find(item => String(item.name || '').toLowerCase() === 'otsmail')
+  return app ? Number(app.requests || 0) : null
+})
+const otsmailTodayShare = computed(() => {
+  const total = Number(cloudflare.workersToday || 0)
+  if (!total || otsmailToday.value === null) return '0.0'
+  return ((otsmailToday.value / total) * 100).toFixed(1)
+})
+const workersTip = computed(() => t(isPaid.value ? 'cfRequestsTipPaid' : 'cfRequestsTipFree', {
+  limit: formatNumber(workersLimit.value || 0)
+}))
+const cfMonthRangeText = computed(() => {
+  const period = String(cloudflare.period || '')
+  if (period.length < 7) return ''
+  return t('cfMonthRange', {range: `${period.slice(5, 7)}-01`})
+})
+const showOtherApps = ref(false)
 const workersLimit = computed(() =>
   cloudflare.plan === 'paid'
     ? cloudflare.limits?.workersMonthlyRequests
@@ -461,15 +528,26 @@ function kvLimit(key) {
 
 const kvActions = computed(() => {
   const items = [
-    ['read', 'cfKvRead', 'kvDailyRead'],
-    ['write', 'cfKvWrite', 'kvDailyWrite'],
-    ['delete', 'cfKvDelete', 'kvDailyDelete'],
-    ['list', 'cfKvList', 'kvDailyList']
+    ['read', 'cfKvRead'],
+    ['write', 'cfKvWrite'],
+    ['delete', 'cfKvDelete'],
+    ['list', 'cfKvList']
   ]
-  return items.map(([key, label, limitKey]) => {
+  const limitKeys = isPaid.value
+    ? {read: 'kvMonthlyRead', write: 'kvMonthlyWrite', delete: 'kvMonthlyDelete', list: 'kvMonthlyList'}
+    : {read: 'kvDailyRead', write: 'kvDailyWrite', delete: 'kvDailyDelete', list: 'kvDailyList'}
+  return items.map(([key, label]) => {
     const used = Number(cloudflare.kv?.[key] || 0)
-    const limit = Number(cloudflare.limits?.[limitKey] || 0)
-    return { key, label: t(label), used, limit, percentText: shareText(used, limit) }
+    const limit = Number(cloudflare.limits?.[limitKeys[key]] || 0)
+    return {
+      key,
+      label: t(label),
+      used,
+      limit,
+      usedText: formatNumber(used),
+      limitText: limit ? formatNumber(limit) : '—',
+      percentText: limit ? shareText(used, limit) : t('cfNoLimit')
+    }
   })
 })
 
@@ -493,6 +571,7 @@ function donutItems(rows, total) {
   return visible.map((row, index) => ({
     ...row,
     color: row.key === 'other' ? '#9CA3AF' : CF_COLORS[index % CF_COLORS.length],
+    share: Number(total || 0) > 0 ? Number(row.value || 0) / Number(total) : 0,
     shareText: shareText(row.value, total)
   }))
 }
@@ -526,20 +605,34 @@ const cfKvItems = computed(() => donutItems(
     value: Number(ns.read || 0) + Number(ns.write || 0) + Number(ns.delete || 0) + Number(ns.list || 0)
   })), cfKvTotal.value))
 
-const cfTopApps = computed(() => {
-  const total = Number(cloudflare.totalRequests || 0)
-  const apps = (cloudflare.apps || []).slice(0, 6).map(app => ({
+function appRow(app, total) {
+  return {
     ...app,
     key: app.name,
+    share: total ? Number(app.requests || 0) / total : 0,
     shareText: shareText(app.requests, total),
     barPct: total ? Math.max(0.5, Math.min(100, (Number(app.requests) / total) * 100)) : 0
-  }))
-  const rest = (cloudflare.apps || []).slice(6)
-  if (rest.length) {
-    const requests = rest.reduce((sumValue, app) => sumValue + Number(app.requests || 0), 0)
-    apps.push({ key: 'other', name: t('cfOther'), requests, shareText: shareText(requests, total), barPct: total ? Math.max(0.5, Math.min(100, (requests / total) * 100)) : 0 })
   }
-  return apps
+}
+
+const cfPrimaryApps = computed(() => {
+  const total = Number(cloudflare.totalRequests || 0)
+  return (cloudflare.apps || []).slice(0, 6).map(app => appRow(app, total))
+})
+
+const cfOtherApps = computed(() => {
+  const total = Number(cloudflare.totalRequests || 0)
+  return (cloudflare.apps || []).slice(6).map(app => appRow(app, total))
+})
+
+const cfOtherRow = computed(() => {
+  const total = Number(cloudflare.totalRequests || 0)
+  const requests = cfOtherApps.value.reduce((sumValue, app) => sumValue + Number(app.requests || 0), 0)
+  return {
+    requests,
+    shareText: shareText(requests, total),
+    barPct: total ? Math.max(0.5, Math.min(100, (requests / total) * 100)) : 0
+  }
 })
 
 const numberCount = reactive({
@@ -597,7 +690,7 @@ const topic = computed(() => ({
   gaugeSplitLine: uiStore.dark ? skinToken('--rd-line-strong', '#CFD3DC') : '#606266',
   containerBackground: uiStore.dark ? skinToken('--rd-panel-2', '#6C6E72') : '#E6EBF8'
 }))
-let daySendTotal = 0
+const daySendTotal = ref(0)
 let leaveWidth = 0
 let senderPie = null
 let increaseLine = null
@@ -652,7 +745,7 @@ onMounted(() => {
     emailColumnData.daysData = data.emailDayCount.receiveDayCount.map(item => dayjs(item.date).format("M.D"))
     emailColumnData.receiveData = data.emailDayCount.receiveDayCount.map(item => item.total)
     emailColumnData.sendData = data.emailDayCount.sendDayCount.map(item => item.total)
-    daySendTotal = data.daySendTotal
+    daySendTotal.value = Number(data.daySendTotal || 0)
     analysisLoading.value = false
     initPicture();
     first = false
@@ -725,7 +818,7 @@ function createCfDonut(el, chart, items, total, unit) {
     color: items.map(item => item.color),
     animationDuration: 400,
     title: {
-      text: formatCompact(total),
+      text: formatNumber(total),
       subtext: unit,
       left: '50%',
       top: '40%',
@@ -788,6 +881,8 @@ function createSenderPie() {
     senderPie.dispose()
   }
   senderPie = echarts.init(document.querySelector(".sender-pie"))
+  const sourceTotal = (senderData.value || []).reduce((sum, item) => sum + Number(item.value || 0), 0)
+  const sourceValue = name => Number((senderData.value || []).find(item => item.name === name)?.value || 0)
   let option = {
     tooltip: {
       trigger: 'item',
@@ -796,7 +891,7 @@ function createSenderPie() {
       },
       backgroundColor: topic.value.background,
       formatter: params => {
-        return `${params.marker} ${params.name}： ${params.value} (${params.percent}%)`;
+        return `${params.marker} ${params.name}：${formatNumber(params.value)} (${shareText(params.value, sourceTotal)})`;
       }
     },
     legend: {
@@ -804,11 +899,18 @@ function createSenderPie() {
       orient: 'vertical',
       left: '10',
       top: '20',
+      itemGap: 10,
       textStyle: {
-        color: topic.value.color
+        color: topic.value.color,
+        fontSize: 11,
+        rich: {
+          n: {width: 88, color: topic.value.color, fontSize: 11, padding: [0, 6, 0, 0]},
+          v: {width: 52, align: 'right', color: topic.value.color, fontSize: 11, padding: [0, 6, 0, 0]},
+          p: {width: 42, align: 'right', color: topic.value.axisColor, fontSize: 11}
+        }
       },
       formatter: function (name) {
-        return truncateTextByWidth(name)
+        return `{n|${truncateTextByWidth(name, 88)}}{v|${formatNumber(sourceValue(name))}}{p|${shareText(sourceValue(name), sourceTotal)}}`
       }
     },
     series: [
@@ -870,11 +972,9 @@ function createIncreaseLine() {
         axis: 'x',
       },
       formatter: function (params) {
-        let result = ''
-        params.forEach(item => {
-          result = `${item.marker} ${t('growthTotalUsers')} ${item.value}`;
-        });
-        return result;
+        const item = params[0]
+        if (!item) return ''
+        return `${item.axisValue} · ${item.marker} ${t('growthTotalUsers')} ${formatNumber(item.value)}`
       },
       backgroundColor: topic.value.background,  // 设置背景颜色
       borderColor: topic.value.splitLineColor,      // 设置边框颜色
@@ -1015,13 +1115,17 @@ function createEmailColumnChart() {
 
   const option = {
     tooltip: {
+      trigger: 'axis',
+      axisPointer: {type: 'shadow'},
       textStyle: {
         color: topic.value.color
       },
       backgroundColor: topic.value.background,
       formatter: function (params) {
-        params.marker
-        return `${params.marker} ${params.seriesName}: ${params.value}`
+        const rows = Array.isArray(params) ? params : [params]
+        if (!rows.length) return ''
+        const lines = rows.map(item => `${item.marker} ${item.seriesName}: ${formatNumber(item.value)}`)
+        return `${rows[0].axisValue}<br/>${lines.join('<br/>')}`
       }
     },
     legend: {
@@ -1169,11 +1273,11 @@ function createSendGauge() {
       // 中心文字颜色（新增）
       detail: {
         valueAnimation: true,
-        formatter: '{value}',
+        formatter: '{value} / 100',
         color: topic.value.color // 黑色文字
       },
       data: [{
-        value: daySendTotal,
+        value: daySendTotal.value,
         name: t('total'),
         // 名称标签颜色（新增）
         title: {
@@ -1218,7 +1322,7 @@ function createSendGauge() {
 .cf-kv-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 4px 0 8px; }
 .cf-kv-actions > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 7px 8px; border-radius: 8px; background: var(--el-fill-color-light); }
 .cf-kv-actions span { font-size: 10px; color: var(--el-text-color-secondary); }
-.cf-kv-actions strong { font-size: 15px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.cf-kv-actions strong { font-size: 12px; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .cf-kv-actions em { font-style: normal; font-size: 9px; color: var(--el-text-color-placeholder); }
 .cf-kv-donut-wrap { grid-template-columns: 150px minmax(0, 1fr); min-height: 170px; margin-top: 2px; }
 .cf-kv-donut-wrap .cf-donut { height: 170px; }
@@ -1232,6 +1336,22 @@ function createSendGauge() {
 .cf-app-row > em { font-style: normal; font-size: 10px; text-align: right; color: var(--el-text-color-secondary); font-variant-numeric: tabular-nums; }
 .cf-app-bar { grid-column: 2 / -1; height: 3px; overflow: hidden; border-radius: 99px; background: var(--el-fill-color-light); }
 .cf-app-bar span { display: block; height: 100%; border-radius: inherit; background: var(--rd-accent); }
+.metric-tag { margin-left: 4px; font-size: 11px; font-weight: 400; color: var(--el-text-color-secondary); }
+.cf-total-label { width: fit-content; }
+.cf-total-sub { font-size: 10px; line-height: 1.3; color: var(--el-text-color-placeholder); }
+.cf-total-note { color: var(--el-text-color-secondary); }
+.cf-heavy { display: inline-block; margin-left: 5px; padding: 0 4px; border-radius: 4px; font-size: 9px; line-height: 1.5; font-weight: 400; color: var(--el-color-warning); background: var(--el-color-warning-light-9); vertical-align: middle; }
+.cf-app-caret { margin-left: 3px; vertical-align: -2px; transition: transform .2s ease; }
+.cf-app-caret.open { transform: rotate(180deg); }
+.cf-app-row-toggle { cursor: pointer; }
+.cf-app-row-toggle:hover { background: var(--el-fill-color-lighter); }
+.cf-app-row-sub { padding-left: 12px; background: var(--el-fill-color-lighter); }
+.cf-app-total { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: baseline; margin-top: 6px; padding-top: 7px; border-top: 1px solid var(--el-border-color); font-size: 11px; }
+.cf-app-total > span { color: var(--el-text-color-secondary); }
+.cf-app-total > strong { font-size: 12px; font-variant-numeric: tabular-nums; }
+.cf-app-total > em { grid-column: 1 / -1; font-style: normal; font-size: 9px; color: var(--el-text-color-placeholder); }
+.cf-footnotes { display: grid; gap: 3px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--el-border-color-lighter); font-size: 10px; line-height: 1.5; color: var(--el-text-color-placeholder); }
+.send-gauge-note { padding: 0 12px 12px; text-align: center; font-size: 10px; line-height: 1.4; color: var(--el-text-color-secondary); }
 @media (max-width: 1000px) {
   .cf-viz-grid { grid-template-columns: 1fr; }
 }
@@ -1543,7 +1663,7 @@ function createSendGauge() {
 .cf-kv-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 4px 0 8px; }
 .cf-kv-actions > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 7px 8px; border-radius: 8px; background: var(--el-fill-color-light); }
 .cf-kv-actions span { font-size: 10px; color: var(--el-text-color-secondary); }
-.cf-kv-actions strong { font-size: 15px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.cf-kv-actions strong { font-size: 12px; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .cf-kv-actions em { font-style: normal; font-size: 9px; color: var(--el-text-color-placeholder); }
 .cf-kv-donut-wrap { grid-template-columns: 150px minmax(0, 1fr); min-height: 170px; margin-top: 2px; }
 .cf-kv-donut-wrap .cf-donut { height: 170px; }
@@ -1557,6 +1677,22 @@ function createSendGauge() {
 .cf-app-row > em { font-style: normal; font-size: 10px; text-align: right; color: var(--el-text-color-secondary); font-variant-numeric: tabular-nums; }
 .cf-app-bar { grid-column: 2 / -1; height: 3px; overflow: hidden; border-radius: 99px; background: var(--el-fill-color-light); }
 .cf-app-bar span { display: block; height: 100%; border-radius: inherit; background: var(--rd-accent); }
+.metric-tag { margin-left: 4px; font-size: 11px; font-weight: 400; color: var(--el-text-color-secondary); }
+.cf-total-label { width: fit-content; }
+.cf-total-sub { font-size: 10px; line-height: 1.3; color: var(--el-text-color-placeholder); }
+.cf-total-note { color: var(--el-text-color-secondary); }
+.cf-heavy { display: inline-block; margin-left: 5px; padding: 0 4px; border-radius: 4px; font-size: 9px; line-height: 1.5; font-weight: 400; color: var(--el-color-warning); background: var(--el-color-warning-light-9); vertical-align: middle; }
+.cf-app-caret { margin-left: 3px; vertical-align: -2px; transition: transform .2s ease; }
+.cf-app-caret.open { transform: rotate(180deg); }
+.cf-app-row-toggle { cursor: pointer; }
+.cf-app-row-toggle:hover { background: var(--el-fill-color-lighter); }
+.cf-app-row-sub { padding-left: 12px; background: var(--el-fill-color-lighter); }
+.cf-app-total { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: baseline; margin-top: 6px; padding-top: 7px; border-top: 1px solid var(--el-border-color); font-size: 11px; }
+.cf-app-total > span { color: var(--el-text-color-secondary); }
+.cf-app-total > strong { font-size: 12px; font-variant-numeric: tabular-nums; }
+.cf-app-total > em { grid-column: 1 / -1; font-style: normal; font-size: 9px; color: var(--el-text-color-placeholder); }
+.cf-footnotes { display: grid; gap: 3px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--el-border-color-lighter); font-size: 10px; line-height: 1.5; color: var(--el-text-color-placeholder); }
+.send-gauge-note { padding: 0 12px 12px; text-align: center; font-size: 10px; line-height: 1.4; color: var(--el-text-color-secondary); }
 @media (max-width: 1000px) {
   .cf-viz-grid { grid-template-columns: 1fr; }
 }

@@ -170,7 +170,11 @@ const PLAN_LIMITS = {
 		r2StorageBytes: 10 * 1024 ** 3,
 		durableObjectMonthlyRequests: 1000000,
 		durableObjectStorageBytes: 5 * 1000 ** 3,
-		durableObjects: true
+		durableObjects: true,
+		kvMonthlyRead: 10000000,
+		kvMonthlyWrite: 1000000,
+		kvMonthlyDelete: 1000000,
+		kvMonthlyList: 1000000
 	}
 };
 
