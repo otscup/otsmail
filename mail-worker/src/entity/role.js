@@ -8,6 +8,7 @@ export const role = sqliteTable('role', {
 	banEmail: text('ban_email').notNull().default(''),
 	banEmailType: integer('ban_email_type').notNull().default(0),
 	availDomain: text('avail_domain').default(''),
+	sendDomain: text('send_domain').default(''),
 	sort: integer('sort'),
 	isDefault: integer('is_default').default(0),
 	createTime: text('create_time').default(sql`CURRENT_TIMESTAMP`).notNull(),

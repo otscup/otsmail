@@ -12,6 +12,7 @@ import userContext from '../security/user-context';
 import {normalizeFilterRules} from '../utils/filter-rules';
 import {sanitizeEmailHtml} from '../utils/html-sanitize';
 import {getTableColumns} from 'drizzle-orm';
+import senderProviderConfig from './sender-provider-config';
 
 const settingService = {
 
@@ -209,6 +210,9 @@ const settingService = {
 			settingRow.resendTokens[key] = `${settingRow.resendTokens[key].slice(0, 12)}******`;
 		});
 
+		// 多渠道发信配置：apiKey / secret 只回显前 12 位
+		settingRow.senderProviders = senderProviderConfig.mask(settingRow);
+
 		settingRow.s3AccessKey = settingRow.s3AccessKey ? `${settingRow.s3AccessKey.slice(0, 12)}******` : null;
 		settingRow.s3SecretKey = settingRow.s3SecretKey ? `${settingRow.s3SecretKey.slice(0, 12)}******` : null;
 		settingRow.tgBotToken = settingRow.tgBotToken ? `${settingRow.tgBotToken.slice(0, 20)}******` : null;
@@ -331,10 +335,16 @@ const settingService = {
 
 		if (params.noticeContent !== undefined) {
 			params.noticeContent = sanitizeEmailHtml(String(params.noticeContent || ''));
-		}
-		if (params.noticeWidth !== undefined) {
+		}		if (params.noticeWidth !== undefined) {
 			const width = Number(params.noticeWidth);
 			params.noticeWidth = Number.isFinite(width) ? Math.min(800, Math.max(220, width)) : 300;
+		}
+
+		// 渠道凭据：含 ****** 的占位值保留旧 Key；只接受已知渠道与受限字段，避免任意 JSON 落库
+		if (params.senderProviders !== undefined) {
+			params.senderProviders = JSON.stringify(
+				senderProviderConfig.sanitizeInput(params.senderProviders, settingData)
+			);
 		}
 
 		params.resendTokens = JSON.stringify(resendTokens);
@@ -420,6 +430,7 @@ const settingService = {
 			send: settingRow.send,
 			r2Domain: settingRow.r2Domain,
 			siteKey: settingRow.siteKey,
+			turnstileEnabled: Boolean(settingRow.siteKey && settingRow.secretKey),
 			background: settingRow.background,
 			aiSummaryMode: settingRow.aiSummaryMode || 'manual',
 			countRefreshMinutes: settingRow.countRefreshMinutes || 10,

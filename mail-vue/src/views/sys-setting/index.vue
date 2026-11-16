@@ -225,18 +225,16 @@
                 </div>
               </div>
               <div class="setting-item">
-                <div><span>{{ setting.hasCfEmail ? $t('cloudflareEmailSending') : $t('resendToken') }}</span></div>
-                <div v-if="setting.hasCfEmail">
-                  <span>{{ $t('enabled') }}</span>
+                <div>
+                  <span>{{ $t('senderProviders') }}</span>
+                  <el-tooltip effect="dark" :content="$t('senderProvidersDesc')">
+                    <Icon class="warning" icon="fe:warning" width="18" height="18"/>
+                  </el-tooltip>
                 </div>
-                <div v-else>
-                  <el-button class="opt-button" style="margin-top: 0" @click="openResendList" size="small"
+                <div>
+                  <el-button class="opt-button" style="margin-top: 0" @click="openSenderProviders" size="small"
                              type="primary">
-                    <Icon icon="ic:round-list" width="18" height="18"/>
-                  </el-button>
-                  <el-button class="opt-button" style="margin-top: 0" @click="openResendForm" size="small"
-                             type="primary">
-                    <Icon icon="material-symbols:add-rounded" width="16" height="16"/>
+                    <Icon icon="fluent:settings-48-regular" width="16" height="16"/>
                   </el-button>
                 </div>
               </div>
@@ -589,20 +587,6 @@
       </div>
 
       <!-- Dialogs remain the same -->
-      <el-dialog v-model="resendTokenFormShow" :title="$t('resendToken')" width="340" @closed="cleanResendTokenForm">
-        <form @submit.prevent>
-          <el-select style="margin-bottom: 15px" v-model="resendTokenForm.domain" placeholder="Select">
-            <el-option
-                v-for="item in settingStore.domainList"
-                :key="item"
-                :label="item"
-                :value="item"
-            />
-          </el-select>
-          <el-input type="text" :placeholder="$t('addResendTokenDesc')" v-model="resendTokenForm.token" @keyup.enter="saveResendToken"/>
-          <el-button type="primary" :loading="settingLoading" @click="saveResendToken">{{ $t('save') }}</el-button>
-        </form>
-      </el-dialog>
       <el-dialog v-model="r2DomainShow" :title="$t('addOsDomain')" width="340"
                  @closed="r2DomainInput = setting.r2Domain">
         <form @submit.prevent>
@@ -947,14 +931,6 @@
           </div>
         </template>
       </el-dialog>
-      <el-dialog class="resend-table" v-model="showResendList" :title="$t('resendTokenList')">
-        <el-table :data="resendList">
-          <el-table-column :min-width="emailColumnWidth" property="key" :label="$t('domain')"
-                           :show-overflow-tooltip="true"/>
-          <el-table-column :width="tokenColumnWidth" property="value" label="Token" fixed="right"
-                           :show-overflow-tooltip="true"/>
-        </el-table>
-      </el-dialog>
       <el-dialog v-model="regVerifyCountShow" :title="$t('rulesVerifyTitle',{count: regVerifyCount})"
                  @closed="regVerifyCount = setting.regVerifyCount">
         <form @submit.prevent>
@@ -1150,13 +1126,199 @@
         </el-form>
         <el-button type="primary" style="width: 100%;" :loading="settingLoading" @click="saveAiCodeFilter">{{ $t('save') }}</el-button>
       </el-dialog>
+      <el-dialog v-model="senderProvidersShow" :title="$t('senderProviders')" width="880px"
+                 class="provider-dialog" @open="loadSenderProviders">
+        <!-- 不用 v-loading：全局把 loading 蒙层改成 rgba(0,0,0,.3)，打开瞬间会闪一层灰底 -->
+        <div class="provider-wrap">
+          <div class="provider-tip">{{ $t('senderProvidersDesc') }}</div>
+          <el-alert v-if="senderProvidersInfo.hasCloudflareEmail" :title="$t('senderCfEmailTip')" type="info"
+                    :closable="false" show-icon class="provider-alert"/>
+
+          <div class="provider-summary">
+            <div class="provider-stat">
+              <span class="provider-stat-value">
+                {{ providerSummary.synced }}<i>/{{ providerSummary.total }}</i>
+              </span>
+              <span class="provider-stat-label">{{ $t('channelSynced') }}</span>
+            </div>
+            <div class="provider-stat">
+              <span class="provider-stat-value">
+                {{ providerSummary.routable }}<i>/{{ providerSummary.synced }}</i>
+              </span>
+              <span class="provider-stat-label">{{ $t('channelRoutable') }}</span>
+            </div>
+            <div class="provider-stat">
+              <span class="provider-stat-value">{{ providerSummary.remaining.day }}</span>
+              <span class="provider-stat-label">
+                {{ $t('channelDailyRemaining') }} · {{ providerSummary.usage.day }}/{{ providerSummary.limits.day }}
+              </span>
+            </div>
+            <div class="provider-stat">
+              <span class="provider-stat-value">{{ providerSummary.remaining.month }}</span>
+              <span class="provider-stat-label">
+                {{ $t('channelMonthlyRemaining') }} · {{ providerSummary.usage.month }}/{{ providerSummary.limits.month }}
+              </span>
+            </div>
+          </div>
+          <div class="provider-quota-note">{{ $t('channelQuotaScope') }}</div>
+          <div class="provider-quota-note">{{ $t('channelQuotaLocal') }}</div>
+          <div v-if="senderProvidersLoading && !senderProviderRows.length" class="provider-loading">
+            {{ $t('loadingText') }}
+          </div>
+
+          <div v-for="row in senderProviderRows" :key="row.id" class="provider-card"
+               :class="{ 'is-open': row.expanded }">
+            <div class="provider-head" @click="toggleProvider(row)">
+              <span class="provider-caret" :class="{ open: row.expanded }">▸</span>
+              <span class="provider-name">{{ row.name }}</span>
+              <el-tag size="small" effect="plain" :type="row.configured ? 'success' : 'info'">
+                {{ row.configured ? $t('channelSyncedTag') : $t('channelNotConfigured') }}
+              </el-tag>
+              <el-tag v-if="row.cooling" type="warning" size="small">{{ $t('providerCooling') }}</el-tag>
+              <div class="provider-head-actions" @click.stop>
+                <el-button v-if="row.meta.signupUrl" link type="primary" size="small" @click="openProviderSignup(row)">
+                  {{ $t('registerProvider') }}
+                </el-button>
+                <span class="provider-label">{{ $t('priority') }}</span>
+                <el-input-number v-model="row.order" :min="1" :max="99" size="small"
+                                 controls-position="right" class="provider-order"/>
+                <el-switch v-model="row.enabled"/>
+              </div>
+            </div>
+
+            <!-- 折叠态：只留一行额度摘要，一眼看清每个渠道的情况 -->
+            <div v-if="!row.expanded" class="provider-brief">
+              <span>{{ $t('channelDailyCap') }} {{ row.dailyLimit }}</span>
+              <span>{{ $t('todaySent') }} {{ row.usage.day }}</span>
+              <span>{{ $t('channelRemaining') }} <b>{{ row.remaining.day }}</b></span>
+              <span>{{ $t('channelMonthlyRemaining') }} <b>{{ row.remaining.month }}</b></span>
+            </div>
+
+            <div v-show="row.expanded" class="provider-body">
+              <div class="provider-usage">
+                <div class="provider-usage-item">
+                  <div class="provider-usage-text">
+                    <span>{{ $t('channelDailyCap') }} {{ row.dailyLimit }}</span>
+                    <span>{{ $t('todaySent') }} {{ row.usage.day }}</span>
+                    <span class="provider-remaining">
+                      {{ $t('channelRemaining') }} <b>{{ row.remaining.day }}</b>
+                    </span>
+                  </div>
+                  <el-progress :percentage="usagePercent(row, 'day')" :stroke-width="6" :show-text="false"
+                               :color="usageColor(usagePercent(row, 'day'))"/>
+                </div>
+                <div class="provider-usage-item">
+                  <div class="provider-usage-text">
+                    <span>{{ $t('monthlyLimit') }} {{ row.monthlyLimit }}</span>
+                    <span>{{ $t('monthSent') }} {{ row.usage.month }}</span>
+                    <span class="provider-remaining">
+                      {{ $t('channelRemaining') }} <b>{{ row.remaining.month }}</b>
+                    </span>
+                  </div>
+                  <el-progress :percentage="usagePercent(row, 'month')" :stroke-width="6" :show-text="false"
+                               :color="usageColor(usagePercent(row, 'month'))"/>
+                </div>
+              </div>
+
+              <div class="provider-accounts">
+                <div class="provider-accounts-head">
+                  <span>{{ $t('sendAccounts') }}</span>
+                  <el-button size="small" text type="primary" @click="addProviderAccount(row)">
+                    + {{ $t('addSendAccount') }}
+                  </el-button>
+                </div>
+                <div v-for="(account, index) in row.accounts" :key="index" class="provider-account-row">
+                  <el-select v-model="account.domain" class="account-domain" size="small" filterable allow-create clearable
+                             default-first-option :placeholder="$t('sendDomain')">
+                    <el-option v-for="domain in providerDomainOptions" :key="domain" :label="domain" :value="domain"/>
+                  </el-select>
+                  <el-input v-model="account.apiKey" class="account-key" size="small" show-password
+                            :placeholder="$t('apiKeyPlaceholder')"/>
+                  <el-input v-if="row.meta.keyFields.includes('secret')" v-model="account.secret" class="account-secret"
+                            size="small" show-password :placeholder="$t('apiSecret')"/>
+                  <el-button size="small" :loading="account.testing" @click="testProviderAccount(row, account)">
+                    {{ $t('testSend') }}
+                  </el-button>
+                  <el-button size="small" type="danger" text @click="removeProviderAccount(row, index)">
+                    {{ $t('delete') }}
+                  </el-button>
+                </div>
+                <div v-if="!row.accounts.length" class="provider-accounts-empty">{{ $t('noSendAccount') }}</div>
+              </div>
+
+              <div class="provider-form">
+                <div class="provider-field">
+                  <span>{{ $t('dailyLimit') }}</span>
+                  <el-input-number v-model="row.dailyLimit" :min="1" :max="100000" size="small"
+                                   controls-position="right" @change="onProviderLimitChange(row, 'day')"/>
+                  <span class="provider-field-hint">
+                    {{ row.dailyLimitManual
+                        ? $t('channelLimitHintManual', {value: row.defaultDailyLimit})
+                        : $t('channelLimitHintDefault', {value: row.defaultDailyLimit}) }}
+                  </span>
+                  <el-button v-if="row.dailyLimitManual" link size="small" class="provider-limit-reset"
+                             @click="resetProviderLimit(row, 'day')">
+                    {{ $t('channelLimitReset') }}
+                  </el-button>
+                </div>
+                <div class="provider-field">
+                  <span>{{ $t('monthlyLimit') }}</span>
+                  <el-input-number v-model="row.monthlyLimit" :min="1" :max="3000000" size="small"
+                                   controls-position="right" @change="onProviderLimitChange(row, 'month')"/>
+                  <span class="provider-field-hint">
+                    {{ row.monthlyLimitManual
+                        ? $t('channelLimitHintManual', {value: row.defaultMonthlyLimit})
+                        : $t('channelLimitHintDefault', {value: row.defaultMonthlyLimit}) }}
+                  </span>
+                  <el-button v-if="row.monthlyLimitManual" link size="small" class="provider-limit-reset"
+                             @click="resetProviderLimit(row, 'month')">
+                    {{ $t('channelLimitReset') }}
+                  </el-button>
+                </div>
+                <div class="provider-field provider-field-action">
+                  <el-button size="small" :loading="row.testing" @click="testSenderProvider(row)">
+                    {{ $t('testSend') }}
+                  </el-button>
+                </div>
+              </div>
+
+              <div class="provider-note">{{ row.meta.note }}</div>
+              <div class="provider-dns">
+                <div class="provider-dns-title">{{ $t('dnsRecords') }}</div>
+                <div v-for="dns in dnsRows(row)" :key="dns.key" class="dns-row">
+                  <span class="dns-name">{{ dns.type }} {{ dns.key }}</span>
+                  <el-input v-model="row.dnsRecords[dns.key]" size="small" class="dns-value"
+                            :placeholder="$t('dnsValuePlaceholder')"/>
+                  <el-tag size="small" class="dns-status" :type="dnsStatusType(dns.status)">{{ $t(dnsStatusKey(dns.status)) }}</el-tag>
+                </div>
+                <div v-if="row.meta.spfInclude" class="dns-row">
+                  <span class="dns-name">TXT @ (include:{{ row.meta.spfInclude }})</span>
+                  <span class="dns-hint">{{ $t('spfMergeHint') }}</span>
+                  <el-tag size="small" class="dns-status" :type="dnsStatusType(spfStatus(row).status)">
+                    {{ $t(dnsStatusKey(spfStatus(row).status)) }}
+                  </el-tag>
+                </div>
+              </div>
+            </div>
+          </div>
+          <el-button size="small" class="provider-check" :loading="senderDnsLoading" @click="checkSenderDns">
+            {{ $t('checkDns') }}
+          </el-button>
+        </div>
+        <template #footer>
+          <el-button @click="senderProvidersShow = false">{{ $t('cancel') }}</el-button>
+          <el-button type="primary" :loading="senderProvidersSaving" @click="saveSenderProviders">
+            {{ $t('save') }}
+          </el-button>
+        </template>
+      </el-dialog>
     </el-scrollbar>
   </div>
 </template>
 
 <script setup>
 import {computed, defineOptions, nextTick, onMounted, onUnmounted, reactive, ref, watch} from "vue";
-import {aiModels, deleteBackground, setBackground, setBlackList, settingQuery, settingSet, tgWebhook, webhookTest} from "@/request/setting.js";
+import {aiModels, deleteBackground, setBackground, setBlackList, settingQuery, settingSet, tgWebhook, webhookTest, senderProvidersQuery, senderProvidersSave, senderProvidersTest, senderProvidersDns} from "@/request/setting.js";
 import {aiClassify} from "@/request/ai.js";
 import {versionCheck, versionInfo} from "@/request/version.js";
 import {telegramBindTicket} from "@/request/my.js";
@@ -1170,7 +1332,6 @@ import {storeToRefs} from "pinia";
 import {debounce} from 'lodash-es'
 import {isDomain, isEmail} from "@/utils/verify-utils.js";
 import loading from "@/components/loading/index.vue";
-import {getTextWidth} from "@/utils/text.js";
 import {fileToBase64} from "@/utils/file-utils.js"
 import {useI18n} from 'vue-i18n';
 import {useRouter} from 'vue-router';
@@ -1241,7 +1402,6 @@ const localUpShow = ref(false)
 const accountStore = useAccountStore();
 const userStore = useUserStore();
 const editTitleShow = ref(false)
-const resendTokenFormShow = ref(false)
 const blackFormShow = ref(false)
 const filterFormShow = ref(false)
 const filterRules = ref([])
@@ -1280,7 +1440,36 @@ const enabledOidcCount = computed(() => {
   return setting.value.oidcSwitch === 1 ? 1 : 0
 })
 const emailPrefixShow = ref(false)
-const showResendList = ref(false)
+// 多渠道发信
+const senderProvidersShow = ref(false)
+const senderProvidersLoading = ref(false)
+const senderProvidersSaving = ref(false)
+const senderDnsLoading = ref(false)
+const senderProviderRows = ref([])
+const senderProvidersInfo = ref({adminEmail: '', hasCloudflareEmail: false})
+const senderDnsResult = ref(null)
+
+/** 汇总口径由服务端算好（synced=凭据填全，routable=已启用且未冷却），前端不再重复算一遍 */
+const emptyProviderSummary = {
+  total: 0, synced: 0, enabled: 0, routable: 0,
+  limits: {day: 0, month: 0},
+  usage: {day: 0, month: 0},
+  remaining: {day: 0, month: 0}
+}
+const providerSummary = computed(() => senderProvidersInfo.value.summary || emptyProviderSummary)
+
+function usagePercent(row, period) {
+  const limit = Number(period === 'day' ? row.dailyLimit : row.monthlyLimit) || 0
+  const used = Number(row.usage?.[period]) || 0
+  if (limit <= 0) return 0
+  return Math.min(100, Math.round((used / limit) * 100))
+}
+
+function usageColor(percent) {
+  if (percent >= 90) return '#f56c6c'
+  if (percent >= 70) return '#e6a23c'
+  return '#34c759'
+}
 const settingStore = useSettingStore();
 const uiStore = useUiStore();
 const {settings: setting} = storeToRefs(settingStore);
@@ -1344,10 +1533,6 @@ let backup = '{}'
 const addS3Show = ref(false)
 const addVerifyCountShow = ref(false)
 const regVerifyCountShow = ref(false)
-const resendTokenForm = reactive({
-  domain: '',
-  token: '',
-})
 const turnstileForm = reactive({
   siteKey: '',
   secretKey: ''
@@ -1401,8 +1586,6 @@ const tgBotStatus = ref(0)
 const tgBotToken = ref('')
 const forwardEmail = ref([])
 const forwardStatus = ref(0)
-const emailColumnWidth = ref(0)
-const tokenColumnWidth = ref(0)
 const ruleType = ref(0)
 const ruleEmail = ref([])
 const tgMsgFrom = ref('')
@@ -1426,7 +1609,6 @@ function getSettings() {
     aiModelList.value = setting.value.aiModel ? [setting.value.aiModel] : []
     settingStore.domainList = settingData.domainList;
     settingStore.settings.showAvatar = settingData.showAvatar ?? 0;
-    resendTokenForm.domain = setting.value.domainList[0]
     loginOpacity.value = setting.value.loginOpacity
     chatOpacity.value = setting.value.chatOpacity ?? 0.88
     minEmailPrefix.value = setting.value.minEmailPrefix
@@ -1470,28 +1652,6 @@ function resetAddS3Form() {
   s3.s3SecretKey = ''
   s3.forcePathStyle = setting.value.forcePathStyle
 }
-
-const resendList = computed(() => {
-
-  let list = Object.keys(setting.value.resendTokens).map(key => {
-    return {
-      key: key,
-      value: setting.value.resendTokens[key]
-    };
-  })
-
-  if (list.length > 0) {
-
-    const key = list.reduce((a, b) => compareByLengthAndUpperCase(a, b, 'key')).key;
-    emailColumnWidth.value = getTextWidth(key) + 30;
-
-    const value = list.reduce((a, b) => compareByLengthAndUpperCase(a, b, 'value')).value;
-    tokenColumnWidth.value = getTextWidth(value) + 30;
-
-  }
-
-  return list;
-});
 
 function saveAddVerifyCount() {
   if (!addVerifyCount.value) {
@@ -1665,15 +1825,6 @@ function autoCleanExcludeAddTag(val) {
   })
 }
 
-const compareByLengthAndUpperCase = (a, b, key) => {
-  const getUpperCaseCount = (str) => (str.match(/[A-Z]/g) || []).length;
-  if (a[key].length === b[key].length) {
-    return getUpperCaseCount(a[key]) > getUpperCaseCount(b[key]) ? a : b;
-  }
-  return a[key].length > b[key].length ? a : b;
-};
-
-
 function closedSetBackground() {
   backgroundImage.value = ''
   localUpShow.value = false
@@ -1697,10 +1848,6 @@ function openTgSetting() {
 
 function openNoticePopupSetting() {
   noticePopupShow.value = true
-}
-
-function openResendList() {
-  showResendList.value = true
 }
 
 function resetNoticeForm() {
@@ -2063,10 +2210,6 @@ function saveR2domain() {
   editSetting(settingForm)
 }
 
-function openResendForm() {
-  resendTokenFormShow.value = true
-}
-
 function openBlackListForm() {
   blackFormShow.value = true
 }
@@ -2097,13 +2240,211 @@ function openAiCodeFilter() {
   aiCodeFilterShow.value = true
 }
 
-function saveResendToken() {
-  const settingForm = {
-    resendTokens: {}
+function openSenderProviders() {
+  senderProvidersShow.value = true
+}
+
+function openProviderSignup(row) {
+  const url = row?.meta?.signupUrl
+  if (url) window.open(url, '_blank', 'noopener')
+}
+
+function toggleProvider(row) {
+  row.expanded = !row.expanded
+}
+
+/** 手填上限优先；点「恢复默认」写回目录默认值，保存后服务端按默认值计算 */
+function resetProviderLimit(row, period) {
+  if (period === 'day') {
+    row.dailyLimit = row.defaultDailyLimit
+    row.dailyLimitManual = false
+  } else {
+    row.monthlyLimit = row.defaultMonthlyLimit
+    row.monthlyLimitManual = false
   }
-  const domain = resendTokenForm.domain.slice(1)
-  settingForm.resendTokens[domain] = resendTokenForm.token
-  editSetting(settingForm)
+  syncRowRemaining(row)
+}
+
+function onProviderLimitChange(row, period) {
+  if (period === 'day') {
+    row.dailyLimitManual = Number(row.dailyLimit) !== Number(row.defaultDailyLimit)
+  } else {
+    row.monthlyLimitManual = Number(row.monthlyLimit) !== Number(row.defaultMonthlyLimit)
+  }
+  syncRowRemaining(row)
+}
+
+function syncRowRemaining(row) {
+  const dailyLimit = Number(row.dailyLimit) || 0
+  const monthlyLimit = Number(row.monthlyLimit) || 0
+  row.remaining = {
+    day: Math.max(0, dailyLimit - (Number(row.usage?.day) || 0)),
+    month: Math.max(0, monthlyLimit - (Number(row.usage?.month) || 0))
+  }
+}
+
+function fillSenderProviderRows(data) {
+  senderProvidersInfo.value = data || {adminEmail: '', hasCloudflareEmail: false}
+  // 保存后重新拉取时保留用户已展开的卡片，避免每次都全部折叠
+  const expandedIds = new Set(senderProviderRows.value.filter(row => row.expanded).map(row => row.id))
+  senderProviderRows.value = (data?.providers || []).map(row => {
+    const usage = row.usage || {day: 0, month: 0}
+    const accounts = (Array.isArray(row.accounts) && row.accounts.length
+      ? row.accounts
+      : (row.apiKey || row.secret ? [{domain: '', apiKey: row.apiKey, secret: row.secret}] : [])
+    ).map(account => ({
+      domain: account.domain || '',
+      apiKey: account.apiKey || '',
+      secret: account.secret || '',
+      testing: false
+    }))
+    return {
+      ...row,
+      accounts,
+      usage,
+      expanded: expandedIds.has(row.id),
+      dailyLimitManual: !!row.dailyLimitManual,
+      monthlyLimitManual: !!row.monthlyLimitManual,
+      defaultDailyLimit: Number(row.defaultDailyLimit) || Number(row.dailyLimit) || 0,
+      defaultMonthlyLimit: Number(row.defaultMonthlyLimit) || Number(row.monthlyLimit) || 0,
+      remaining: row.remaining || {
+        day: Math.max(0, (Number(row.dailyLimit) || 0) - (Number(usage.day) || 0)),
+        month: Math.max(0, (Number(row.monthlyLimit) || 0) - (Number(usage.month) || 0))
+      },
+      dnsRecords: {...(row.dnsRecords || {})},
+      testing: false
+    }
+  })
+}
+
+async function loadSenderProviders() {
+  senderProvidersLoading.value = true
+  try {
+    fillSenderProviderRows(await senderProvidersQuery())
+    await checkSenderDns()
+  } catch (e) {
+  } finally {
+    senderProvidersLoading.value = false
+  }
+}
+
+async function saveSenderProviders() {
+  senderProvidersSaving.value = true
+  try {
+    const senderProviders = {}
+    for (const row of senderProviderRows.value) {
+      senderProviders[row.id] = {
+        enabled: row.enabled,
+        order: row.order,
+        accounts: (row.accounts || []).map(account => ({
+          domain: account.domain || '',
+          apiKey: account.apiKey || '',
+          secret: account.secret || ''
+        })),
+        dailyLimit: row.dailyLimit,
+        monthlyLimit: row.monthlyLimit,
+        dnsRecords: row.dnsRecords
+      }
+    }
+    fillSenderProviderRows(await senderProvidersSave({senderProviders}))
+    ElMessage({message: t('saveSuccessMsg'), type: 'success', plain: true})
+    await checkSenderDns()
+  } catch (e) {
+  } finally {
+    senderProvidersSaving.value = false
+  }
+}
+
+const providerDomainOptions = computed(() => (settingStore.domainList || [])
+  .map(domain => String(domain || '').replace(/^@/, ''))
+  .filter(Boolean))
+
+function addProviderAccount(row) {
+  row.accounts.push({domain: '', apiKey: '', secret: '', testing: false})
+}
+
+function removeProviderAccount(row, index) {
+  row.accounts.splice(index, 1)
+}
+
+async function testProviderAccount(row, account) {
+  account.testing = true
+  try {
+    const data = await senderProvidersTest({provider: row.id, domain: account.domain || ''})
+    ElMessage({
+      message: `${data.provider || row.name} · ${account.domain || t('sendDomain')} → ${data.to}`,
+      type: 'success',
+      plain: true,
+      duration: 6000
+    })
+  } catch (e) {
+  } finally {
+    account.testing = false
+  }
+}
+
+async function testSenderProvider(row) {
+  row.testing = true
+  try {
+    const data = await senderProvidersTest({provider: row.id})
+    ElMessage({
+      message: `${data.provider || row.name} · ${data.id || '-'} → ${data.to}`,
+      type: 'success',
+      plain: true,
+      duration: 6000
+    })
+  } catch (e) {
+  } finally {
+    row.testing = false
+  }
+}
+
+async function checkSenderDns() {
+  senderDnsLoading.value = true
+  try {
+    senderDnsResult.value = await senderProvidersDns({})
+  } catch (e) {
+  } finally {
+    senderDnsLoading.value = false
+  }
+}
+
+function dnsRows(row) {
+  const domain = senderDnsResult.value?.domain || ''
+  const checked = senderDnsResult.value?.providers?.[row.id]?.records || []
+  return (row.meta?.dnsRecords || []).map(template => {
+    const key = Object.keys(row.dnsRecords || {}).find(name => name === template.name || name === `${template.name}.${domain}`) || template.name
+    const fqdn = key.includes(domain) && domain ? key : (domain ? `${key}.${domain}` : key)
+    const hit = checked.find(item => item.name === fqdn)
+    return {key, type: template.type, status: hit?.status || 'unverified'}
+  })
+}
+
+function spfStatus(row) {
+  if (!row.meta?.spfInclude) return {status: 'notRequired'}
+  return senderDnsResult.value?.providers?.[row.id]?.spf || {status: 'unverified'}
+}
+
+function dnsStatusKey(status) {
+  return {
+    ok: 'dnsOk',
+    missing: 'dnsMissing',
+    mismatch: 'dnsMismatch',
+    error: 'dnsError',
+    notRequired: 'dnsNotRequired',
+    not_required: 'dnsNotRequired'
+  }[status] || 'dnsUnverified'
+}
+
+function dnsStatusType(status) {
+  return {
+    ok: 'success',
+    missing: 'warning',
+    mismatch: 'danger',
+    error: 'danger',
+    notRequired: 'info',
+    not_required: 'info'
+  }[status] || 'info'
 }
 
 function backupSetting() {
@@ -2112,10 +2453,6 @@ function backupSetting() {
   delete settingForm.siteKey
   delete settingForm.secretKey
   backup = JSON.stringify(setting.value)
-}
-
-function cleanResendTokenForm() {
-  resendTokenForm.token = ''
 }
 
 function beforeChange() {
@@ -2238,7 +2575,6 @@ function editSetting(settingForm, refreshStatus = true) {
     }
     editTitleShow.value = false
     r2DomainShow.value = false
-    resendTokenFormShow.value = false
     turnstileShow.value = false
     tgSettingShow.value = false
     thirdEmailShow.value = false
@@ -2978,5 +3314,136 @@ form .el-button {
   .setting-item { grid-template-columns: 1fr !important; }
   .setting-item > div:last-child { justify-self:start; }
   .ai-settings-card { max-width: none; }
+}
+/* 发信渠道：内容样式。
+   注意：el-dialog 会被 teleport 到 body，Vue 的 scoped 作用域不会跟进 teleport 内的 .el-dialog，
+   所以 .el-dialog.provider-dialog / __body / __footer 这些外壳规则放在 styles/redesign.css 里。 */
+.provider-wrap { min-width: 0; }
+.provider-loading { color: #94a3b8; font-size: 12px; padding: 12px 0; }
+.provider-tip { color: #64748b; font-size: 12px; margin-bottom: 10px; }
+.provider-alert { margin-bottom: 12px; }
+.provider-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.provider-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f5f7fa;
+}
+.provider-stat-value { font-size: 18px; font-weight: 600; color: #1f2937; line-height: 1.2; }
+.provider-stat-value i { font-style: normal; font-size: 12px; font-weight: 500; color: #94a3b8; }
+.provider-stat-label { font-size: 11px; color: #64748b; line-height: 1.4; word-break: break-word; }
+.provider-quota-note { color: #94a3b8; font-size: 11px; line-height: 1.5; margin-bottom: 8px; }
+.provider-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 10px; min-width: 0; }
+.provider-card.is-open { border-color: #bfdbfe; }
+.provider-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; }
+.provider-caret {
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1;
+  transition: transform .15s ease;
+}
+.provider-caret.open { transform: rotate(90deg); }
+.provider-name { font-weight: 600; }
+.provider-label { color: #64748b; font-size: 12px; }
+.provider-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.provider-order { width: 90px !important; }
+.provider-brief {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  color: #475569;
+  font-size: 12px;
+  min-width: 0;
+}
+.provider-brief b { color: #1f2937; }
+.provider-body { min-width: 0; }
+.provider-usage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.provider-usage-item { min-width: 0; padding: 8px; border-radius: 6px; background: #f8fafc; }
+.provider-usage-text {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 10px;
+  margin-bottom: 6px;
+  color: #475569;
+  font-size: 12px;
+}
+.provider-remaining b { color: #1f2937; }
+.provider-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
+  gap: 10px;
+  margin-top: 10px;
+}
+.provider-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12px; color: #64748b; }
+.provider-field .el-input,
+.provider-field .el-input-number { width: 100% !important; }
+.provider-field-hint { color: #94a3b8; font-size: 11px; line-height: 1.4; }
+.provider-limit-reset { align-self: flex-start; padding: 0; height: auto; }
+.provider-field-action { justify-content: flex-end; }
+.provider-accounts { margin-top: 10px; border-top: 1px dashed #e2e8f0; padding-top: 8px; }
+.provider-accounts-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #475569;
+  margin-bottom: 6px;
+}
+.provider-account-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.provider-account-row .account-domain { width: 170px; }
+.provider-account-row .account-key { flex: 1 1 220px; min-width: 160px; }
+.provider-account-row .account-secret { flex: 1 1 160px; min-width: 140px; }
+.provider-accounts-empty { font-size: 12px; color: #94a3b8; }
+.provider-note { color: #94a3b8; font-size: 12px; margin-top: 8px; line-height: 1.5; }
+.provider-dns { margin-top: 10px; border-top: 1px dashed #e2e8f0; padding-top: 8px; }
+.provider-dns-title { font-size: 12px; color: #475569; margin-bottom: 6px; }
+/* DNS 行改成可换行的 flex：窄屏时输入框独占一行，不会再被挤成几像素宽 */
+.dns-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  min-width: 0;
+}
+.dns-name {
+  flex: 0 1 220px;
+  min-width: 120px;
+  font-family: monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  color: #334155;
+}
+.dns-hint { flex: 1 1 160px; min-width: 0; font-size: 12px; color: #94a3b8; }
+.dns-row .el-input { flex: 1 1 220px; min-width: 0; width: auto !important; }
+.dns-row .dns-status { flex: 0 0 auto; white-space: nowrap; }
+.provider-check { margin-bottom: 4px; }
+
+@media (max-width: 768px) {
+  .provider-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .provider-head { align-items: flex-start; }
+  .provider-head-actions { margin-left: 0; width: 100%; justify-content: space-between; }
+  .provider-usage { grid-template-columns: minmax(0, 1fr); }
+  .provider-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .provider-field-action { grid-column: 1 / -1; justify-content: stretch; }
+  .provider-field-action .el-button { width: 100%; }
+  .provider-account-row > * { flex: 1 1 100%; width: 100% !important; }
+  .dns-name { flex: 1 1 100%; }
+  .dns-row .el-input { flex: 1 1 100%; }
+  .dns-hint { flex: 1 1 100%; }
 }
 </style>

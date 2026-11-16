@@ -26,6 +26,8 @@ export const email = sqliteTable('email', {
 	type: integer('type').default(0).notNull(),
 	status: integer('status').default(0).notNull(),
 	resendEmailId: text('resend_email_id'),
+	// 实际投递渠道：resend/brevo/mailjet/elastic/smtp2go/cloudflare，站内邮件为空
+	sendProvider: text('send_provider').default('').notNull(),
 	message: text('message'),
 	unread: integer('unread').default(0).notNull(),
 	createTime: text('create_time').default(sql`CURRENT_TIMESTAMP`).notNull(),

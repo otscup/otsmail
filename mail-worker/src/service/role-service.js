@@ -33,7 +33,7 @@ const roleService = {
 
 	async add(c, params, userId) {
 
-		let { name, permIds, banEmail, availDomain } = params;
+		let { name, permIds, banEmail, availDomain, sendDomain } = params;
 
 		if (!name) {
 			throw new BizError(t('emptyRoleName'));
@@ -41,6 +41,7 @@ const roleService = {
 
 		banEmail = Array.isArray(banEmail) ? banEmail : [];
 		availDomain = Array.isArray(availDomain) ? availDomain : [];
+		sendDomain = this.normalizeDomains(sendDomain);
 
 		let roleRow = await orm(c).select().from(role).where(eq(role.name, name)).get();
 
@@ -68,6 +69,7 @@ const roleService = {
 			accountCount: params.accountCount,
 			banEmail,
 			availDomain,
+			sendDomain,
 			isDefault: 0,
 			userId
 		}).returning().get();
@@ -93,6 +95,7 @@ const roleService = {
 		roleList.forEach(role => {
 			role.banEmail = role.banEmail.split(",").filter(item => item !== "");
 			role.availDomain = role.availDomain.split(",").filter(item => item !== "");
+			role.sendDomain = (role.sendDomain || '').split(",").filter(item => item !== "");
 			role.permIds = permList.filter(perm => perm.roleId === role.roleId).map(perm => perm.permId);
 		});
 
@@ -101,7 +104,7 @@ const roleService = {
 
 	async setRole(c, params, callerUserId) {
 
-		let { name, permIds, roleId, banEmail, availDomain } = params;
+		let { name, permIds, roleId, banEmail, availDomain, sendDomain } = params;
 
 		if (!name) {
 			throw new BizError(t('emptyRoleName'));
@@ -122,6 +125,7 @@ const roleService = {
 
 		banEmail = Array.isArray(banEmail) ? banEmail : [];
 		availDomain = Array.isArray(availDomain) ? availDomain : [];
+		sendDomain = this.normalizeDomains(sendDomain);
 
 		const notEmailIndex = banEmail.findIndex(item => (!verifyUtils.isEmail(item) && !verifyUtils.isDomain(item)) && item !== "*")
 
@@ -144,7 +148,8 @@ const roleService = {
 			sendCount: params.sendCount,
 			accountCount: params.accountCount,
 			banEmail,
-			availDomain
+			availDomain,
+			sendDomain
 		}).where(eq(role.roleId, roleId)).run();
 		await orm(c).delete(rolePerm).where(eq(rolePerm.roleId, roleId)).run();
 
@@ -178,8 +183,17 @@ const roleService = {
 
 	},
 
-	roleSelectUse(c) {
-		return orm(c).select({ name: role.name, roleId: role.roleId, isDefault: role.isDefault }).from(role).orderBy(asc(role.sort)).all();
+	async roleSelectUse(c) {
+		const list = await orm(c).select({
+			name: role.name,
+			roleId: role.roleId,
+			isDefault: role.isDefault,
+			sendDomain: role.sendDomain
+		}).from(role).orderBy(asc(role.sort)).all();
+		return list.map(item => ({
+			...item,
+			sendDomain: (item.sendDomain || '').split(',').filter(domain => domain !== '')
+		}));
 	},
 
 	async selectDefaultRole(c) {
@@ -219,6 +233,32 @@ const roleService = {
 
 	selectByUserId(c, userId) {
 		return orm(c).select(role).from(user).leftJoin(role, eq(role.roleId, user.type)).where(eq(user.userId, userId)).get();
+	},
+
+	// 发送域名：留空表示不额外限制（仍受「可用域名」约束）
+	normalizeDomains(list) {
+		const domains = [...new Set((Array.isArray(list) ? list : [])
+			.map(item => String(item || '').trim().replace(/^@/, '').toLowerCase())
+			.filter(item => item !== ''))];
+
+		if (domains.some(item => !verifyUtils.isDomain(item))) {
+			throw new BizError(t('invalidDomain'));
+		}
+
+		return domains.join(',');
+	},
+
+	hasSendDomainPerm(sendDomain, email) {
+
+		const sendDomainList = String(sendDomain || '').split(',').filter(item => item !== '');
+
+		if (sendDomainList.length === 0) {
+			return true;
+		}
+
+		const domain = emailUtils.getDomain(String(email || '').toLowerCase());
+
+		return sendDomainList.some(item => item.replace(/^@/, '').toLowerCase() === domain);
 	},
 
 	hasAvailDomainPerm(availDomain, email) {

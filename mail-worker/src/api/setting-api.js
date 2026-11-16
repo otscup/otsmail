@@ -4,6 +4,7 @@ import settingService from '../service/setting-service';
 import webhookService from '../service/webhook-service';
 import aiService from '../service/ai-service';
 import telegramService from '../service/telegram-service';
+import senderProviderAdminService from '../service/sender-provider-admin-service';
 import userContext from "../security/user-context";
 
 app.put('/setting/set', async (c) => {
@@ -57,4 +58,24 @@ app.post('/setting/webhookTest', async (c) => {
 	});
 	return c.json(result.ok(resultData));
 })
+
+// 多渠道发信：渠道配置、用量、测试发送、DNS 核验
+app.get('/setting/senderProviders', async (c) => {
+	return c.json(result.ok(await senderProviderAdminService.overview(c)));
+});
+
+app.put('/setting/senderProviders', async (c) => {
+	const body = await c.req.json();
+	return c.json(result.ok(await senderProviderAdminService.save(c, body)));
+});
+
+app.post('/setting/senderProviders/test', async (c) => {
+	const body = await c.req.json().catch(() => ({}));
+	return c.json(result.ok(await senderProviderAdminService.test(c, body)));
+});
+
+app.post('/setting/senderProviders/dns', async (c) => {
+	const body = await c.req.json().catch(() => ({}));
+	return c.json(result.ok(await senderProviderAdminService.checkDns(c, body)));
+});
 

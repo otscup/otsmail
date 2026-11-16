@@ -8,7 +8,6 @@ import accountService from './account-service';
 import BizError from '../error/biz-error';
 import emailUtils from '../utils/email-utils';
 import fileUtils from '../utils/file-utils';
-import { Resend } from 'resend';
 import attService from './att-service';
 import { parseHTML } from 'linkedom';
 import userService from './user-service';
@@ -26,6 +25,8 @@ import telegramService from './telegram-service';
 import r2Service from './r2-service';
 import mailRuleService from './mail-rule-service';
 import fcmService from './fcm-service';
+import sendRouterService from './send-router-service';
+import senderProviderConfig from './sender-provider-config';
 
 const BULK_CHUNK = 50;
 const MAX_HTML_BYTES = 1_200_000;
@@ -145,6 +146,7 @@ const emailService = {
 				type: email.type,
 				status: email.status,
 				resendEmailId: email.resendEmailId,
+				sendProvider: email.sendProvider,
 				message: email.message,
 				unread: email.unread,
 				createTime: email.createTime,
@@ -328,7 +330,8 @@ const emailService = {
 		bcc = [...new Set(bcc.filter(Boolean))].filter(item => !receiveEmail.includes(item) && !cc.includes(item));
 		const recipients = [...receiveEmail, ...cc, ...bcc];
 
-		const { resendTokens, r2Domain, send, domainList } = await settingService.query(c);
+		const setting = await settingService.query(c);
+		const { r2Domain, send, domainList } = setting;
 
 		let { imageDataList, html } = await attService.toImageUrlHtml(c, content);
 
@@ -391,14 +394,19 @@ const emailService = {
 				throw new BizError(t('noDomainPermSend'),403)
 			}
 
+			//所属用户组限制了发送域名，发件账号的域名必须在名单内
+			if(!roleService.hasSendDomainPerm(roleRow.sendDomain, accountRow.email)) {
+				throw new BizError(t('noSendDomainPerm'),403)
+			}
+
 		}
 
 		const domain = emailUtils.getDomain(accountRow.email);
-		const resendToken = resendTokens[domain];
 		const useCloudflareEmail = !!c.env.email;
+		const hasProvider = senderProviderConfig.hasAnyConfigured(setting, domain);
 
 		//如果接收方存在站外邮箱，又没有发信服务
-		if (!useCloudflareEmail && !resendToken && !allInternal) {
+		if (!useCloudflareEmail && !hasProvider && !allInternal) {
 			throw new BizError(t('noSendProvider'));
 		}
 
@@ -424,7 +432,7 @@ const emailService = {
 
 		let sendResult = {};
 
-		//存在站外邮箱时，如果配置了 Cloudflare Email Service 就优先使用，否则使用 Resend
+		//存在站外邮箱时，如果配置了 Cloudflare Email Service 就优先使用，否则走多渠道轮换
 		const sendParams = {
 			name,
 			accountEmail: accountRow.email,
@@ -444,24 +452,28 @@ const emailService = {
 		if (attachments?.length > 10) throw new BizError(t('attLimit'));
 		if (utf8Size(html) > MAX_SEND_HTML_BYTES) throw new BizError(t('contentTooLarge'));
 
+		let sendProvider = '';
+
 		if (!allInternal) {
 
 			if (useCloudflareEmail) {
 				try {
 					sendResult = await this.sendByCloudflareEmail(c, sendParams);
+					sendProvider = 'cloudflare';
 					if (sendResult?.error) {
 						throw new Error(sendResult.error.message || 'Cloudflare Email failed');
 					}
 				} catch (e) {
-					// 站外邮件不能因为单一通道故障丢失，Cloudflare 失败时回退 Resend
-					if (!resendToken) {
-						throw e;
-					}
-					console.error('Cloudflare Email failed, falling back to Resend:', e);
-					sendResult = await this.sendByResend(resendToken, sendParams);
+					// 站外邮件不能因为单一通道故障丢失，Cloudflare 失败时回退到多渠道轮换
+					console.error('Cloudflare Email failed, falling back to providers:', e);
+					const routed = await sendRouterService.send(c, sendParams);
+					sendResult = { data: { id: routed.id } };
+					sendProvider = routed.provider;
 				}
 			} else {
-				sendResult = await this.sendByResend(resendToken, sendParams);
+				const routed = await sendRouterService.send(c, sendParams);
+				sendResult = { data: { id: routed.id } };
+				sendProvider = routed.provider;
 			}
 
 		}
@@ -491,6 +503,7 @@ const emailService = {
 		emailData.type = emailConst.type.SEND;
 		emailData.userId = userId;
 		emailData.resendEmailId = data?.id;
+		emailData.sendProvider = sendProvider;
 
 		const recipient = [];
 
@@ -597,37 +610,6 @@ const emailService = {
 		};
 	},
 
-	async sendByResend(resendToken, params) {
-		const resend = new Resend(resendToken);
-
-		const sendForm = {
-			from: `${params.name} <${params.accountEmail}>`,
-			to: [...params.receiveEmail],
-			subject: params.subject,
-			text: params.text,
-			html: params.html,
-			attachments: await this.toResendAttachments(params.attachments)
-		};
-
-		if (params.cc?.length) {
-			sendForm.cc = [...params.cc];
-		}
-
-		if (params.bcc?.length) {
-			sendForm.bcc = [...params.bcc];
-		}
-
-		if (params.sendType === 'reply') {
-			const messageId = sanitizeHeaderValue(params.messageId);
-			sendForm.headers = {
-				'in-reply-to': messageId,
-				'references': messageId
-			};
-		}
-
-		return await resend.emails.send(sendForm);
-	},
-
 	async toCloudflareAttachments(attachments) {
 		const arrayBufferAttachments = await this.toArrayBufferAttachments(attachments);
 
@@ -647,25 +629,6 @@ const emailService = {
 		});
 	},
 
-	async toResendAttachments(attachments = []) {
-		const result = [];
-
-		for (const attachment of attachments) {
-			const content = await this.toAttachmentBase64(attachment);
-			if (!content) {
-				continue;
-			}
-
-			result.push({
-				...attachment,
-				content,
-				contentType: attachment.contentType || attachment.mimeType || attachment.type || 'application/octet-stream'
-			});
-		}
-
-		return result;
-	},
-
 	async toArrayBufferAttachments(attachments = []) {
 		const result = [];
 
@@ -679,35 +642,6 @@ const emailService = {
 		}
 
 		return result;
-	},
-
-	async toAttachmentBase64(attachment) {
-		let content = attachment.content;
-
-		if (!content) {
-			return null;
-		}
-
-		if (typeof content === 'string') {
-			if (content.startsWith('data:')) {
-				content = content.split(',')[1] || content;
-			}
-			return content.replace(/\s+/g, '');
-		}
-
-		const arrayBuffer = await this.toAttachmentArrayBuffer(attachment);
-		if (!arrayBuffer) {
-			return null;
-		}
-
-		const bytes = new Uint8Array(arrayBuffer);
-		let binary = '';
-
-		for (let i = 0; i < bytes.length; i += 0x8000) {
-			binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-		}
-
-		return btoa(binary);
 	},
 
 	async toAttachmentArrayBuffer(attachment) {

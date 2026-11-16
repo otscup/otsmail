@@ -35,3 +35,19 @@ export function aiModels(params) {
 export function tgWebhook(params) {
     return http.post('/setting/tgWebhook', params)
 }
+
+export function senderProvidersQuery() {
+    return http.get('/setting/senderProviders')
+}
+
+export function senderProvidersSave(params) {
+    return http.put('/setting/senderProviders', params)
+}
+
+export function senderProvidersTest(params) {
+    return http.post('/setting/senderProviders/test', params)
+}
+
+export function senderProvidersDns(params) {
+    return http.post('/setting/senderProviders/dns', params)
+}

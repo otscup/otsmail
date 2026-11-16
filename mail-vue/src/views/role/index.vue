@@ -65,6 +65,10 @@
           <div>
             {{ t('availableDomainsDesc') }}
           </div>
+          <div style="font-weight: bold;;margin-top: 10px;margin-bottom: 2px;">{{ t('sendDomain') }}</div>
+          <div>
+            {{ t('sendDomainDesc') }}
+          </div>
         </el-popover>
       </template>
       <div class="dialog-box">
@@ -89,6 +93,25 @@
           <el-option
               v-for="item in domainOptions"
               :key="item.value"
+              :label="item.label"
+              :value="item.value"
+          />
+        </el-select>
+        <el-select
+            class="dialog-input"
+            v-model="form.sendDomain"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            :reserve-keyword="false"
+            tag-type="warning"
+            :placeholder="$t('sendDomain')"
+            @change="sendDomainChange"
+        >
+          <el-option
+              v-for="item in domainOptions"
+              :key="'send-' + item.value"
               :label="item.label"
               :value="item.value"
           />
@@ -188,7 +211,8 @@ const form = reactive({
   accountCount: 0,
   sort: 0,
   isDefault: 0,
-  availDomain: []
+  availDomain: [],
+  sendDomain: []
 })
 
 let domainOptions = []
@@ -216,6 +240,19 @@ function availDomainChange() {
   if (index > -1) {
     form.availDomain.splice(index, 1)
   }
+}
+
+function sendDomainChange() {
+  const raw = form.sendDomain.map(item => String(item || '').trim().replace(/^@/, '').toLowerCase())
+  const valid = [...new Set(raw.filter(item => isDomain(item)))]
+  if (valid.length !== raw.length) {
+    ElMessage({
+      message: t('invalidDomainMsg'),
+      type: 'warning',
+      plain: true
+    })
+  }
+  form.sendDomain = valid
 }
 
 function banEmailAddTag(val) {
@@ -333,6 +370,7 @@ function resetForm() {
   form.accountCount = 0
   form.banEmail = []
   form.availDomain = []
+  form.sendDomain = []
   tree.value.setCheckedKeys([])
 }
 
@@ -349,6 +387,7 @@ function openRoleSet(role) {
   form.accountCount = role.accountCount
   form.banEmail = role.banEmail
   form.availDomain = role.availDomain
+  form.sendDomain = role.sendDomain || []
   nextTick(() => {
     tree.value.setCheckedKeys(role.permIds)
   })

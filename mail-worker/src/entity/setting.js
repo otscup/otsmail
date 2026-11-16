@@ -31,6 +31,8 @@ export const setting = sqliteTable('setting', {
 	loginOpacity: integer('login_opacity').default(0.88),
 	loginTheme: text('login_theme').default('paper').notNull(),
 	resendTokens: text('resend_tokens').default("{}").notNull(),
+	// 多渠道发信配置 JSON（密钥只走管理员设置页，读接口掩码）
+	senderProviders: text('sender_providers').default("{}").notNull(),
 	noticeTitle: text('notice_title').default('').notNull(),
 	noticeContent: text('notice_content').default('').notNull(),
 	noticeType: text('notice_type').default('').notNull(),

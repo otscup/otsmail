@@ -71,6 +71,13 @@
         <el-select v-model="addForm.roleId" :placeholder="$t('roleDesc')">
           <el-option v-for="item in roleList" :label="item.name" :value="item.roleId" :key="item.roleId"/>
         </el-select>
+        <div class="role-send-domain" v-if="selectedRole">
+          <span class="send-domain-label">{{ $t('sendDomain') }}：</span>
+          <template v-if="selectedRole.sendDomain && selectedRole.sendDomain.length">
+            <el-tag v-for="domain in selectedRole.sendDomain" :key="domain" size="small" type="warning">{{ domain }}</el-tag>
+          </template>
+          <span v-else class="send-domain-none">{{ $t('unrestricted') }}</span>
+        </div>
         <el-date-picker
             v-model="addForm.expireTime"
             type="date"
@@ -98,7 +105,7 @@
 
 <script setup>
 import settingsTabs from "@/components/settings-tabs/index.vue";
-import {defineOptions, nextTick, reactive, ref, watch} from "vue"
+import {computed, defineOptions, nextTick, reactive, ref, watch} from "vue"
 import {Icon} from "@iconify/vue";
 import loading from "@/components/loading/index.vue";
 import {useSettingStore} from "@/store/setting.js";
@@ -141,6 +148,8 @@ const addForm = reactive({
 })
 
 const regKeyData = reactive([])
+
+const selectedRole = computed(() => roleList.find(item => item.roleId === addForm.roleId) || null)
 
 getList(true)
 
@@ -395,6 +404,20 @@ function openAdd() {
 .reg-key {
   height: 100%;
   overflow: hidden;
+}
+
+.role-send-domain {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: -4px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+
+  .send-domain-none {
+    color: var(--el-text-color-placeholder);
+  }
 }
 
 .scrollbar {
