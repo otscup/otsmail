@@ -44,7 +44,10 @@ export default {
 			 const key = decodeURIComponent(url.pathname.substring('/attachments/'.length));
 			 const ok = await attService.verifyKey(env, key, url.searchParams.get('uid'), url.searchParams.get('exp'), url.searchParams.get('sig'));
 			 if (!ok) return new Response('Forbidden', { status: 403 });
-			 return await r2Service.publicObjResp({ env }, `attachments/${key}`);
+			 return await r2Service.publicObjResp({ env }, `attachments/${key}`, {
+				 // 预览请求才内联，普通下载仍保持 attachment
+				 previewInline: url.searchParams.get('preview') === '1'
+			 });
 		 }
 
 		// App 第三方登录回调：IdP 只认网页回调，浏览器会先落登录页下载整包 Vue SPA

@@ -194,7 +194,7 @@
                 </div>
                 <div class="att-size">{{ formatBytes(att.size) }}</div>
                 <div class="opt-icon att-icon">
-                  <Icon v-if="isOnlyOffice(att.filename)" icon="mdi:file-edit-outline" width="22" height="22" title="编辑（ONLYOFFICE）" @click="openOnlyOffice(att)"/>
+                  <Icon v-if="onlyOfficeEnabled && isOnlyOffice(att.filename)" icon="mdi:file-edit-outline" width="22" height="22" title="编辑（ONLYOFFICE）" @click="openOnlyOffice(att)"/>
                   <Icon v-if="isImage(att.filename) || isPreviewable(att.filename) || isOnlyOffice(att.filename) || isCsv(att.filename) || isMarkdown(att.filename)" icon="hugeicons:view" width="22" height="22" title="预览" @click="openAttachment(att)"/>
                   <a :href="fileUrl(att)" download @click.prevent="downloadAttachment(att)">
                     <Icon icon="system-uicons:push-down" width="22" height="22"/>
@@ -246,7 +246,7 @@
         <div v-else ref="officeWrapRef" class="att-frame-wrap">
           <div v-if="attachmentKind === 'office' && officeLoading" class="att-preview-note">正在加载 ONLYOFFICE 编辑器…</div>
           <iframe v-if="attachmentUrl" :src="attachmentUrl" class="att-preview-frame"
-                  :sandbox="attachmentKind === 'iframe' && !attachmentUrl.startsWith('https://view.officeapps.live.com') ? 'allow-scripts allow-forms allow-popups' : undefined"
+                  :sandbox="attachmentKind === 'iframe' && !attachmentUrl.startsWith('https://view.officeapps.live.com') && !isPdf(attachmentName) ? 'allow-scripts allow-forms allow-popups' : undefined"
                   :style="attachmentKind === 'office' ? officeFrameStyle : undefined"
                   :title="attachmentName" @load="officeLoading = false"/>
         </div>
@@ -648,7 +648,12 @@ function isOnlyOffice(filename) {
   return ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'rtf'].includes(getExtName(filename))
 }
 
+// 每个部署方自己配 OnlyOffice 页面；没配就完全不露出编辑入口（默认值 /onlyoffice.html 不是有效页面）
+const onlyOfficeUrl = import.meta.env.VITE_ONLYOFFICE_URL || ''
+const onlyOfficeEnabled = Boolean(onlyOfficeUrl)
+
 function openOnlyOffice(att, readonly = false) {
+  if (!onlyOfficeUrl) return
   const ext = getExtName(att.filename)
   const documentType = ['xls', 'xlsx', 'ods'].includes(ext) ? 'cell'
     : ['ppt', 'pptx', 'odp'].includes(ext) ? 'slide' : 'word'
@@ -669,7 +674,7 @@ function openOnlyOffice(att, readonly = false) {
   attachmentKind.value = 'office'
   attachmentFullscreen.value = false
   officeLoading.value = true
-  attachmentUrl.value = `${import.meta.env.VITE_ONLYOFFICE_URL || '/onlyoffice.html'}?docConfig=${encodeURIComponent(JSON.stringify(config))}`
+  attachmentUrl.value = `${onlyOfficeUrl}?docConfig=${encodeURIComponent(JSON.stringify(config))}`
   showAttachmentPreview.value = true
 }
 
@@ -680,6 +685,26 @@ function openMicrosoftOffice(att) {
   officeLoading.value = false
   attachmentUrl.value = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl(att))}`
   showAttachmentPreview.value = true
+}
+
+// 这些格式走 Microsoft Office Online（view.officeapps.live.com）渲染，
+// 文件 URL 会交给第三方服务拉取，所以打开前必须让用户明确确认。
+async function confirmOfficePreview(att) {
+  try {
+    await ElMessageBox.confirm(
+      t('officePreviewConfirmText'),
+      t('officePreviewConfirmTitle'),
+      {
+        confirmButtonText: t('officePreviewConfirmOk'),
+        cancelButtonText: t('officePreviewConfirmCancel'),
+        type: 'warning'
+      }
+    )
+  } catch {
+    // 取消 / 关闭：什么都不做，不留下空白预览面板
+    return
+  }
+  openMicrosoftOffice(att)
 }
 
 function openAttachment(att) {
@@ -717,14 +742,15 @@ function openAttachment(att) {
     return
   }
   if (isOnlyOffice(att.filename)) {
-    return openMicrosoftOffice(att)
+    return confirmOfficePreview(att)
   }
   if (!isPreviewable(att.filename)) {
     downloadAttachment(att)
     return
   }
   attachmentKind.value = 'iframe'
-  attachmentUrl.value = fileUrl(att)
+  // 服务端对预览请求返回 Content-Disposition: inline；下载链接仍走 fileUrl（attachment）
+  attachmentUrl.value = previewUrl(att)
   showAttachmentPreview.value = true
 }
 
@@ -758,9 +784,26 @@ function isImage(filename) {
   return ['png', 'jpg', 'jpeg', 'bmp', 'gif','jfif'].includes(getExtName(filename))
 }
 
+function isPdf(filename) {
+  return getExtName(filename) === 'pdf'
+}
+
 function fileUrl(att) {
   const url = att?.url || cvtR2Url(att?.key)
   return url?.startsWith('/') ? `${location.origin}${url}` : url
+}
+
+// 预览用 URL：带 preview=1 让 Worker 把 Content-Disposition 从 attachment 改成 inline，
+// 否则 Chrome 会把 iframe 里的响应当成下载并显示「此页面已被 Chrome 屏蔽」。
+function previewUrl(att) {
+  const url = fileUrl(att)
+  try {
+    const parsed = new URL(url, location.origin)
+    parsed.searchParams.set('preview', '1')
+    return parsed.toString()
+  } catch (e) {
+    return url
+  }
 }
 
 function formateReceive(recipient) {
