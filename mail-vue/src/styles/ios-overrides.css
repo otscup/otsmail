@@ -3011,6 +3011,7 @@ html.dark .email-container .email-row:hover {
 .main-view.mail-detail .scrollbar {
   flex: 1 1 auto;
   height: auto !important;
+  min-height: 0 !important;
 }
 .main-view.mail-detail .container {
   margin: 0 !important;

@@ -25,6 +25,10 @@ export function hasPerm(permKey) {
     return permKeys.includes('*') || permKeys.includes(permKey);
 }
 
+export function isSystemAdmin(user) {
+    return user?.type === 0 || user?.permKeys?.includes('*') || user?.role?.permKeys?.includes('*');
+}
+
 
 export function permsToRouter(permKeys) {
     const routerList = []

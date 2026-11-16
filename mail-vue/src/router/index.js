@@ -4,6 +4,13 @@ import {useUiStore} from "@/store/ui.js";
 import {useSettingStore} from "@/store/setting.js";
 import {cvtR2Url} from "@/utils/convert.js";
 import {getToken} from "@/utils/token-store.js"
+import {useUserStore} from "@/store/user.js";
+import {isSystemAdmin} from "@/perm/perm.js";
+
+const adminPaths = new Set([
+    '/analysis', '/reg-key', '/user', '/sys-setting', '/role', '/mcp-admin',
+    '/system-settings', '/invite-code', '/all-users', '/all-email'
+])
 
 const routes = [
     {
@@ -209,6 +216,10 @@ router.beforeEach((to, from, next) => {
             return next()
         }
         return next(from.path)
+    }
+
+    if (adminPaths.has(to.path) && !isSystemAdmin(useUserStore().user)) {
+        return next({name: 'setting'})
     }
 
     next()

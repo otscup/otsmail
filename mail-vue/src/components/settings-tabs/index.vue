@@ -12,6 +12,7 @@ import {computed} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {useUserStore} from '@/store/user.js'
 import {useI18n} from 'vue-i18n'
+import {isSystemAdmin} from '@/perm/perm.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,10 +20,16 @@ const userStore = useUserStore()
 const {t} = useI18n()
 const tabs = computed(() => {
   const list = [{path: '/settings', label: t('settings')}]
-  if (userStore.user?.type === 0 || userStore.user?.role?.permKeys?.includes('*')) {
-    list.push({path: '/sys-setting', label: t('systemSettings')}, {path: '/mcp-admin', label: t('mcpService')})
-  }
-  list.push({path: '/user', label: t('accountPermissions')}, {path: '/role', label: t('role')}, {path: '/unsubscribe', label: t('unsubscribeManage')}, {path: '/reg-key', label: t('regKey')}, {path: '/analysis', label: t('analysis')})
+  if (!isSystemAdmin(userStore.user)) return list
+  list.push(
+      {path: '/sys-setting', label: t('systemSettings')},
+      {path: '/mcp-admin', label: t('mcpService')},
+      {path: '/user', label: t('accountPermissions')},
+      {path: '/role', label: t('role')},
+      {path: '/unsubscribe', label: t('unsubscribeManage')},
+      {path: '/reg-key', label: t('regKey')},
+      {path: '/analysis', label: t('analysis')}
+  )
   return list
 })
 </script>

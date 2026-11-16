@@ -9,7 +9,8 @@
       <Aside />
     </el-aside>
     <div
-        :class="(uiStore.asideShow && isMobile)? 'overlay-show':'overlay-hide'"
+        v-if="uiStore.asideShow && isMobile"
+        class="overlay-show"
         @click="uiStore.asideShow = false"
     ></div>
     <el-container class="main-container">
@@ -192,6 +193,10 @@ onBeforeUnmount(() => {
 .layout-v2 .el-aside { grid-column:1; width:272px !important; height:100vh; background:var(--rd-panel); border-right:1px solid var(--rd-line); }
 .layout-v2 .main-container { grid-column:2; min-width:0; }
 .layout-v2.layout-collapsed .main-container { grid-column:1; }
+
+@media (max-width: 1024px) {
+  .layout.layout-v2 .main-container { grid-column:1 !important; width:100%; }
+}
 </style>
 
 

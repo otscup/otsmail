@@ -2076,6 +2076,96 @@ html[data-theme] .layout-v2 .main-view.box > .container .item.wide {
   display: block !important;
   padding: 16px 0 18px !important;
 }
+
+/* v28: 手机端设置页——窄屏下收窄留白，标签列可压缩，第三方绑定按钮不再被裁切 */
+@media (max-width: 767px) {
+  html[data-theme] .layout-v2 .main-view.box > .container {
+    margin: 8px 10px 12px !important;
+    padding: 0 14px !important;
+    border-radius: 14px;
+  }
+
+  html[data-theme] .layout-v2 .main-view.box > .container .item {
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr) !important;
+    gap: 12px !important;
+    min-height: 48px !important;
+    padding: 10px 0 !important;
+  }
+
+  html[data-theme] .layout-v2 .main-view.box > .container .item.wide {
+    display: block !important;
+    padding: 12px 0 14px !important;
+  }
+
+  html[data-theme] .layout-v2 .main-view.box > .container .item > div:last-child {
+    min-width: 0;
+    text-align: left;
+    white-space: normal !important;
+    overflow: visible !important;
+    overflow-wrap: anywhere;
+  }
+
+  /* 第三方绑定：操作区按内容取宽，标签列自动压缩 */
+  html[data-theme] .layout-v2 .main-view.box > .container .item.oauth-item {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 8px 10px !important;
+  }
+
+  html[data-theme] .layout-v2 .main-view.box > .container .item.oauth-item > div:last-child {
+    text-align: right;
+  }
+
+  html[data-theme] .layout-v2 .main-view.box > .container .item.oauth-item .binding-actions {
+    flex-wrap: wrap;
+    overflow: visible !important;
+    white-space: normal !important;
+  }
+
+  html[data-theme] .layout-v2 .main-view.box > .container .item.oauth-item .provider-label {
+    min-width: 0;
+  }
+}
+
+/* 发信渠道弹窗：el-dialog 被 teleport 到 body，Vue scoped 样式中的 .el-dialog.provider-dialog 不会命中，
+   外壳宽度 / flex 高度 / 滚动必须写成全局规则，否则内容会被 .el-dialog 的 overflow:hidden 直接裁掉。 */
+.el-overlay-dialog .el-dialog.provider-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(880px, calc(100vw - 24px)) !important;
+  /* 覆盖 ios-overrides 桌面端 .el-dialog{max-width:600px!important}，只影响本弹窗 */
+  max-width: min(880px, calc(100vw - 24px)) !important;
+  max-height: calc(100dvh - 32px);
+  margin: 16px auto !important;
+  overflow: hidden;
+}
+
+.el-dialog.provider-dialog .el-dialog__header,
+.el-dialog.provider-dialog .el-dialog__footer { flex: 0 0 auto; }
+
+/* body 自己是唯一的滚动容器：头部/底部固定，中间滚 */
+.el-dialog.provider-dialog .el-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.el-dialog.provider-dialog .el-dialog__body > * { max-width: 100%; }
+
+@media (max-width: 768px) {
+  /* ios-overrides 手机端把 .el-dialog 改成 fixed 底部弹层；这里改回文档流内居中，避免和 max-height 打架 */
+  .el-overlay-dialog .el-dialog.provider-dialog {
+    position: relative;
+    inset: auto;
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px);
+    margin: 8px auto !important;
+    border-radius: 14px !important;
+  }
+}
 html[data-theme] .layout-v2 .main-view.box > .container .item > div:first-child {
   color: var(--rd-muted) !important;
   font-size: 13px !important;
@@ -2274,3 +2364,9 @@ html[data-skin="classic"] .layout-v2 .email-container .email-row.is-checked {
 .settings-card .setting-item.login-theme-item .el-select { width: 100% !important; max-width: 100% !important; }
 /* ios-overrides 的 `> div:last-child .el-select` 带 :last-child（算一个类），特异性 (0,4,1) 高于上面两条，必须再抬一级。 */
 .settings-container .settings-card .setting-item.login-theme-item > div:last-child .el-select { width: 100% !important; max-width: 100% !important; }
+
+/* 手机浏览器工具栏会压缩可视高度；侧栏跟随 dvh，避免底部头像被工具栏遮住。桌面仍用 100vh。 */
+@media (max-width: 1024px) {
+  .layout.layout-v2 { height: 100dvh !important; }
+  .layout-v2 .el-aside { height: 100dvh !important; }
+}
